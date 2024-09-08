@@ -1,0 +1,49 @@
+Player[] queue;
+Board gameBoard;
+
+event Plot start() {
+    queue = [];
+}
+
+event Player join(Player player) {
+    if(queue.length >= 2) {
+        player.sendmessage("A game is already in progress!");
+        player.kick();
+    }
+    queue.append(player);
+    if(queue.length == 2) {
+        gameBoard = new Board(queue);
+        gameBoard.startGame();
+    } else {
+        player.sendmessage("Waiting for a second player...");
+    }
+}
+
+event Player rightClick(Player player, location loc) {
+    gameBoard.makeMove(player, i); 
+}
+
+class Board {
+    Player[] gamePlayers;
+    num currentPlayer = 0;
+    num[] state = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+
+    event instance(Player[] gamePlayers) { 
+        this.gamePlayers = gamePlayers.shuffle(); 
+    }
+
+    func startGame() { 
+        select.allgamePlayers.sendmessage("Game starting!"); 
+        wait 20;
+        gamePlayers[currentPlayer].sendMessage("Your turn!"); 
+    }
+
+    func makeMove(Player gamePlayer, num i) {
+        if(gamePlayers[currentPlayer] != gamePlayer || state[i] != 0) return;
+        state[i] = currentPlayer + 1;
+
+        currentPlayer = 1 - currentPlayer;
+        wait 20;
+        gamePlayers[currentPlayer].sendMessage("Your turn!");
+    }
+}
