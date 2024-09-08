@@ -1,13 +1,13 @@
 Player[] queue;
 Board gameBoard;
 
-event Plot start() {
+event Plot Start() {
     queue = [];
 }
 
-event Player join(Player player) {
+event Player Join(Player player) {
     if(queue.length >= 2) {
-        player.sendmessage("A game is already in progress!");
+        player.sendMessage("A game is already in progress!");
         player.kick();
     }
     queue.append(player);
@@ -15,35 +15,68 @@ event Player join(Player player) {
         gameBoard = new Board(queue);
         gameBoard.startGame();
     } else {
-        player.sendmessage("Waiting for a second player...");
+        player.sendMessage("Waiting for a second player...");
     }
 }
 
-event Player rightClick(Player player, location loc) {
-    gameBoard.makeMove(player, i); 
+event Player RightClick(Player player, vector3 loc) {
+    if(!loc.between(<5, 50, 5>, <7, 50, 7>)) return;
+    int xOffset = loc.x - 5;
+    int yOffset = loc.y - 5;
+    int i = xOffset % 3 + yOffset * 3;
+    gameBoard.makeMove(event.player, i); 
+}
+
+func broadcast(string message) {
+    Plot.players.foreach(player => player.sendMessage(message));
 }
 
 class Board {
-    Player[] gamePlayers;
-    num currentPlayer = 0;
-    num[] state = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+    Player[] players;
+    int currentPlayer = 0;
+    int[] state = [0, 0, 0, 0, 0, 0, 0, 0, 0];
 
-    event instance(Player[] gamePlayers) { 
-        this.gamePlayers = gamePlayers.shuffle(); 
+    event Instance(Player[] players) { 
+        this.players = players.shuffle(); 
     }
 
     func startGame() { 
-        select.allgamePlayers.sendmessage("Game starting!"); 
+        broadcast("Game starting!"); 
         wait 20;
-        gamePlayers[currentPlayer].sendMessage("Your turn!"); 
+        players[currentPlayer].sendMessage("Your turn!"); 
     }
 
-    func makeMove(Player gamePlayer, num i) {
-        if(gamePlayers[currentPlayer] != gamePlayer || state[i] != 0) return;
-        state[i] = currentPlayer + 1;
-
+    func makeMove(Player player, int i) {
+        if(players[currentPlayer] != player || state[i] != 0) return;
+        state[i] = player + 1;
+        if(checkForEnd()) {
+            Plot.players.foreach(player => player.kick());
+            return;
+        }
         currentPlayer = 1 - currentPlayer;
         wait 20;
-        gamePlayers[currentPlayer].sendMessage("Your turn!");
+        players[currentPlayer].sendMessage("Your turn!");
+    }
+
+    private func checkForEnd() {
+        for(int player = 1; player <= 2; player++){
+            bool win = state[0] == player && state[1] == player && state[2] == player 
+                    || state[3] == player && state[4] == player && state[5] == player
+                    || state[6] == player && state[7] == player && state[8] == player
+                    || state[0] == player && state[3] == player && state[6] == player
+                    || state[1] == player && state[4] == player && state[7] == player
+                    || state[2] == player && state[5] == player && state[8] == player
+                    || state[0] == player && state[4] == player && state[8] == player
+                    || state[2] == player && state[4] == player && state[6] == player;
+            if(win) {
+                broadcast(players[player - 1].name + " Won!");
+                return true;
+            }
+        }
+        if(state.all(tile => tile != 0))
+        {
+            broadcast("Tie!");
+            return true;
+        }
     }
 }
