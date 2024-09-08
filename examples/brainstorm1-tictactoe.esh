@@ -12,7 +12,7 @@ event Player Join(Player player) {
     }
     queue.append(player);
     if(queue.length == 2) {
-        gameBoard = new Board(queue);
+        gameBoard = Board(queue);
         gameBoard.startGame();
     } else {
         player.sendMessage("Waiting for a second player...");
@@ -27,8 +27,12 @@ event Player RightClick(Player player, vector3 loc) {
     gameBoard.makeMove(event.player, i); 
 }
 
-func broadcast(string message) {
+event Broadcast(string message) {
     Plot.players.foreach(player => player.sendMessage(message));
+}
+
+event GameEnd() {
+    Plot.players.foreach(player => player.kick());
 }
 
 class Board {
@@ -41,7 +45,7 @@ class Board {
     }
 
     func startGame() { 
-        broadcast("Game starting!"); 
+        call Broadcast("Game starting!"); 
         wait 20;
         players[currentPlayer].sendMessage("Your turn!"); 
     }
@@ -50,7 +54,7 @@ class Board {
         if(players[currentPlayer] != player || state[i] != 0) return;
         state[i] = player + 1;
         if(checkForEnd()) {
-            Plot.players.foreach(player => player.kick());
+            call GameEnd();
             return;
         }
         currentPlayer = 1 - currentPlayer;
@@ -58,7 +62,7 @@ class Board {
         players[currentPlayer].sendMessage("Your turn!");
     }
 
-    private func checkForEnd() {
+    private func checkForEnd() -> bool {
         for(int player = 1; player <= 2; player++){
             bool win = state[0] == player && state[1] == player && state[2] == player 
                     || state[3] == player && state[4] == player && state[5] == player
@@ -69,13 +73,13 @@ class Board {
                     || state[0] == player && state[4] == player && state[8] == player
                     || state[2] == player && state[4] == player && state[6] == player;
             if(win) {
-                broadcast(players[player - 1].name + " Won!");
+                call Broadcast(players[player - 1].name + " Won!");
                 return true;
             }
         }
         if(state.all(tile => tile != 0))
         {
-            broadcast("Tie!");
+            call Broadcast("Tie!");
             return true;
         }
     }
