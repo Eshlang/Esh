@@ -7,10 +7,8 @@ import stdlib::Item;
 // classes (Involves a whole lot of oop stuff that oftentimes makes it confusing
 // to use).
 struct Pickaxe {
-	// In go, this would mean that Pickaxe extends item. This syntax is meh for
-	// me, but I don't like the idea of doing `struct Pickaxe extends Item`
-	// because of my above reason for doing structs
-	Item 
+	// UPDATE: better syntax for inheritance :)
+	inherit Item 
 	num strength;
 	// I am not implementing a custom mining thing because thats too much work,
 	// pretend this would actually do something though :grin:
