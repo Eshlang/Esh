@@ -26,6 +26,8 @@ pub enum Token {
     RParen, // )
     LAngle, // <
     RAngle, // >
+    LBrace, // [
+    RBrace, // ]
 
     // Keywords
     Func,
