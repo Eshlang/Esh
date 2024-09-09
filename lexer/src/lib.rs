@@ -1,14 +1,41 @@
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
+pub enum Token {
+    Ident(String),
+    // String type, but in df it's called txt
+    Txt(String),
+    Number(f32),
+    // Comments probably don't need to contain what's in the comment, but I'll leave this for now
+    Comment(String),
+
+    EOF,
+    Assign,       // =
+    Equal,        // ==
+    NotEqual,     // !=
+    LessThan,     // <=
+    GreaterThan,  // >=
+    Plus,         // +
+    Dash,         // -
+    Asterisk,     // *
+    ForwardSlash, // /
+    Exclamation,  // !
+    Comma,        // ,
+    Dot,          // .
+
+    LCurly, // {
+    RCurly, // }
+    LParen, // (
+    RParen, // )
+    LAngle, // <
+    RAngle, // >
+
+    // Keywords
+    Func,
+    If,
+    Else,
+    Return,
+    True,
+    False,
+    Struct,
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+mod tests {}
