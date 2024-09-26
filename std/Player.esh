@@ -1,0 +1,23 @@
+package std;
+
+struct Player {
+    str name;
+    num health;
+    //...
+
+    pub func sendMessage(Player self, str message) {
+        dfa {
+            sel playername {self.name}
+            plac sendmessage {message} #target:selection
+        }
+    }
+    pub func setHotbarSlot(Player self, Item item, num slot) {
+        dfa {
+            sel playername {self.name}
+            plac sethotbarslot {item} {slot} #target:selection
+        }
+    }
+    //...
+}
+
+

@@ -1,0 +1,26 @@
+seg func
+    df f0 "std.Player.sendMessage"
+    df f1 "std.Player.setHotbarSlot"
+seg param
+    dp var lr0 "lr0" #scope:local
+
+    dp param p0 "self" #type:dict
+    dp param p1 "message" #type:str
+    dp param p2 "item" #type:item
+    dp param p3 "slot" #type:num
+
+    dp var ln0 "self" #scope:line
+    dp var ln1 "message" #scope:line
+    dp var ln2 "item" #scope:line
+    dp var ln3 "slot" #scope:line
+
+    dp item i0 "air"
+seg code
+    func f0 i0 p0 p1
+        var getdictvalue lr0 ln0 "name"
+        sel playername lr0
+        plac sendmessage ln1 #target:selection
+    func f1 i0 p0 p2 p3
+        var getdictvalue lr0 ln0 "name"
+        sel playername lr0
+        plac sethotbarslot ln2 ln3 #target:selection
