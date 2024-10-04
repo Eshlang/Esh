@@ -1,88 +1,117 @@
-from Standard import Plot, Player;
+namespace GameLogic {
+    from Standard import Plot, Player;
+    from Structures import Board;
 
-Player[] queue;
-Board gameBoard;
+    Player[] queue;
+    Board gameBoard;
 
-event Plot Start() {
-    queue = [];
-}
-
-event Player Join(Player player) {
-    if(queue.length >= 2) {
-        player.sendMessage("A game is already in progress!");
-        player.kick();
-    }
-    queue.append(player);
-    if(queue.length == 2) {
-        gameBoard = Board(queue);
-        gameBoard.startGame();
-    } else {
-        player.sendMessage("Waiting for a second player...");
-    }
-}
-
-event Player RightClick(Player player, vector3 loc) {
-    if(!loc.between(<5, 50, 5>, <7, 50, 7>)) return;
-    int xOffset = loc.x - 5;
-    int yOffset = loc.y - 5;
-    int i = xOffset % 3 + yOffset * 3;
-    gameBoard.makeMove(event.player, i); 
-}
-
-event Broadcast(string message) {
-    Plot.players.foreach(player => player.sendMessage(message));
-}
-
-event GameEnd() {
-    Plot.players.foreach(player => player.kick());
-}
-
-class Board {
-    Player[] players;
-    int currentPlayer = 0;
-    int[] state = [0, 0, 0, 0, 0, 0, 0, 0, 0];
-
-    instance(Player[] players) { 
-        this.players = players.shuffle(); 
+    event Plot Start() {
+        queue = [];
     }
 
-    func startGame() { 
-        call Broadcast("Game starting!"); 
-        wait 20;
-        players[currentPlayer].sendMessage("Your turn!"); 
-    }
-
-    func makeMove(Player player, int i) {
-        if(players[currentPlayer] != player || state[i] != 0) return;
-        state[i] = player + 1;
-        if(checkForEnd()) {
-            call GameEnd();
-            return;
+    event Player Join(Player player) {
+        if(queue.length >= 2) {
+            player.sendMessage("A game is already in progress!");
+            player.kick();
         }
-        currentPlayer = 1 - currentPlayer;
-        wait 20;
-        players[currentPlayer].sendMessage("Your turn!");
+        queue.append(player);
+        if(queue.length == 2) {
+            gameBoard = Board(queue);
+            gameBoard.startGame();
+        } else {
+            player.sendMessage("Waiting for a second player...");
+        }
     }
 
-    private func checkForEnd() -> bool {
-        for(int player = 1; player <= 2; player++){
-            bool win = state[0] == player && state[1] == player && state[2] == player 
-                    || state[3] == player && state[4] == player && state[5] == player
-                    || state[6] == player && state[7] == player && state[8] == player
-                    || state[0] == player && state[3] == player && state[6] == player
-                    || state[1] == player && state[4] == player && state[7] == player
-                    || state[2] == player && state[5] == player && state[8] == player
-                    || state[0] == player && state[4] == player && state[8] == player
-                    || state[2] == player && state[4] == player && state[6] == player;
-            if(win) {
-                call Broadcast(players[player - 1].name + " Won!");
-                return true;
+    event Player RightClick(Player player, vector3 loc) {
+        if(!loc.between(<5, 50, 5>, <7, 50, 7>)) return;
+        int xOffset = loc.x - 5;
+        int yOffset = loc.y - 5;
+        int i = xOffset % 3 + yOffset * 3;
+        gameBoard.makeMove(event.player, i); 
+    }
+
+    event Board.GameEnd(Board board) {
+        if (gameBoard == board) {
+            Standard.GroupActions.SendMessage("Aight game is done bye");
+            Standard.GroupActions.Kick(); //basically a kickall
+        }
+    }
+}
+
+
+namespace Structures {
+
+    from Standard.String import FancyList;
+    from Standard.GroupActions import SendMessage as Broadcast;
+
+    namespace Board { // this is pretty much all the "global" board stuff.
+        event GameEnd(Board); //we're declaring the game end event here, with a board instance parameter
+        int totalBoards = 0;
+    }
+
+    struct Board {
+        Player[] players;
+        int currentPlayer = 0;
+        int[] state = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+
+        // not sure whether this should be in the global section or not.
+        // or whether the global section should be part of the struct, just with a keyword.
+        instance(Player[] players) { 
+            instance.players = players.shuffle(); 
+        }
+
+        func endGame() {
+            call Board.GameEnd(instance);
+        }
+
+        event GameEnd(Board board) {
+            if (board == instance) {
+                call Broadcast("Y'all, game's over.", players); 
+            } else {
+                call Broadcast(`Wow it looks like {FancyList(board.players, (p) => p.name)}'s game is done`, players); 
+                call Broadcast("But uhh your game is still goin 👍", players); 
             }
         }
-        if(state.all(tile => tile != 0))
-        {
-            call Broadcast("Tie!");
-            return true;
+
+        func startGame() { 
+            call Broadcast("Game starting! Get ready!", players); 
+            call Broadcast(`Game starting for players {FancyList(players, (p) => p.name)}.`, Plot.players.exclude(players)); 
+            wait 20;
+            players[currentPlayer].sendMessage("Your turn!"); 
+        }
+
+        func makeMove(Player player, int i) {
+            if(players[currentPlayer] != player || state[i] != 0) return;
+            state[i] = player + 1;
+            if(checkForEnd()) {
+                call this.GameEnd();
+                return;
+            }
+            currentPlayer = 1 - currentPlayer;
+            wait 20;
+            players[currentPlayer].sendMessage("Your turn!");
+        }
+
+        private func checkForEnd() -> bool {
+            for(int player = 1; player <= 2; player++) {
+                bool win = state[0] == player && state[1] == player && state[2] == player 
+                        || state[3] == player && state[4] == player && state[5] == player
+                        || state[6] == player && state[7] == player && state[8] == player
+                        || state[0] == player && state[3] == player && state[6] == player
+                        || state[1] == player && state[4] == player && state[7] == player
+                        || state[2] == player && state[5] == player && state[8] == player
+                        || state[0] == player && state[4] == player && state[8] == player
+                        || state[2] == player && state[4] == player && state[6] == player;
+                if(win) {
+                    call Broadcast(f`Game concluded for players {FancyList(players, (p) => p.name)}\nWinner: {players[player - 1].name}`); 
+                    return true;
+                }
+            }
+            if(state.all(tile => tile != 0)) {
+                call Broadcast("Tie!");
+                return true;
+            }
         }
     }
 }
