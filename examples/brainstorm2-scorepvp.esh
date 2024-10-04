@@ -1,0 +1,109 @@
+namespace Locations {
+    from Standard import BlockLoc;
+
+    const loc spawn = <0, 50, 0, 10, 90>;
+    const loc gameArea = <25, 70, 25, 0, 180>;
+    const BlockLoc enterButton = <0, 52, 2>;
+}
+
+namespace Items {
+    const item[] swordItems = [
+        simpleItem(Item.Materials.WoodenSword, "<gold>Level 1 Sword"),
+        simpleItem(Item.Materials.StoneSword, "<gold>Level 2 Sword"),
+        simpleItem(Item.Materials.IronSword, "<gold>Level 3 Sword"),
+        simpleItem(Item.Materials.GoldSword, "<gold>Level 4 Sword"),
+        simpleItem(Item.Materials.DiamondSword, "<gold>Level 5 Sword OMG")
+    ]
+
+    /// Generates a simple item from a material and name,
+    /// the resulting item is unbreakable, and has no flags or lore.
+    private simpleItem(string material, text name) -> item {
+        // Functional programming might be helpful here;
+        // item(material).setName(name).unbreakable().hideFlags().clearLore(), rather than this
+        // dunno.
+        item value = item(material);
+        value.name = name;
+        value.unbreakable(true);
+        value.hideFlags(true);
+        value.lore = [];
+        return value;
+    }
+}
+
+
+from Standard import Player, Math;
+
+globalfield gamePlayer in Player {
+    int score;
+
+    instance() {
+        score = 0;
+        instance.Player.updateHotbar();
+        instance.Player.teleport(Locations.gameArea);
+    }
+
+    func updateHotbar() {
+        instance.Player.clearInventory();
+        instance.Player.setItem(Items.swordItems[Math.min(score / 10, 4)], Player.Slots.MiddleHotbar)
+    }
+
+    event Player Respawn(Player player) {
+        if (player != instance.Player) return;
+        instance.Player.sendMessage("Welcome back from the dead!");
+        player.teleport(Locations.gameArea);
+        updateHotbar();
+    }
+
+    event Player KillPlayer(Player.FightInfo fightInfo) {
+        if (fightInfo.victim == instance.Player) {
+            int scoreLoss = Math.min(score, 3);
+            if (scoreLoss == 0) return;
+
+            score -= scoreLoss;
+            instance.Player.actionBar(`<red>-{scoreLoss} score - you now have {score} points.`);
+
+            fightInfo.killer.gamePlayer.score += scoreLoss;
+            fightInfo.killer.actionBar(`<green>+{scoreLoss} score - you now have {score} points.`);
+            
+            fightInfo.killer.gamePlayer.updateHotbar(); // update the killer's hotbar, so that it may upgrade their weapon
+        }
+    }
+    
+    event Player Command(Player player, string command) {
+        if (player != instance.Player) return;
+        if (command == "spawn") {
+            playerSpawn(player);
+        }
+    }
+}
+
+func playerSpawn(Player player) {
+    player.teleport(Locations.spawn, true);
+    player.clearInventory();
+    player.health = 20;
+    if (player.gamePlayer) delete player.gamePlayer;
+}
+
+event Player Join(Player player) {
+    playerSpawn(player);
+}
+
+event Player Leave(Player player) {
+    // not sure if the player struct will automatically handle this for you or not,
+    // most likely it will but for now i'll put this cause why not
+    delete player.gamePlayer;
+}
+
+event Player RightClick(Player player, Player.RightClickInfo rightClickInfo) {
+    if (!player.gamePlayer) {
+        if (rightClickInfo.location == Locations.enterButton) {
+            player.gamePlayer = gamePlayer(); // We attach a game player field to the player
+        }
+    }
+}
+
+event Player TakeDamage(Player player) {
+    if (!player.gamePlayer) {
+        cancel;
+    }
+}
