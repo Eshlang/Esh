@@ -38,7 +38,7 @@ globalfield gamePlayer in Player {
 
     instance() {
         score = 0;
-        instance.Player.updateHotbar();
+        updateHotbar();
         instance.Player.teleport(Locations.gameArea);
     }
 

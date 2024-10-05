@@ -1,0 +1,132 @@
+seg func
+    func _f_playerSpawn "_playerSpawn"
+    func _fs_Player_gamePlayer_instance "s_Player_gamePlayer_instance"
+    func _f_Player_gamePlayer_updateHotbar "_Player_gamePlayer_updateHotbar"
+    func _f_Items_simpleItem "_Items_simpleItem"
+    
+seg param
+    ; Game Values
+    dp value _val_playerCount #value:playercount
+    dp value _val_eventBlockLocation #value:eventblocklocation
+
+    ; Variables
+    dp var _fieldmap_Player_gamePlayer "fieldmap_Player_gamePlayer"
+
+    ; Constants
+    dp loc _const_Locations_spawn 0 50 0 #pitch:10 #yaw:90
+    dp loc _const_Locations_gameArea 25 70 25 #pitch:0 #yaw:180
+    dp loc _const_enterButton 0.5 52.5 2.5
+
+    dp var _const_swordItems "const_swordItems"
+
+    ; Reused
+    dp str _u0 "%uuid"
+
+    ; Registers
+    dp var _fre0 "fre_0" #scope:line
+    dp var _fre1 "fre_1" #scope:line
+    dp var _fre2 "fre_2" #scope:line
+    
+    dp var _lre0 "lre_0" #scope:local
+    dp var _lre1 "lre_1" #scope:local
+    dp var _lre2 "lre_2" #scope:local
+
+    dp var _plre0 "%var(lre_0)"
+    dp var _plre1 "%var(lre_1)"
+    dp var _plre2 "%var(lre_2)"
+
+    dp str _plre0_i0 "%index(%var(lre_0), 1)"
+    dp str _plre0_i1 "%index(%var(lre_0), 2)"
+    dp str _plre0_i2 "%index(%var(lre_0), 3)"
+
+    dp str _plre1_i0 "%index(%var(lre_1), 1)"
+    dp str _plre1_i1 "%index(%var(lre_1), 2)"
+    dp str _plre1_i2 "%index(%var(lre_1), 3)"
+
+    dp str _plre2_i0 "%index(%var(lre_2), 1)"
+    dp str _plre2_i1 "%index(%var(lre_2), 2)"
+    dp str _plre2_i2 "%index(%var(lre_2), 3)"
+
+    ; Compiler Params
+    dp var _c_chars "c_chars"
+    dp str _c_chstr0 "\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f"
+    dp str _c_chstr1 "\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f"
+    dp str _c_chstr2 "\u0020\u0021\u0022\u0023\u0024\u0025\u0026\u0027\u0028\u0029\u002a\u002b\u002c\u002d\u002e\u002f"
+    dp str _c_chstr3 "\u0030\u0031\u0032\u0033\u0034\u0035\u0036\u0037\u0038\u0039\u003a\u003b\u003c\u003d\u003e\u003f"
+    dp str _c_chstr4 "\u0040\u0041\u0042\u0043\u0044\u0045\u0046\u0047\u0048\u0049\u004a\u004b\u004c\u004d\u004e\u004f"
+    dp str _c_chstr5 "\u0050\u0051\u0052\u0053\u0054\u0055\u0056\u0057\u0058\u0059\u005a\u005b\u005c\u005d\u005e\u005f"
+    dp str _c_chstr6 "\u0060\u0061\u0062\u0063\u0064\u0065\u0066\u0067\u0068\u0069\u006a\u006b\u006c\u006d\u006e\u006f"
+    dp str _c_chstr7 "\u0070\u0071\u0072\u0073\u0074\u0075\u0076\u0077\u0078\u0079\u007a\u007b\u007c\u007d\u007e\u007f"
+    dp str _c_hash4 "%index(c_chars,%random(1,128))%index(c_chars,%random(1,128))%index(c_chars,%random(1,128))%index(c_chars,%random(1,128))"
+    dp str _c_hash8 "%index(c_chars,%random(1,128))%index(c_chars,%random(1,128))%index(c_chars,%random(1,128))%index(c_chars,%random(1,128))%index(c_chars,%random(1,128))%index(c_chars,%random(1,128))%index(c_chars,%random(1,128))%index(c_chars,%random(1,128))"
+
+seg code
+    plev join
+        varif eq _val_playerCount, 1
+            ; Compiler Initializations
+            var string _c_chars, _c_chstr0, _c_chstr1, _c_chstr2, _c_chstr3, _c_chstr4, _c_chstr5, _c_chstr6, _c_chstr7
+            var createdict _fieldmap_Player_gamePlayer
+
+            ; Constant Initializations
+            var createlist _const_swordItems
+            dp txt _t0 "<gold>Level 1 Sword"
+            var createlist _lre0, "wooden_sword" _t0
+            call _f_Items_simpleItem
+
+        endif
+
+        ; Global Player Join
+        sel defaultplayer
+        var set _lre0, _u0 ;_lre0 is now the default player instance.
+        sel reset
+        call _f_playerSpawn
+
+    func _f_playerSpawn
+        sel playername _lre0
+        plac teleport _const_Locations_spawn
+        plac clearinv
+        plac sethealth 20
+        varif dicthaskey _fieldmap_Player_gamePlayer, _u0
+            var removedictentry _fieldmap_Player_gamePlayer, _u0
+        endif
+        sel reset
+
+    plev leave
+        sel defaultplayer
+        varif dicthaskey _fieldmap_Player_gamePlayer, _u0
+            var removedictentry _fieldmap_Player_gamePlayer, _u0
+        endif
+        sel reset
+
+    plev rightclick
+        sel defaultplayer
+        varif dicthaskey _fieldmap_Player_gamePlayer, _u0 #not:true
+            varif eq _val_eventBlockLocation, _const_enterButton
+                var set _lre0, _u0
+                call _fs_Player_gamePlayer_instance   
+                var setdictvalue _fieldmap_Player_gamePlayer, _u0, _lre0
+            endif
+        endif
+        sel reset
+
+    func _fs_Player_gamePlayer_instance
+        var set _lre1, _c_hash8
+        var createlist _plre1, _lre0, 0
+        var set _lre0, _lre1
+        call _f_Player_gamePlayer_updateHotbar
+        sel playername _lre0
+
+        sel reset
+        var set _lre0, _plre1_i0
+    
+    func _f_Player_gamePlayer_updateHotbar
+        sel _plre0_i0
+        plac clearinv
+        var getlistvalue _fre0 
+        plac setiteminslot
+        plac setite
+        sel reset
+
+    func _f_Items_simpleItem
+
+
