@@ -7,6 +7,8 @@ namespace Locations {
 }
 
 namespace Items {
+    // So far not sure if consts are compile time, or immutable, or both depending on how they're used
+    // Thinking of using "const" for compile time, and "static" for immutable, idunno
     const item[] swordItems = [
         simpleItem(Item.Materials.WoodenSword, "<gold>Level 1 Sword"),
         simpleItem(Item.Materials.StoneSword, "<gold>Level 2 Sword"),
@@ -17,7 +19,7 @@ namespace Items {
 
     /// Generates a simple item from a material and name,
     /// the resulting item is unbreakable, and has no flags or lore.
-    private simpleItem(string material, text name) -> item {
+    private const simpleItem(string material, text name) -> item {
         // Functional programming might be helpful here;
         // item(material).setName(name).unbreakable().hideFlags().clearLore(), rather than this
         // dunno.
@@ -63,7 +65,7 @@ globalfield gamePlayer in Player {
             instance.Player.actionBar(`<red>-{scoreLoss} score - you now have {score} points.`);
 
             fightInfo.killer.gamePlayer.score += scoreLoss;
-            fightInfo.killer.actionBar(`<green>+{scoreLoss} score - you now have {score} points.`);
+            fightInfo.killer.actionBar(`<green>+{scoreLoss} score - you now have {fightInfo.killer.gamePlayer.score} points.`);
             
             fightInfo.killer.gamePlayer.updateHotbar(); // update the killer's hotbar, so that it may upgrade their weapon
         }
