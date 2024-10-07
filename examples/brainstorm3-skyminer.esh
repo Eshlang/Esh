@@ -1,0 +1,226 @@
+from Standard import Plot, Event, Player;
+
+const loc SPAWN = <20, 60, 20>;
+
+const dict ORES = {
+    "oak_wood": Ore.new(0, 0),
+    "stone": Ore.new(1, 1),
+    "coal_ore": Ore.new(2, 2),
+    "iron_ore": Ore.new(2, 3),
+    "copper_ore": Ore.new(3, 4),
+    "gold_ore": Ore.new(4, 5),
+    "redstone_ore": Ore.new(5, 6),
+    "emerald_ore": Ore.new(6, 7),
+    "lapis_ore": Ore.new(7, 8),
+    "diamond_ore": Ore.new(8, 9),
+    "nether_quartz_ore": Ore.new(9, 10),
+    "obsidian": Ore.new(10, 11)
+};
+
+const Recipe[] RECIPES = [
+    Recipe {
+        ingredients: [0, 0, 0, 0, 0, 0, 0, 0, 0],
+        result: 12
+    },
+    Recipe {
+        ingredients: [-1, 0, -1, -1, 0, -1, -1, 0, -1],
+        result: 13
+    },
+    Recipe {
+        ingredients: [12, 12, 12, -1, 13, -1, -1, 13, -1],
+        result: 14
+    },
+    Recipe {
+        ingredients: [1, 1, 1, 1, 1, 1, 1, 1, 1],
+        result: 15
+    },
+    Recipe {
+        ingredients: [15, 15, 15, -1, 13, -1, -1, 13, -1],
+        result: 16
+    },
+    Recipe {
+        ingredients: [2, 2, 2, 2, 2, 2, 2, 2, 2],
+        result: 17
+    },
+    Recipe {
+        ingredients: [3, 17, 3, 17, 3, 17, 3, 17, 3],
+        result: 18
+    },
+    Recipe {
+        ingredients: [18, 18, 18, -1, 13, -1, -1, 13, -1],
+        result: 19
+    },
+    Recipe {
+        ingredients: [4, 17, 4, 17, 4, 17, 4, 17, 4],
+        result: 20
+    },
+    Recipe {
+        ingredients: [18, 20, 18, 20, 18, 20, 18, 20, 18],
+        result: 21
+    },
+    Recipe {
+        ingredients: [21, 21, 21, -1, 13, -1, -1, 13, -1],
+        result: 22
+    },
+    Recipe {
+        ingredients: [5, 17, 5, 17, 5, 17, 5, 17, 5],
+        result: 23
+    },
+    Recipe {
+        ingredients: [23, 23, 23, -1, 13, -1, -1, 13, -1],
+        result: 24
+    }
+    Recipe {
+        ingredients: [23, 6, 23, 6, 23, 6, 23, 6, 23],
+        result: 25
+    },
+    Recipe {
+        ingredients: [21, 21, 21, 21, 25, 21, 21, 21, 21],
+        result: 26
+    },
+    Recipe {
+        ingredients: [6, 6, 6, 6, 6, 6, 6, 6, 6],
+        result: 27
+    },
+    Recipe {
+        ingredients: [26, 26, 26, 26, 27, 26, 26, 26, 26],
+        result: 28
+    },
+    Recipe {
+        ingredients: [28, 28, 28, -1, 13, -1, -1, 13, -1],
+        result: 29
+    }
+];
+
+const item[] ITEMS = [
+    item("oak_button").name($"Wood Chip"),
+    item("stone_button").name($"Pebble"),
+    item("polished_blackstone_button").name($"Coal Chunk"),
+    item("raw_iron").name($"Iron Chunk"),
+    item("raw_copper").name($"Copper Chunk"),
+    item("raw_gold").name($"Gold Chunk"),
+    item("redstone").name($"Redstone Dust"),
+    item("emerald").name($"Emerald"),
+    item("lapis_lazuli").name($"Lapis Lazuli"),
+    item("diamond").name($"Diamond"),
+    item("quartz").name($"Quartz"),
+    item("obsidian").name($"Obsidian"),
+    item("oak_planks").name($"Wood Planks"),
+    item("stick").name($"Stick"),
+    item("wooden_pickaxe").name($"Wooden Pickaxe").setTag("hardness", 1),
+    item("cobblestone").name($"Cobblestone"),
+    item("stone_pickaxe").name($"Stone Pickaxe").setTag("hardness", 2),
+    item("coal").name($"Coal"),
+    item("iron_ingot").name($"Iron Ingot"),
+    item("iron_pickaxe").name($"Iron Pickaxe").setTag("hardness", 3),
+    item("copper_ingot").name($"Copper Ingot"),
+    item("brick").name($"Copper Alloy Ingot"),
+    item("iron_pickaxe").name($"Copper Alloy Pickaxe").setTag("hardness", 4),
+    item("gold_ingot").name($"Gold Ingot"),
+    item("gold_pickaxe").name($"Gold Pickaxe").setTag("hardness", 5),
+    item("pink_dye").name($"Rose Gold"),
+    item("nautilus_shell").name($"Copper Shell"),
+    item("redstone_block").name($"Redstone Block"),
+    item("conduit").name($"Mechanical Component"),
+    item("gold_pickaxe").name($"Mechanical Pickaxe").setTag("hardness", 6)
+];
+
+const int[] CRAFTING_SLOTS = [4, 5, 6, 13, 14, 15, 22, 23, 24];
+
+const int[] RESULT_SLOT = 17;
+
+const item[] CRAFTING_MENU = [
+    NONE, NONE, NONE, AIR, AIR, AIR, NONE, NONE, NONE,
+    NONE, NONE, NONE, AIR, AIR, AIR, NONE, NO_RESULT, NONE,
+    NONE, NONE, NONE, AIR, AIR, AIR, NONE, NONE, NONE
+];
+
+struct Ore {
+    int hardness;
+    item drop;
+    func new(int hardness, int itemID) -> Ore {
+        return Ore {
+            hardness: hardness,
+            drop: ITEMS[itemID].setTag("id", itemID),
+        }
+    }
+}
+
+struct Recipe {
+    int[] ingredients;
+    int result;
+}
+
+const item NO_RESULT = item("light_gray_stained_glass_pane").name("");
+const item AIR = item("air");
+const item NONE = item("gray_stained_glass_pane").name("");
+
+event Player Join(Event.Join e) {
+    e.player.teleport(SPAWN);
+}
+
+event Player Respawn(Event.Join e) {
+    e.player.teleport(SPAWN);
+}
+
+event Player BreakBlock(Event.BreakBlock e) {
+    str block = Plot.GetBlockType(e.blockLocation);
+    int hardness = 0;
+    if (!ORES.hasKey(block)) 
+        return;
+    if (e.item.hasTag("hardness")) 
+        hardness = e.item.getTag("hardness");
+    if (ORES[block]["hardness"] <= hardness)
+        e.player.giveItem(item(ORES[block]["drop"]));
+}
+
+event Player RightClick(Event.RightClick e) {
+    e.cancel();
+    string block = Plot.GetBlockType(e.blockLocation);
+    if (block == "crafting_table") {
+        e.player.showInv(CRAFTING_MENU);
+        e.player.setInvName($"Crafting Table", centered: true);
+    }
+}
+
+event Player ClickMenuSlot(Event.ClickMenuSlot e) {
+    if (CRAFTING_SLOTS.contains(e.clickedSlotIndex)) {
+        e.uncancel();
+    }
+    if (e.clickedSlotIndex == RESULT_SLOT && e.clickedSlotItem != NO_RESULT) {
+        for (int slot in CRAFTING_SLOTS) {
+            e.player.inventoryMenuItems[slot].amount -= 1;
+        }
+        e.uncancel();
+    }
+    craftRecipe(e.player.inventoryMenuItems);
+}
+
+event Player ClickInvSlot(Event.ClickInvSlot e) {
+    if (e.player.invOpen(Player.InventoryType.PlotMenu)) {
+        craftRecipe(e.player.inventoryMenuItems);
+    }
+}
+
+event Player CloseInv(Event.CloseInv e) {
+    for (int slot in CRAFTING_SLOTS) {
+        e.player.giveItem(e.player.inventoryMenuItems[slot]);
+    }
+}
+
+func craftRecipe(item[] craftingMenu) {
+    for (Recipe recipe in RECIPES) {
+        for (int i in 0..9) {
+            int itemID = -1;
+            if (craftingMenu[CRAFTING_SLOTS[i]].hasTag("id"))
+                itemID = craftingMenu[CRAFTING_SLOTS[i]].getTag("id")
+            if (itemID != recipe.ingredients[i]) 
+                break;
+            if (i == 9) {
+                craftingMenu[RESULT_SLOT] = recipe.result;
+                return;
+            }
+        }
+    }
+    craftingMenu[RESULT_SLOT] = NO_RESULT;
+}
