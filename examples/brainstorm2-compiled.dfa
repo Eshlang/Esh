@@ -1,15 +1,16 @@
 seg func
-    func _f_playerSpawn "_playerSpawn"
-    func _fs_Player_gamePlayer_instance "s_Player_gamePlayer_instance"
-    func _f_Player_gamePlayer_updateHotbar "_Player_gamePlayer_updateHotbar"
-    func _fe_Player_gamePlayer_Player_respawn "e_Player_gamePlayer_Player_respawn"
-    func _fe_Player_gamePlayer_Player_killPlayer "e_Player_gamePlayer_Player_killPlayer"
-    func _f_Items_simpleItem "_Items_simpleItem"
+    df _f_playerSpawn "_playerSpawn"
+    df _fs_Player_gamePlayer_instance "s_Player_gamePlayer_instance"
+    df _f_Player_gamePlayer_updateHotbar "_Player_gamePlayer_updateHotbar"
+    df _fe_Player_gamePlayer_Player_respawn "e_Player_gamePlayer_Player_respawn"
+    df _fe_Player_gamePlayer_Player_command "e_Player_gamePlayer_Player_command"
+    df _fe_Player_gamePlayer_Player_killPlayer "e_Player_gamePlayer_Player_killPlayer"
+    df _f_Items_simpleItem "_Items_simpleItem"
     
 seg param
     ; Game Values
-    dp value _val_playerCount #value:playercount
-    dp value _val_eventBlockLocation #value:eventblocklocation
+    dp value _val_playerCount #type:playercount
+    dp value _val_eventBlockLocation #type:eventblocklocation
 
     ; Variables
     dp var _fieldmap_Player_gamePlayer "fieldmap_Player_gamePlayer"
@@ -36,6 +37,14 @@ seg param
     dp str _lre0_i0 "%index(lre_0,1)"
     dp str _lre0_i1 "%index(lre_0,2)"
     dp str _lre0_i2 "%index(lre_0,3)"
+
+    dp str _lre1_i0 "%index(lre_0,1)"
+    dp str _lre1_i1 "%index(lre_0,2)"
+    dp str _lre1_i2 "%index(lre_0,3)"
+
+    dp str _lre2_i0 "%index(lre_0,1)"
+    dp str _lre2_i1 "%index(lre_0,2)"
+    dp str _lre2_i2 "%index(lre_0,3)"
 
     dp var _plre0 "%var(lre_0)"
     dp var _plre1 "%var(lre_1)"
@@ -107,33 +116,36 @@ seg code
         sel reset
         call _f_playerSpawn
 
+    ; _lre0 is parameter 0; player uuid
     func _f_playerSpawn
         sel playername _lre0
         plac teleport _const_Locations_spawn
         plac clearinv
         plac sethealth 20
-        varif dicthaskey _fieldmap_Player_gamePlayer, _u0
-            var removedictentry _fieldmap_Player_gamePlayer, _u0
+        varif dicthaskey _fieldmap_Player_gamePlayer, _lre0
+            var removedictentry _fieldmap_Player_gamePlayer, _lre0
         endif
         sel reset
 
     plev leave
         sel defaultplayer
-        varif dicthaskey _fieldmap_Player_gamePlayer, _u0
-            var removedictentry _fieldmap_Player_gamePlayer, _u0
-        endif
+        var set _fre0, _u0
         sel reset
+        varif dicthaskey _fieldmap_Player_gamePlayer, _fre0
+            var removedictentry _fieldmap_Player_gamePlayer, _fre0
+        endif
 
     plev rightclick
         sel defaultplayer
-        varif dicthaskey _fieldmap_Player_gamePlayer, _u0 #not:true
+        var set _fre0, _u0
+        sel reset
+        varif dicthaskey _fieldmap_Player_gamePlayer, _fre0 #not:true
             varif eq _val_eventBlockLocation, _const_enterButton
                 var set _lre0, _u0
                 call _fs_Player_gamePlayer_instance   
                 var setdictvalue _fieldmap_Player_gamePlayer, _u0, _lre0
             endif
         endif
-        sel reset
 
     func _fs_Player_gamePlayer_instance
         var set _lre1, _c_hash8
@@ -149,12 +161,12 @@ seg code
     ; so naturally _plre0 -> field struct
     ; and _plre0_i0 -> player UUID, meanwhile i1+ would be other struct fields
     func _f_Player_gamePlayer_updateHotbar
-        sel _plre0_i0
+        sel playername _plre0_i0
         plac clearinv
         var div _fre0, _plre0_i1, 10 #divisionmode:floorresult
         var minnumber _fre0, _fre0, 4
         var getlistvalue _fre1, _const_swordItems, _fre0
-        plac setiteminslot _fre1, 5
+        plac setslotitem _fre1, 5
         sel reset
 
     func _f_Items_simpleItem
@@ -172,15 +184,31 @@ seg code
         ; Player.gamePlayer globalfield Respawn
         rep foreachentry _fre0, _fre1, _fieldmap_Player_gamePlayer
             ; Player.gamePlayer globalfield Respawn (Per Field)
-            var set _lre0, _fre0
-            var set _lre1, _fre1
+            var set _lre1, _fre0 ; key (uuid), goes to lre1
+            var set _lre0, _fre1 ; hash, goes to lre0
             sel defaultplayer
             var set _lre2, _u0 
             sel reset
             call _fe_Player_gamePlayer_Player_respawn
         endrep
     
-    plev killplayer
+    plev command
+        ; Global Player Command
+            ; (empty)
+
+        ; Player.gamePlayer globalfield Command
+        rep foreachentry _fre0, _fre1, _fieldmap_Player_gamePlayer
+            ; Player.gamePlayer globalfield Command (Per Field)
+            var set _lre1, _fre0 ; key (uuid), goes to lre1
+            var set _lre0, _fre1 ; hash, goes to lre0
+            sel defaultplayer
+            dp value _t0 #type:eventcommand
+            var createlist _lre2, _u0, _t0 
+            sel reset
+            call _fe_Player_gamePlayer_Player_command
+        endrep
+    
+    plev killPlayer
         ; FightInfo
         ; Struct: Victim UUID, Killer UUID, EventDamage, DamageEventCause
         dp value _t0 #type:uuid #target:victim
@@ -207,7 +235,7 @@ seg code
     func _fe_Player_gamePlayer_Player_killPlayer
         varif stringmatches _plre2_i0, _plre0_i0
             var minnumber _fre0, _plre0_i1, 3
-            varif _fre0, 0
+            varif eq _fre0, 0
                 ctrl return
             endif
             var set _fre1, _plre0_i1
@@ -217,7 +245,7 @@ seg code
             dp txt _t1 " score - you now have "
             dp txt _t2 " points."
             var styledtext _fre2, _t0, _fre1, _t1, _plre0_i0, _t2
-            sel _plre0_i0
+            sel playername _plre0_i0
             plac actionbar _fre2
             sel reset
             dp txt _t0 "<green>+"
@@ -225,7 +253,7 @@ seg code
             dp str _t2 "%index(%entry(fieldmap_Player_gamePlayer,%index(lre_2,2)),2)"
             dp txt _t3 " points."
             var styledtext _fre2, _t0, _fre1, _t1, _t2, _t3
-            sel _plre2_i1
+            sel playername _plre2_i1
             plac actionbar _fre2
             sel reset
         endif
@@ -248,4 +276,24 @@ seg code
         ; maybe all oop functions will have their own special parameter slot for this? dunno
         call _f_Player_gamePlayer_updateHotbar
 
-    
+
+    ; _lre0 = hash of the field struct
+    ; _lre1 = key of the field struct (in this case the uuid)
+    ; _lre2 = [default player uuid, command string]
+    func _fe_Player_gamePlayer_Player_command
+        varif stringmatches _lre2, _plre0_i0 #not:true
+            ctrl return
+        endif
+        varif stringmatches _lre2_i1, "spawn"
+        ; we want specifically the default player passed in the function
+            var set _lre0, _lre2_i0
+            call _f_playerSpawn
+        endif
+
+    plev playertakedmg
+        sel defaultplayer
+        var set _fre0, _u0
+        sel reset
+        varif dicthaskey _fieldmap_Player_gamePlayer, _fre0 #not:true
+            gmac cancelevent
+        endif
