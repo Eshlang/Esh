@@ -1,7 +1,7 @@
-pub enum Token {
+pub enum TokenType {
     Ident(String),
     // String type, but in df it's called txt
-    Txt(String),
+    String(String),
     Number(f32),
     // Comments probably don't need to contain what's in the comment, but I'll leave this for now
     Comment(String),
@@ -29,7 +29,10 @@ pub enum Token {
     LBrace, // [
     RBrace, // ]
 
-    // Keywords
+    Keyword(Keyword),
+}
+
+pub enum Keyword {
     Func,
     If,
     Else,
@@ -37,6 +40,10 @@ pub enum Token {
     True,
     False,
     Struct,
+}
+
+pub struct Token {
+    pub token_type: TokenType,
 }
 
 #[cfg(test)]
