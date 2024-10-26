@@ -1,9 +1,9 @@
-pub enum TokenType {
-    Ident(String),
-    String(String),
+pub enum TokenType<'a> {
+    Ident(&'a str),
+    String(&'a str),
     Number(f32),
     // Comments probably don't need to contain what's in the comment, but I'll leave this for now
-    Comment(String),
+    Comment(&'a str),
 
     Assign,       // =
     Equal,        // ==
@@ -41,6 +41,6 @@ pub enum Keyword {
     For,    // for loop
 }
 
-pub struct Token {
-    pub token_type: TokenType,
+pub struct Token<'a> {
+    pub token_type: TokenType<'a>,
 }
