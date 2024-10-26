@@ -5,7 +5,6 @@ pub enum TokenType {
     // Comments probably don't need to contain what's in the comment, but I'll leave this for now
     Comment(String),
 
-    EOF,
     Assign,       // =
     Equal,        // ==
     NotEqual,     // !=
@@ -32,13 +31,14 @@ pub enum TokenType {
 }
 
 pub enum Keyword {
-    Func,
-    If,
-    Else,
-    Return,
-    True,
-    False,
-    Struct,
+    Func,   // functions
+    If,     // ifs
+    Else,   // else
+    Return, // return
+    True,   // true (boolean)
+    False,  // false (boolean)
+    Struct, // struct definition
+    For,    // for loop
 }
 
 pub struct Token {
