@@ -5,6 +5,7 @@ use types::{Keyword, Position, Range, Token, TokenType};
 
 mod errors;
 pub mod types;
+pub mod lexer;
 
 #[derive(Debug)]
 pub struct Lexer<'a> {
