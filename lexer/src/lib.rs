@@ -12,6 +12,11 @@ pub struct Lexer<'a> {
 
     current_char: char,
     position: Position,
+
+    /// Used to ensure that when there is a new line, we do not increment
+    /// [Self.position.line](Position::line) right away. This way, we can have the position start
+    /// at 0 and not 1
+    started_line: bool,
 }
 
 impl<'a> Lexer<'a> {
@@ -22,6 +27,7 @@ impl<'a> Lexer<'a> {
             // Initialze as '\0', it gets set right when the lexer starts so it doesn't really
             // matter
             current_char: '\0',
+            started_line: true,
         }
     }
 
@@ -53,15 +59,16 @@ impl<'a> Lexer<'a> {
 
     /// Can i have the next character please Sir?
     fn next_char(&mut self) -> Option<char> {
-        // We do not want to increment the position on the first character. self.current_char is
-        // initialized as '\0'
-        if self.current_char != '\0' {
+        // We do not want to increment the position on the first character in a line.
+        if !self.started_line {
             self.position.char += 1;
         }
+        self.started_line = false;
         self.current_char = self.input.next()?;
         if self.current_char == '\n' {
             self.position.line += 1;
             self.position.char = 0;
+            self.started_line = true;
         }
         Some(self.current_char)
     }
@@ -111,6 +118,7 @@ impl<'a> Lexer<'a> {
                     decimal = true;
                     string.push(*char);
                 }
+                _ if char.is_whitespace() => break,
                 _ => {
                     // TODO make a better result for this type of error
                     return Err(self.err(start, LexerErrorKind::InvalidCharacter));
@@ -287,7 +295,7 @@ mod tests {
         let input = r#""Hi im \\   \n\ta \"string\"
 
 whooo
-  ""#;
+ho""#;
 
         let mut actual = Lexer::new(input);
 
@@ -298,12 +306,64 @@ whooo
                     "Hi im \\   \n\ta \"string\"
 
 whooo
-  "
+ho"
                     .to_string()
                 ),
-                range: Range::new((0, 0), (3, 3)),
+                range: Range::new((0, 0), (3, 2)),
             },
         )
     }
 
+    #[test]
+    pub fn test_multiple_lines() {
+        let input = "  id_1ent
+=
+
+this
+
+
+
+  \" ois\"
+100 grob
+\"cool\" \
+            ";
+
+        let expected = [
+            Token {
+                token_type: TokenType::Ident("id_1ent".to_string()),
+                range: Range::new((0, 2), (0, 8)),
+            },
+            Token {
+                token_type: TokenType::Assign,
+                range: Range::new((1, 0), (1, 0)),
+            },
+            Token {
+                token_type: TokenType::Ident("this".to_string()),
+                range: Range::new((3, 0), (3, 3)),
+            },
+            Token {
+                token_type: TokenType::String(" ois".to_string()),
+                range: Range::new((7, 2), (7, 7)),
+            },
+            Token {
+                token_type: TokenType::Number(100.0),
+                range: Range::new((8, 0), (8, 2)),
+            },
+            Token {
+                token_type: TokenType::Ident("grob".to_string()),
+                range: Range::new((8, 4), (8, 7)),
+            },
+            Token {
+                token_type: TokenType::String("cool".to_string()),
+                range: Range::new((9, 0), (9, 5)),
+            },
+        ];
+
+        let actual = Lexer::new(input);
+
+        expected
+            .iter()
+            .zip(actual)
+            .for_each(|(expected, actual)| assert_eq!(dbg!(actual).unwrap(), *expected));
+    }
 }
