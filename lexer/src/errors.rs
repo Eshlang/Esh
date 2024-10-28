@@ -17,4 +17,6 @@ pub enum LexerErrorKind {
     InvalidCharacter,
     #[error("unterminated string")]
     UnterminatedString,
+    #[error("invalid number Sir")]
+    InvalidNumber,
 }

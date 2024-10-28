@@ -90,6 +90,40 @@ impl<'a> Lexer<'a> {
         })
     }
 
+    fn parse_number(&mut self) -> Result<Token, LexerError> {
+        let start = self.position.clone();
+        let mut decimal = false;
+        let mut string = String::from(self.current_char);
+
+        loop {
+            let Some(char) = self.input.peek() else {
+                break;
+            };
+
+            match char {
+                '0'..='9' => string.push(*char),
+                '.' if !decimal => {
+                    decimal = true;
+                    string.push(*char);
+                }
+                _ => {
+                    // TODO make a better result for this type of error
+                    return Err(self.err(start, LexerErrorKind::InvalidCharacter));
+                }
+            };
+            let _ = self.next_char();
+        }
+        Ok(Token {
+            range: Range {
+                start: start.clone(),
+                end: self.position.clone(),
+            },
+            token_type: TokenType::Number(
+                string.parse::<f32>().expect("We made sure it's a number"),
+            ),
+        })
+    }
+
     /// parse out a string
     fn parse_string(&mut self) -> Result<Token, LexerError> {
         let start = self.position.clone();
@@ -178,6 +212,7 @@ impl<'a> Iterator for Lexer<'a> {
         match self.next_char()? {
             '"' => Some(self.parse_string()),
             'a'..='z' | 'A'..='Z' | '_' => Some(self.parse_ident()),
+            '0'..='9' => Some(self.parse_number()),
 
             // Single character tokens
             '(' => Some(Ok(self.type_to_token(TokenType::LParen))),
