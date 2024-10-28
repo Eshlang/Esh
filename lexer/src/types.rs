@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 /// A position inside the code
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Position {
     pub line: usize,
     pub char: usize,
@@ -17,13 +17,28 @@ impl Display for Position {
 ///
 /// - If [Self::end] is [None], then the range only spans [Self::start].
 /// - If [Self::end] is [Some], then the range spans from [Self::start] to [Self::end]
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Range {
     pub start: Position,
     pub end: Position,
 }
 
-#[derive(Clone)]
+impl Range {
+    pub fn new(start: (usize, usize), end: (usize, usize)) -> Self {
+        Self {
+            start: Position {
+                line: start.0,
+                char: start.1,
+            },
+            end: Position {
+                line: end.0,
+                char: end.1,
+            },
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum TokenType {
     Ident(String),
     String(String),
@@ -56,7 +71,7 @@ pub enum TokenType {
     Keyword(Keyword),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Keyword {
     Func,   // functions
     If,     // ifs
@@ -68,6 +83,7 @@ pub enum Keyword {
     For,    // for loop
 }
 
+#[derive(Debug, PartialEq)]
 pub struct Token {
     pub token_type: TokenType,
     pub range: Range,
