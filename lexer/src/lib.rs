@@ -24,7 +24,10 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn err(&self, start: Position, source: LexerErrorKind) -> LexerError {
+    /// Generates a lovely error for the lexer.
+    ///
+    /// The error will span from `start` to whatever [Self::position](field@Self::position) is currently at
+    fn err(&self, start: Position, source: LexerErrorKind) -> LexerError {
         LexerError {
             range: Range {
                 start,
@@ -34,6 +37,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    /// Go past all the whitespace grr
     fn skip_whitespace(&mut self) {
         let _ = self.input.by_ref().take_while(|&v| {
             self.position.char += 1;
@@ -45,12 +49,14 @@ impl<'a> Lexer<'a> {
         });
     }
 
+    /// Can i have the next character please Sir?
     fn next_char(&mut self) -> Option<char> {
         self.position.char += 1;
         self.current_char = self.input.next()?;
         Some(self.current_char)
     }
 
+    /// Parse an identifier
     fn parse_ident(&mut self) -> Result<Token, LexerError> {
         let start = self.position.clone();
 
@@ -77,6 +83,7 @@ impl<'a> Lexer<'a> {
         })
     }
 
+    /// parse out a string
     fn parse_string(&mut self) -> Result<Token, LexerError> {
         let start = self.position.clone();
         let mut string = String::new();
@@ -114,6 +121,45 @@ impl<'a> Lexer<'a> {
             token_type: TokenType::String(string),
         })
     }
+
+    /// Converts a [TokenType] into a [Token]
+    fn token_type_to_token(&self, token_type: TokenType) -> Token {
+        Token {
+            range: Range {
+                start: self.position.clone(),
+                end: self.position.clone(),
+            },
+            token_type,
+        }
+    }
+
+    /// Will return a Token if it makes sense ok i dont want to write documen tation rn
+    fn parse_char_lookahead(
+        &mut self,
+        token_type: TokenType,
+        lookahead: (char, TokenType),
+    ) -> Result<Token, LexerError> {
+        if self.input.peek() == Some(&lookahead.0) {
+            // Skip over the character :grin:
+            let start = self.position.clone();
+            let _ = self.next_char();
+            Ok(Token {
+                range: Range {
+                    start,
+                    end: self.position.clone(),
+                },
+                token_type: lookahead.1,
+            })
+        } else {
+            Ok(Token {
+                range: Range {
+                    start: self.position.clone(),
+                    end: self.position.clone(),
+                },
+                token_type,
+            })
+        }
+    }
 }
 
 impl<'a> Iterator for Lexer<'a> {
@@ -125,6 +171,27 @@ impl<'a> Iterator for Lexer<'a> {
         match self.next_char()? {
             '"' => Some(self.parse_string()),
             'a'..='z' | 'A'..='Z' | '_' => Some(self.parse_ident()),
+
+            // Single character tokens
+            '(' => Some(Ok(self.token_type_to_token(TokenType::LParen))),
+            ')' => Some(Ok(self.token_type_to_token(TokenType::RParen))),
+            '{' => Some(Ok(self.token_type_to_token(TokenType::RBrace))),
+            '}' => Some(Ok(self.token_type_to_token(TokenType::LBrace))),
+            '[' => Some(Ok(self.token_type_to_token(TokenType::RBracket))),
+            ']' => Some(Ok(self.token_type_to_token(TokenType::LBracket))),
+            '.' => Some(Ok(self.token_type_to_token(TokenType::Dot))),
+            ',' => Some(Ok(self.token_type_to_token(TokenType::Comma))),
+            '-' => Some(Ok(self.token_type_to_token(TokenType::Dash))),
+            '+' => Some(Ok(self.token_type_to_token(TokenType::Plus))),
+            '*' => Some(Ok(self.token_type_to_token(TokenType::Asterisk))),
+            '/' => Some(Ok(self.token_type_to_token(TokenType::Slash))),
+
+            // <, >, =, or ! can be interpreted as <=, >=, ==, or != (separate tokens!!!)
+            '<' => Some(self.parse_char_lookahead(TokenType::RAngle, ('=', TokenType::LTEqual))),
+            '>' => Some(self.parse_char_lookahead(TokenType::LAngle, ('=', TokenType::GTEqual))),
+            '=' => Some(self.parse_char_lookahead(TokenType::Assign, ('=', TokenType::Equal))),
+            '!' => Some(self.parse_char_lookahead(TokenType::Bang, ('=', TokenType::NotEqual))),
+
             '\0' => None,
             _ => todo!(),
         }
