@@ -281,4 +281,29 @@ mod tests {
             .zip(actual)
             .for_each(|(expected, actual)| assert_eq!(dbg!(actual).unwrap(), *expected));
     }
+
+    #[test]
+    pub fn test_strings() {
+        let input = r#""Hi im \\   \n\ta \"string\"
+
+whooo
+  ""#;
+
+        let mut actual = Lexer::new(input);
+
+        assert_eq!(
+            actual.next().unwrap().unwrap(),
+            Token {
+                token_type: TokenType::String(
+                    "Hi im \\   \n\ta \"string\"
+
+whooo
+  "
+                    .to_string()
+                ),
+                range: Range::new((0, 0), (3, 3)),
+            },
+        )
+    }
+
 }
