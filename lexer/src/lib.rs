@@ -1,7 +1,7 @@
 use std::{iter::Peekable, str::Chars};
 
 use errors::{LexerError, LexerErrorKind};
-use types::{Position, Range, Token, TokenType};
+use types::{Keyword, Position, Range, Token, TokenType};
 
 mod errors;
 mod types;
@@ -98,8 +98,26 @@ impl<'a> Lexer<'a> {
                 start,
                 end: self.position.clone(),
             },
-            token_type: TokenType::Ident(ident),
+            token_type: match Self::keyword_from_ident(&ident) {
+                Some(keyword) => TokenType::Keyword(keyword),
+                None => TokenType::Ident(ident),
+            },
         })
+    }
+
+    fn keyword_from_ident(input: &str) -> Option<Keyword> {
+        match input {
+            "func" => Some(Keyword::Func),
+            "if" => Some(Keyword::If),
+            "else" => Some(Keyword::Else),
+            "return" => Some(Keyword::Return),
+            "true" => Some(Keyword::True),
+            "false" => Some(Keyword::False),
+            "struct" => Some(Keyword::Struct),
+            "for" => Some(Keyword::For),
+
+            _ => None,
+        }
     }
 
     fn parse_number(&mut self) -> Result<Token, LexerError> {
@@ -165,7 +183,7 @@ impl<'a> Lexer<'a> {
                 ('n', true) => string.push('\n'),
                 ('t', true) => string.push('\t'),
                 (_, true) => {
-                    // TODO this probably isnt a good handler for backslashes? idk we should maybe
+                    // TODO this prob;ably isnt a good handler for backslashes? idk we should maybe
                     // think about how this should be handled
                     string.push('\\');
                     string.push(char)
@@ -373,5 +391,12 @@ this
             .iter()
             .zip(actual)
             .for_each(|(expected, actual)| assert_eq!(dbg!(actual).unwrap(), *expected));
+    }
+
+    #[test]
+    pub fn test_actual_code() {
+        let input = "\
+func test() 
+";
     }
 }
