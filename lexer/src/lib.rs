@@ -122,6 +122,8 @@ impl<'a> Lexer<'a> {
                 //
                 // This will create a problem in the parser if there are numbers followed by an
                 // ident/string with no space but that is not my problem :smiling_imp:
+                //
+                // TODO fix this later because it is really stupid
                 _ => break,
             };
             let _ = self.next_char();
@@ -162,6 +164,12 @@ impl<'a> Lexer<'a> {
                 // Backslashed single characters
                 ('n', true) => string.push('\n'),
                 ('t', true) => string.push('\t'),
+                (_, true) => {
+                    // TODO this probably isnt a good handler for backslashes? idk we should maybe
+                    // think about how this should be handled
+                    string.push('\\');
+                    string.push(char)
+                }
                 _ => string.push(char),
             }
             backslashed = false;
