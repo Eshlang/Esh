@@ -51,13 +51,19 @@ pub enum TokenType {
     NotEqual, // !=
     LTEqual,  // <=
     GTEqual,  // >=
-    Plus,     // +
-    Dash,     // -
-    Asterisk, // *
-    Slash,    // /
-    Bang,     // !
-    Comma,    // ,
-    Dot,      // .
+    Or,       // ||
+    And,      // &&
+
+    Plus,      // +
+    Dash,      // -
+    Asterisk,  // *
+    Slash,     // /
+    Bang,      // !
+    Comma,     // ,
+    Dot,       // .
+    Semicolon, // ;
+    Bar,       // |
+    Ampersand, // &
 
     LBrace,   // {
     RBrace,   // }
