@@ -1,15 +1,15 @@
 use std::fmt::Display;
 
 /// A position inside the code
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Position {
     pub line: usize,
-    pub character: usize,
+    pub char: usize,
 }
 
 impl Display for Position {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}:{}", self.line, self.character)
+        write!(f, "{}:{}", self.line, self.char)
     }
 }
 
@@ -20,7 +20,7 @@ impl Display for Position {
 #[derive(Debug)]
 pub struct Range {
     pub start: Position,
-    pub end: Option<Position>,
+    pub end: Position,
 }
 
 pub enum TokenType<'a> {
@@ -68,4 +68,5 @@ pub enum Keyword {
 
 pub struct Token<'a> {
     pub token_type: TokenType<'a>,
+    pub range: Range,
 }
