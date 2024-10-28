@@ -6,6 +6,7 @@ use types::{Position, Range, Token, TokenType};
 mod errors;
 mod types;
 
+#[derive(Debug)]
 pub struct Lexer<'a> {
     input: Peekable<Chars<'a>>,
 
@@ -43,7 +44,7 @@ impl<'a> Lexer<'a> {
             let Some(char) = self.input.peek() else {
                 break;
             };
-            if char.is_whitespace() {
+            if !char.is_whitespace() {
                 break;
             }
             let _ = self.next_char();
@@ -52,7 +53,11 @@ impl<'a> Lexer<'a> {
 
     /// Can i have the next character please Sir?
     fn next_char(&mut self) -> Option<char> {
-        self.position.char += 1;
+        // We do not want to increment the position on the first character. self.current_char is
+        // initialized as '\0'
+        if self.current_char != '\0' {
+            self.position.char += 1;
+        }
         self.current_char = self.input.next()?;
         if self.current_char == '\n' {
             self.position.line += 1;
@@ -209,7 +214,8 @@ impl<'a> Iterator for Lexer<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         self.skip_whitespace();
 
-        match self.next_char()? {
+        let char = self.next_char()?;
+        match char {
             '"' => Some(self.parse_string()),
             'a'..='z' | 'A'..='Z' | '_' => Some(self.parse_ident()),
             '0'..='9' => Some(self.parse_number()),
@@ -236,7 +242,43 @@ impl<'a> Iterator for Lexer<'a> {
             '!' => Some(self.parse_char_lookahead(TokenType::Bang, ('=', TokenType::NotEqual))),
 
             '\0' => None,
-            _ => todo!(),
+            _ => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    pub fn test_simple_line() {
+        let input = r#"foo bar "baazz"  1.0"#;
+
+        let expected = [
+            Token {
+                token_type: TokenType::Ident("foo".to_string()),
+                range: Range::new((0, 0), (0, 2)),
+            },
+            Token {
+                token_type: TokenType::Ident("bar".to_string()),
+                range: Range::new((0, 4), (0, 6)),
+            },
+            Token {
+                token_type: TokenType::String("baazz".to_string()),
+                range: Range::new((0, 8), (0, 14)),
+            },
+            Token {
+                token_type: TokenType::Number(1.0),
+                range: Range::new((0, 17), (0, 19)),
+            },
+        ];
+
+        let actual = Lexer::new(input);
+
+        expected
+            .iter()
+            .zip(actual)
+            .for_each(|(expected, actual)| assert_eq!(dbg!(actual).unwrap(), *expected));
     }
 }
