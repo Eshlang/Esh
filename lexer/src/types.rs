@@ -23,12 +23,12 @@ pub struct Range {
     pub end: Position,
 }
 
-pub enum TokenType<'a> {
-    Ident(&'a str),
-    String(&'a str),
+pub enum TokenType {
+    Ident(String),
+    String(String),
     Number(f32),
     // Comments probably don't need to contain what's in the comment, but I'll leave this for now
-    Comment(&'a str),
+    Comment(String),
 
     Assign,       // =
     Equal,        // ==
@@ -66,7 +66,7 @@ pub enum Keyword {
     For,    // for loop
 }
 
-pub struct Token<'a> {
-    pub token_type: TokenType<'a>,
+pub struct Token {
+    pub token_type: TokenType,
     pub range: Range,
 }
