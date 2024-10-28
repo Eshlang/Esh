@@ -39,20 +39,25 @@ impl<'a> Lexer<'a> {
 
     /// Go past all the whitespace grr
     fn skip_whitespace(&mut self) {
-        let _ = self.input.by_ref().take_while(|&v| {
-            self.position.char += 1;
-            if v == '\n' {
-                self.position.line += 1;
-                self.position.char = 0;
+        loop {
+            let Some(char) = self.input.peek() else {
+                break;
+            };
+            if char.is_whitespace() {
+                break;
             }
-            v.is_whitespace()
-        });
+            let _ = self.next_char();
+        }
     }
 
     /// Can i have the next character please Sir?
     fn next_char(&mut self) -> Option<char> {
         self.position.char += 1;
         self.current_char = self.input.next()?;
+        if self.current_char == '\n' {
+            self.position.line += 1;
+            self.position.char = 0;
+        }
         Some(self.current_char)
     }
 
@@ -64,13 +69,15 @@ impl<'a> Lexer<'a> {
         let mut ident = String::from(self.current_char);
 
         loop {
-            let Some(char) = self.next_char() else {
+            let Some(char) = self.input.peek() else {
                 break;
             };
-
             match char {
                 // Idents only support A-z, 0-9, and _
-                'a'..='z' | 'A'..='Z' | '0'..='9' | '_' => ident.push(char),
+                'a'..='z' | 'A'..='Z' | '0'..='9' | '_' => {
+                    ident.push(*char);
+                    self.next_char();
+                }
                 _ => break,
             }
         }
@@ -181,6 +188,7 @@ impl<'a> Iterator for Lexer<'a> {
             ']' => Some(Ok(self.token_type_to_token(TokenType::LBracket))),
             '.' => Some(Ok(self.token_type_to_token(TokenType::Dot))),
             ',' => Some(Ok(self.token_type_to_token(TokenType::Comma))),
+            // TODO Make these guys have a += and maybe even a ++??!!
             '-' => Some(Ok(self.token_type_to_token(TokenType::Dash))),
             '+' => Some(Ok(self.token_type_to_token(TokenType::Plus))),
             '*' => Some(Ok(self.token_type_to_token(TokenType::Asterisk))),
