@@ -118,11 +118,11 @@ impl<'a> Lexer<'a> {
                     decimal = true;
                     string.push(*char);
                 }
-                _ if char.is_whitespace() => break,
-                _ => {
-                    // TODO make a better result for this type of error
-                    return Err(self.err(start, LexerErrorKind::InvalidCharacter));
-                }
+                // If we meet any invalid character, we can break.
+                //
+                // This will create a problem in the parser if there are numbers followed by an
+                // ident/string with no space but that is not my problem :smiling_imp:
+                _ => break,
             };
             let _ = self.next_char();
         }
