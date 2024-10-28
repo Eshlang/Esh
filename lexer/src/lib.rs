@@ -130,7 +130,7 @@ impl<'a> Lexer<'a> {
     }
 
     /// Converts a [TokenType] into a [Token]
-    fn token_type_to_token(&self, token_type: TokenType) -> Token {
+    fn type_to_token(&self, token_type: TokenType) -> Token {
         Token {
             range: Range {
                 start: self.position.clone(),
@@ -180,19 +180,19 @@ impl<'a> Iterator for Lexer<'a> {
             'a'..='z' | 'A'..='Z' | '_' => Some(self.parse_ident()),
 
             // Single character tokens
-            '(' => Some(Ok(self.token_type_to_token(TokenType::LParen))),
-            ')' => Some(Ok(self.token_type_to_token(TokenType::RParen))),
-            '{' => Some(Ok(self.token_type_to_token(TokenType::RBrace))),
-            '}' => Some(Ok(self.token_type_to_token(TokenType::LBrace))),
-            '[' => Some(Ok(self.token_type_to_token(TokenType::RBracket))),
-            ']' => Some(Ok(self.token_type_to_token(TokenType::LBracket))),
-            '.' => Some(Ok(self.token_type_to_token(TokenType::Dot))),
-            ',' => Some(Ok(self.token_type_to_token(TokenType::Comma))),
+            '(' => Some(Ok(self.type_to_token(TokenType::LParen))),
+            ')' => Some(Ok(self.type_to_token(TokenType::RParen))),
+            '{' => Some(Ok(self.type_to_token(TokenType::RBrace))),
+            '}' => Some(Ok(self.type_to_token(TokenType::LBrace))),
+            '[' => Some(Ok(self.type_to_token(TokenType::RBracket))),
+            ']' => Some(Ok(self.type_to_token(TokenType::LBracket))),
+            '.' => Some(Ok(self.type_to_token(TokenType::Dot))),
+            ',' => Some(Ok(self.type_to_token(TokenType::Comma))),
             // TODO Make these guys have a += and maybe even a ++??!!
-            '-' => Some(Ok(self.token_type_to_token(TokenType::Dash))),
-            '+' => Some(Ok(self.token_type_to_token(TokenType::Plus))),
-            '*' => Some(Ok(self.token_type_to_token(TokenType::Asterisk))),
-            '/' => Some(Ok(self.token_type_to_token(TokenType::Slash))),
+            '-' => Some(Ok(self.type_to_token(TokenType::Dash))),
+            '+' => Some(Ok(self.type_to_token(TokenType::Plus))),
+            '*' => Some(Ok(self.type_to_token(TokenType::Asterisk))),
+            '/' => Some(Ok(self.type_to_token(TokenType::Slash))),
 
             // <, >, =, or ! can be interpreted as <=, >=, ==, or != (separate tokens!!!)
             '<' => Some(self.parse_char_lookahead(TokenType::RAngle, ('=', TokenType::LTEqual))),
