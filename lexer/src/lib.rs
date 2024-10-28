@@ -1,7 +1,7 @@
 use std::str::Chars;
 
-use errors::LexerError;
-use types::{Position, Token};
+use errors::{LexerError, LexerErrorKind};
+use types::{Position, Range, Token, TokenType};
 
 mod errors;
 mod types;
@@ -40,21 +40,51 @@ impl<'a> Lexer<'a> {
         Some(self.current_char)
     }
 
-    fn parse_string(&mut self) -> Result<LexerError, Token<'a>> {
+    fn parse_string(&mut self) -> Result<Token, LexerError> {
         let start = self.position.clone();
-        let backslashed = false;
+        let mut string = String::new();
+        let mut backslashed = false;
 
         loop {
-            let char = self.next_char();
-            if char == '\\' {
-                backslashed = true;
+            let char = self.next_char().ok_or(LexerError {
+                range: Range {
+                    start: start.clone(),
+                    end: self.position.clone(),
+                },
+                source: LexerErrorKind::UnterminatedString,
+            })?;
+
+            match (char, backslashed) {
+                // Backslashes
+                ('\\', false) => {
+                    backslashed = true;
+                    // continue here so we don't set backslashed back to false
+                    continue;
+                }
+                ('\\', true) => string.push('\\'),
+                // Backslashed quotes
+                ('"', false) => break,
+                ('"', true) => string.push('"'),
+                // Backslashed single characters
+                ('n', true) => string.push('\n'),
+                ('t', true) => string.push('\t'),
+                _ => string.push(char),
             }
+            backslashed = false;
         }
+
+        Ok(Token {
+            range: Range {
+                start: start.clone(),
+                end: self.position.clone(),
+            },
+            token_type: TokenType::String(string),
+        })
     }
 }
 
 impl<'a> Iterator for Lexer<'a> {
-    type Item = Result<LexerError, Token<'a>>;
+    type Item = Result<Token, LexerError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.skip_whitespace();
@@ -62,10 +92,8 @@ impl<'a> Iterator for Lexer<'a> {
         match self.next_char() {
             // Newlines can be skipped
             Some('"') => Some(self.parse_string()),
-            Some('\0') | None | _ => return None,
+            Some('\0') | None => None,
+            _ => todo!(),
         }
     }
 }
-
-#[cfg(test)]
-mod tests {}
