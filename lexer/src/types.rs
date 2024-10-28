@@ -23,6 +23,7 @@ pub struct Range {
     pub end: Position,
 }
 
+#[derive(Clone)]
 pub enum TokenType {
     Ident(String),
     String(String),
@@ -30,31 +31,32 @@ pub enum TokenType {
     // Comments probably don't need to contain what's in the comment, but I'll leave this for now
     Comment(String),
 
-    Assign,       // =
-    Equal,        // ==
-    NotEqual,     // !=
-    LessThan,     // <=
-    GreaterThan,  // >=
-    Plus,         // +
-    Dash,         // -
-    Asterisk,     // *
-    ForwardSlash, // /
-    Exclamation,  // !
-    Comma,        // ,
-    Dot,          // .
+    Assign,   // =
+    Equal,    // ==
+    NotEqual, // !=
+    LTEqual,  // <=
+    GTEqual,  // >=
+    Plus,     // +
+    Dash,     // -
+    Asterisk, // *
+    Slash,    // /
+    Bang,     // !
+    Comma,    // ,
+    Dot,      // .
 
-    LCurly, // {
-    RCurly, // }
-    LParen, // (
-    RParen, // )
-    LAngle, // <
-    RAngle, // >
-    LBrace, // [
-    RBrace, // ]
+    LBrace,   // {
+    RBrace,   // }
+    LParen,   // (
+    RParen,   // )
+    LAngle,   // <
+    RAngle,   // >
+    LBracket, // [
+    RBracket, // ]
 
     Keyword(Keyword),
 }
 
+#[derive(Clone)]
 pub enum Keyword {
     Func,   // functions
     If,     // ifs
