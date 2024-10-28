@@ -1,4 +1,4 @@
-use std::str::Chars;
+use std::{iter::Peekable, str::Chars};
 
 use errors::{LexerError, LexerErrorKind};
 use types::{Position, Range, Token, TokenType};
@@ -7,7 +7,7 @@ mod errors;
 mod types;
 
 pub struct Lexer<'a> {
-    input: Chars<'a>,
+    input: Peekable<Chars<'a>>,
 
     current_char: char,
     position: Position,
@@ -16,7 +16,7 @@ pub struct Lexer<'a> {
 impl<'a> Lexer<'a> {
     pub fn new(input: &'a str) -> Self {
         Self {
-            input: input.chars(),
+            input: input.chars().peekable(),
             position: Position { line: 0, char: 0 },
             // Initialze as '\0', it gets set right when the lexer starts so it doesn't really
             // matter
@@ -24,8 +24,19 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    pub fn err(&self, start: Position, source: LexerErrorKind) -> LexerError {
+        LexerError {
+            range: Range {
+                start,
+                end: self.position.clone(),
+            },
+            source,
+        }
+    }
+
     fn skip_whitespace(&mut self) {
         let _ = self.input.by_ref().take_while(|&v| {
+            self.position.char += 1;
             if v == '\n' {
                 self.position.line += 1;
                 self.position.char = 0;
@@ -40,19 +51,41 @@ impl<'a> Lexer<'a> {
         Some(self.current_char)
     }
 
+    fn parse_ident(&mut self) -> Result<Token, LexerError> {
+        let start = self.position.clone();
+
+        // String needs to start off with the current character !!!
+        let mut ident = String::from(self.current_char);
+
+        loop {
+            let Some(char) = self.next_char() else {
+                break;
+            };
+
+            match char {
+                // Idents only support A-z, 0-9, and _
+                'a'..='z' | 'A'..='Z' | '0'..='9' | '_' => ident.push(char),
+                _ => break,
+            }
+        }
+        Ok(Token {
+            range: Range {
+                start,
+                end: self.position.clone(),
+            },
+            token_type: TokenType::Ident(ident),
+        })
+    }
+
     fn parse_string(&mut self) -> Result<Token, LexerError> {
         let start = self.position.clone();
         let mut string = String::new();
         let mut backslashed = false;
 
         loop {
-            let char = self.next_char().ok_or(LexerError {
-                range: Range {
-                    start: start.clone(),
-                    end: self.position.clone(),
-                },
-                source: LexerErrorKind::UnterminatedString,
-            })?;
+            let char = self
+                .next_char()
+                .ok_or_else(|| self.err(start.clone(), LexerErrorKind::UnterminatedString))?;
 
             match (char, backslashed) {
                 // Backslashes
@@ -89,10 +122,10 @@ impl<'a> Iterator for Lexer<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         self.skip_whitespace();
 
-        match self.next_char() {
-            // Newlines can be skipped
-            Some('"') => Some(self.parse_string()),
-            Some('\0') | None => None,
+        match self.next_char()? {
+            '"' => Some(self.parse_string()),
+            'a'..='z' | 'A'..='Z' | '_' => Some(self.parse_ident()),
+            '\0' => None,
             _ => todo!(),
         }
     }
