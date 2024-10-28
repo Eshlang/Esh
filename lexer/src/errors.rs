@@ -1,7 +1,3 @@
-use std::fmt::Display;
-
-use thiserror;
-
 use crate::types::Range;
 
 #[derive(thiserror::Error, Debug, PartialEq)]
@@ -17,6 +13,4 @@ pub enum LexerErrorKind {
     InvalidCharacter,
     #[error("unterminated string")]
     UnterminatedString,
-    #[error("invalid number Sir")]
-    InvalidNumber,
 }

@@ -152,7 +152,7 @@ impl<'a> Lexer<'a> {
                 end: self.position.clone(),
             },
             token_type: TokenType::Number(
-                string.parse::<f32>().expect("We made sure it's a number"),
+                string.parse::<f64>().expect("We made sure it's a number"),
             ),
         })
     }
@@ -257,8 +257,8 @@ impl<'a> Iterator for Lexer<'a> {
             // Single character tokens
             '(' => Some(Ok(self.type_to_token(TokenType::LParen))),
             ')' => Some(Ok(self.type_to_token(TokenType::RParen))),
-            '{' => Some(Ok(self.type_to_token(TokenType::RBrace))),
-            '}' => Some(Ok(self.type_to_token(TokenType::LBrace))),
+            '{' => Some(Ok(self.type_to_token(TokenType::LBrace))),
+            '}' => Some(Ok(self.type_to_token(TokenType::RBrace))),
             '[' => Some(Ok(self.type_to_token(TokenType::RBracket))),
             ']' => Some(Ok(self.type_to_token(TokenType::LBracket))),
             '.' => Some(Ok(self.type_to_token(TokenType::Dot))),
@@ -271,15 +271,15 @@ impl<'a> Iterator for Lexer<'a> {
             '/' => Some(Ok(self.type_to_token(TokenType::Slash))),
 
             // <, >, =, or ! can be interpreted as <=, >=, ==, or != (separate tokens!!!)
-            '<' => Some(self.parse_char_lookahead(TokenType::RAngle, ('=', TokenType::LTEqual))),
-            '>' => Some(self.parse_char_lookahead(TokenType::LAngle, ('=', TokenType::GTEqual))),
+            '<' => Some(self.parse_char_lookahead(TokenType::LAngle, ('=', TokenType::LTEqual))),
+            '>' => Some(self.parse_char_lookahead(TokenType::RAngle, ('=', TokenType::GTEqual))),
             '=' => Some(self.parse_char_lookahead(TokenType::Assign, ('=', TokenType::Equal))),
             '!' => Some(self.parse_char_lookahead(TokenType::Bang, ('=', TokenType::NotEqual))),
             '|' => Some(self.parse_char_lookahead(TokenType::Bar, ('|', TokenType::Or))),
             '&' => Some(self.parse_char_lookahead(TokenType::Bar, ('&', TokenType::Or))),
 
             '\0' => None,
-            _ => None,
+            _ => todo!(),
         }
     }
 }
@@ -399,7 +399,82 @@ this
     #[test]
     pub fn test_actual_code() {
         let input = "\
-func test() 
+func test(number x, Player p) {
+    p.health = x;
+    wait(10);
+    x = x - 10;
+    p.health = x;
+    if p.health >= 10 || p.health < 0{
+
+    }
+}
 ";
+
+        use crate::types::Keyword::*;
+        use TokenType::*;
+        let expected = [
+            // line 1
+            Keyword(Func),
+            Ident("test".to_string()),
+            LParen,
+            Ident("number".to_string()),
+            Ident("x".to_string()),
+            Comma,
+            Ident("Player".to_string()),
+            Ident("p".to_string()),
+            RParen,
+            LBrace,
+            // line 2
+            Ident("p".to_string()),
+            Dot,
+            Ident("health".to_string()),
+            Assign,
+            Ident("x".to_string()),
+            Semicolon,
+            // line 3
+            Ident("wait".to_string()),
+            LParen,
+            Number(10.0),
+            RParen,
+            Semicolon,
+            // line 4
+            Ident("x".to_string()),
+            Assign,
+            Ident("x".to_string()),
+            Dash,
+            Number(10.0),
+            Semicolon,
+            // line 5
+            Ident("p".to_string()),
+            Dot,
+            Ident("health".to_string()),
+            Assign,
+            Ident("x".to_string()),
+            Semicolon,
+            // line 6
+            Keyword(If),
+            Ident("p".to_string()),
+            Dot,
+            Ident("health".to_string()),
+            GTEqual,
+            Number(10.0),
+            Or,
+            Ident("p".to_string()),
+            Dot,
+            Ident("health".to_string()),
+            LAngle,
+            Number(0.0),
+            LBrace,
+            // line 8
+            RBrace,
+            // line 9
+            RBrace,
+        ];
+
+        let actual = Lexer::new(input);
+        expected
+            .iter()
+            .zip(actual.map(|v| v.unwrap().token_type))
+            .for_each(|(exp, act)| assert_eq!(exp, dbg!(&act)));
     }
 }
