@@ -1,16 +1,15 @@
-use lexer::{
-    lexer::Lexer, types::Token
-};
+use lexer::{types::Token, Lexer};
 
-pub enum Node<'a> {
-    Tree(Tree<'a>),
-    Token(Token<'a>),
+pub enum Node {
+    Tree(Tree),
+    Token(Token),
 }
 
-pub struct Tree<'a>{
-    children: Vec<Node<'a>>,
+pub struct Tree {
+    children: Vec<Node>,
 }
 
 pub fn parse(lexer: &Lexer) -> Tree {
     todo!()
 }
+
