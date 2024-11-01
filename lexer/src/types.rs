@@ -58,6 +58,7 @@ pub enum TokenType {
     Dash,      // -
     Asterisk,  // *
     Slash,     // /
+    Perc,      // %
     Bang,      // !
     Comma,     // ,
     Dot,       // .

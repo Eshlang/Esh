@@ -269,6 +269,7 @@ impl<'a> Iterator for Lexer<'a> {
             '+' => Some(Ok(self.type_to_token(TokenType::Plus))),
             '*' => Some(Ok(self.type_to_token(TokenType::Asterisk))),
             '/' => Some(Ok(self.type_to_token(TokenType::Slash))),
+            '%' => Some(Ok(self.type_to_token(TokenType::Perc))),
 
             // <, >, =, or ! can be interpreted as <=, >=, ==, or != (separate tokens!!!)
             '<' => Some(self.parse_char_lookahead(TokenType::LAngle, ('=', TokenType::LTEqual))),
