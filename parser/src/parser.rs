@@ -33,6 +33,7 @@ pub enum ParserError {
     InvalidToken,
     InvalidStatement,
     MissingIdentifier,
+    MissingSemicolon,
 }
 
 #[derive(Debug, PartialEq)]
@@ -79,6 +80,19 @@ impl<'a> Parser<'a> {
 
     fn is_at_end(&mut self) -> bool {
         self.current == self.tokens.len()
+    }
+
+    fn statement_block(&mut self) -> Result<Node, ParserError> {
+        let mut block = vec![];
+        while !self.is_at_end() {
+            block.push(self.statement()?);
+            if self.curr() == TokenType::Semicolon {
+                self.current += 1;
+            } else {
+                return Err(ParserError::MissingSemicolon);
+            }
+        }
+        return Ok(Node::Block(Box::new(block)));
     }
 
     fn statement(&mut self) -> Result<Node, ParserError> {
@@ -308,7 +322,7 @@ mod tests {
 
     #[test]
     pub fn expression_test() {
-        // "x + 8 / 2 * 4"
+        // x + 8 / 2 * 4
         let input = [
             Token {
                 token_type: TokenType::Ident("x".to_string()),
@@ -369,7 +383,7 @@ mod tests {
 
     #[test]
     pub fn assignment_test() {
-        // "num x = 5"
+        // num x = 5
         let input = [
             Token {
                 token_type: TokenType::Ident("num".to_string()),
@@ -399,6 +413,82 @@ mod tests {
         });
         let mut parser = Parser::new(&input);
         match parser.statement() {
+            Ok(output) => assert_eq!(expected, output),
+            Err(e) => {
+                dbg!(e);
+                panic!()
+            }
+        }
+    }
+
+    #[test]
+    pub fn statement_block_test() {
+        // num x = 5;
+        // str y = "hello";
+        let input = [
+            Token {
+                token_type: TokenType::Ident("num".to_string()),
+                range: Range::new((0, 0), (0, 2)),
+            },
+            Token {
+                token_type: TokenType::Ident("x".to_string()),
+                range: Range::new((0, 4), (0, 4)),
+            },
+            Token {
+                token_type: TokenType::Assign,
+                range: Range::new((0, 6), (0, 6)),
+            },
+            Token {
+                token_type: TokenType::Number(5f64),
+                range: Range::new((0, 8), (0, 8)),
+            },
+            Token {
+                token_type: TokenType::Semicolon,
+                range: Range::new((0, 9), (0, 9)),
+            },
+            Token {
+                token_type: TokenType::Ident("str".to_string()),
+                range: Range::new((1, 0), (1, 2)),
+            },
+            Token {
+                token_type: TokenType::Ident("y".to_string()),
+                range: Range::new((1, 4), (1, 4)),
+            },
+            Token {
+                token_type: TokenType::Assign,
+                range: Range::new((1, 6), (1, 6)),
+            },
+            Token {
+                token_type: TokenType::String("hello".to_string()),
+                range: Range::new((1, 8), (1, 14)),
+            },
+            Token {
+                token_type: TokenType::Semicolon,
+                range: Range::new((0, 15), (0, 15)),
+            },
+        ];
+        let expected = Node::Block(Box::new(vec![
+            Node::Binary(BinaryNode {
+                operator: Operator::Assignment,
+                left: Box::new(Node::Binary(BinaryNode {
+                    operator: Operator::Declaration,
+                    left: Box::new(Node::Primary(TokenType::Ident("num".to_string()))),
+                    right: Box::new(Node::Primary(TokenType::Ident("x".to_string()))),
+                })),
+                right: Box::new(Node::Primary(TokenType::Number(5f64))),
+            }),
+            Node::Binary(BinaryNode {
+                operator: Operator::Assignment,
+                left: Box::new(Node::Binary(BinaryNode {
+                    operator: Operator::Declaration,
+                    left: Box::new(Node::Primary(TokenType::Ident("str".to_string()))),
+                    right: Box::new(Node::Primary(TokenType::Ident("y".to_string()))),
+                })),
+                right: Box::new(Node::Primary(TokenType::String("hello".to_string()))),
+            }),
+        ]));
+        let mut parser = Parser::new(&input);
+        match parser.statement_block() {
             Ok(output) => assert_eq!(expected, output),
             Err(e) => {
                 dbg!(e);
