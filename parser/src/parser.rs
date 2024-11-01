@@ -1,34 +1,64 @@
 use lexer::{types::Token, types::TokenType};
 
 #[derive(Debug, PartialEq)]
-pub enum Precedence {
-    Primary = 0,
-    Unary = 1,
-    Factor = 2,
-    Term = 3,
-    Comparison = 4,
-    Equality = 5,
-    Expression = 6,
+pub enum Node {
+    Primary(TokenType),
+    Unary(UnaryNode),
+    Binary(BinaryNode),
+    Ternary(TernaryNode),
+    Block(BlockNode),
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Node {
-    Primary(Precedence, TokenType),
-    Unary(Precedence, UnaryNode),
-    Binary(Precedence, BinaryNode),
+pub enum Operator {
+    Not,
+    Negative,
+    Product,
+    Quotient,
+    Sum,
+    Difference,
+    LessThan,
+    GreaterThan,
+    LessThanOrEqualTo,
+    GreaterThanOrEqualTo,
+    Equal,
+    NotEqual,
+    Declaration,
+    Assignment,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum ParserError {
+    InvalidToken,
+    InvalidStatement,
+    MissingIdentifier,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct UnaryNode {
-    operator: TokenType,
+    operator: Operator,
     operand: Box<Node>,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct BinaryNode {
-    operator: TokenType,
+    operator: Operator,
     left: Box<Node>,
     right: Box<Node>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct TernaryNode {
+    operator: Operator,
+    left: Box<Node>,
+    middle: Box<Node>,
+    right: Box<Node>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct BlockNode {
+    operator: Operator,
+    operands: Box<Vec<Node>>,
 }
 
 pub struct Parser<'a> {
@@ -52,115 +82,214 @@ impl<'a> Parser<'a> {
         self.tokens[self.current - 1].token_type.clone()
     }
 
-    fn advance(&mut self) {
-        if !self.is_at_end() {
-            self.current += 1;
-        }
-    }
-
     fn is_at_end(&mut self) -> bool {
         self.current == self.tokens.len()
     }
 
-    fn matches(&mut self, tokens: &[TokenType]) -> bool {
-        for token in tokens {
-            if !self.is_at_end() && &self.curr() == token {
-                self.current += 1;
-                return true;
+    fn statement(&mut self) -> Result<Node, ParserError> {
+        match self.curr() {
+            TokenType::Ident(_) => {
+                self.assignment()
             }
+            _ => Err(ParserError::InvalidStatement)
         }
-        return false;
     }
 
-    fn expression(&mut self) -> Node {
+    fn assignment(&mut self) -> Result<Node, ParserError> {
+        let mut expr = self.declaration()?;
+        if !self.is_at_end() && self.curr() == TokenType::Assign {
+            self.current += 1;
+            expr = Node::Binary(BinaryNode {
+                operator: Operator::Assignment,
+                left: Box::new(expr),
+                right: Box::new(self.expression()?),
+            });
+        }
+        return Ok(expr);
+    }
+
+    fn declaration(&mut self) -> Result<Node, ParserError> {
+        let expr = self.primary()?;
+        match self.curr() {
+            TokenType::Ident(_) => {
+                Ok(Node::Binary(BinaryNode {
+                    operator: Operator::Declaration,
+                    left: Box::new(expr),
+                    right: Box::new(self.primary()?),
+                }))
+            },
+            _ => Err(ParserError::MissingIdentifier)
+        }
+    }
+
+    fn expression(&mut self) -> Result<Node, ParserError> {
         self.equality()
     }
 
-    fn equality(&mut self) -> Node {
-        let mut expr = self.comparison();
-        while self.matches(&[TokenType::Equal, TokenType::NotEqual]) {
-            expr = Node::Binary(
-                Precedence::Equality,
-                BinaryNode {
-                    operator: self.prev(), 
-                    left: Box::new(expr), 
-                    right: Box::new(self.comparison()),
-                }
-            )
+    fn equality(&mut self) -> Result<Node, ParserError> {
+        let mut expr = self.comparison()?;
+        while !self.is_at_end() {
+            match self.curr() {
+                TokenType::Equal => {
+                    self.current += 1;
+                    expr = Node::Binary(BinaryNode {
+                            operator: Operator::Equal, 
+                            left: Box::new(expr), 
+                            right: Box::new(self.comparison()?),
+                        }
+                    )
+                },
+                TokenType::NotEqual => {
+                    self.current += 1;
+                    expr = Node::Binary(BinaryNode {
+                            operator: Operator::NotEqual, 
+                            left: Box::new(expr), 
+                            right: Box::new(self.comparison()?),
+                        }
+                    )
+                },
+                _ => break
+            }
         }
-        return expr;
+        return Ok(expr);
     }
 
-    fn comparison(&mut self) -> Node {
-        let mut expr = self.term();
-        while self.matches(&[TokenType::LAngle, TokenType::RAngle, TokenType::LTEqual, TokenType::GTEqual]) {
-            expr = Node::Binary(
-                Precedence::Comparison,
-                BinaryNode {
-                    operator: self.prev(), 
-                    left: Box::new(expr), 
-                    right: Box::new(self.term()),
-                }
-            )
+    fn comparison(&mut self) -> Result<Node, ParserError> {
+        let mut expr = self.term()?;
+        while !self.is_at_end() {
+            match self.curr() {
+                TokenType::LAngle => {
+                    self.current += 1;
+                    expr = Node::Binary(BinaryNode {
+                            operator: Operator::LessThan, 
+                            left: Box::new(expr), 
+                            right: Box::new(self.term()?),
+                        }
+                    )
+                },
+                TokenType::RAngle => {
+                    self.current += 1;
+                    expr = Node::Binary(BinaryNode {
+                            operator: Operator::GreaterThan, 
+                            left: Box::new(expr), 
+                            right: Box::new(self.term()?),
+                        }
+                    )
+                },
+                TokenType::LTEqual => {
+                    self.current += 1;
+                    expr = Node::Binary(BinaryNode {
+                            operator: Operator::LessThanOrEqualTo, 
+                            left: Box::new(expr), 
+                            right: Box::new(self.term()?),
+                        }
+                    )
+                },
+                TokenType::GTEqual => {
+                    self.current += 1;
+                    expr = Node::Binary(BinaryNode {
+                            operator: Operator::GreaterThanOrEqualTo, 
+                            left: Box::new(expr), 
+                            right: Box::new(self.term()?),
+                        }
+                    )
+                },
+                _ => break
+            }
         }
-        return expr;
+        return Ok(expr);
     }
 
-    fn term(&mut self) -> Node {
-        let mut expr = self.factor();
-        while self.matches(&[TokenType::Plus, TokenType::Dash]) {
-            expr = Node::Binary(
-                Precedence::Term,
-                BinaryNode {
-                    operator: self.prev(), 
-                    left: Box::new(expr), 
-                    right: Box::new(self.factor()),
-                }
-            )
+    fn term(&mut self) -> Result<Node, ParserError> {
+        let mut expr = self.factor()?;
+        while !self.is_at_end() {
+            match self.curr() {
+                TokenType::Plus => {
+                    self.current += 1;
+                    expr = Node::Binary(BinaryNode {
+                            operator: Operator::Sum, 
+                            left: Box::new(expr), 
+                            right: Box::new(self.factor()?),
+                        }
+                    )
+                },
+                TokenType::Dash => {
+                    self.current += 1;
+                    expr = Node::Binary(BinaryNode {
+                            operator: Operator::Difference, 
+                            left: Box::new(expr), 
+                            right: Box::new(self.factor()?),
+                        }
+                    )
+                },
+                _ => break
+            }
         }
-        return expr;
+        return Ok(expr);
     }
 
-    fn factor(&mut self) -> Node {
-        let mut expr = self.unary();
-        while self.matches(&[TokenType::Asterisk, TokenType::Slash]) {
-            expr = Node::Binary(
-                Precedence::Factor,
-                BinaryNode {
-                    operator: self.prev(), 
-                    left: Box::new(expr), 
-                    right: Box::new(self.unary()),
-                }
-            )
+    fn factor(&mut self) -> Result<Node, ParserError> {
+        let mut expr = self.unary()?;
+        while !self.is_at_end() {
+            match self.curr() {
+                TokenType::Asterisk => {
+                    self.current += 1;
+                    expr = Node::Binary(BinaryNode {
+                            operator: Operator::Product, 
+                            left: Box::new(expr), 
+                            right: Box::new(self.unary()?),
+                        }
+                    )
+                },
+                TokenType::Slash => {
+                    self.current += 1;
+                    expr = Node::Binary(BinaryNode {
+                            operator: Operator::Quotient, 
+                            left: Box::new(expr), 
+                            right: Box::new(self.unary()?),
+                        }
+                    )
+                },
+                _ => break
+            }
         }
-        return expr;
+        return Ok(expr);
     }
 
-    fn unary(&mut self) -> Node {
+    fn unary(&mut self) -> Result<Node, ParserError> {
         match self.curr() {
-            TokenType::Bang | TokenType::Dash => {
+            TokenType::Bang => {
                 self.current += 1;
-                Node::Unary(
-                    Precedence::Unary, 
-                    UnaryNode {
-                        operator: self.prev(),
-                        operand: Box::new(self.unary()),
+                Ok(Node::Unary(UnaryNode {
+                        operator: Operator::Not,
+                        operand: Box::new(self.unary()?),
                     }
-                )
+                ))
+            },
+            TokenType::Dash => {
+                self.current += 1;
+                Ok(Node::Unary(UnaryNode {
+                        operator: Operator::Negative,
+                        operand: Box::new(self.unary()?),
+                    }
+                ))
             },
             _ => self.primary(),
         }
     }
 
-    fn primary(&mut self) -> Node {
+    fn primary(&mut self) -> Result<Node, ParserError> {
         match self.curr() {
+            TokenType::Number(_) | TokenType::String(_) | TokenType::Ident(_) => {
+                self.current += 1;
+                Ok(Node::Primary(self.prev()))
+            },
             TokenType::LParen => {
                 self.current += 1;
                 todo!("implement parenthesis")
             },
             _ => {
-                self.current += 1;
-                Node::Primary(Precedence::Primary, self.prev())
+                Err(ParserError::InvalidToken)
             }
         }
     }
@@ -169,16 +298,18 @@ impl<'a> Parser<'a> {
 #[cfg(test)]
 mod tests {
 
+    use std::thread::panicking;
+
     use lexer::types::Range;
 
     use super::*;
 
     #[test]
     pub fn expression_test() {
-        // "5 + 8 / 2"
+        // "x + 8 / 2 * 4"
         let input = [
             Token {
-                token_type: TokenType::Number(5f64),
+                token_type: TokenType::Ident("x".to_string()),
                 range: Range::new((0, 0), (0, 0)),
             },
             Token {
@@ -197,41 +328,80 @@ mod tests {
                 token_type: TokenType::Number(2f64),
                 range: Range::new((0, 8), (0, 8)),
             },
+            Token {
+                token_type: TokenType::Asterisk,
+                range: Range::new((0, 10), (0, 10)),
+            },
+            Token {
+                token_type: TokenType::Number(4f64),
+                range: Range::new((0, 12), (0, 12)),
+            },
         ];
-        let expected = Node::Binary(
-            Precedence::Term, 
-            BinaryNode {
-                operator: TokenType::Plus,
-                left: Box::new(
-                    Node::Primary(
-                        Precedence::Primary, 
-                        TokenType::Number(5f64),
-                    ),
-                ),
-                right: Box::new(
-                    Node::Binary(
-                        Precedence::Factor,
-                        BinaryNode {
-                            operator: TokenType::Slash,
-                            left: Box::new(
-                                Node::Primary(
-                                    Precedence::Primary,
-                                    TokenType::Number(8f64),
-                                ),
+        let expected = Node::Binary(BinaryNode {
+                operator: Operator::Sum,
+                left: Box::new(Node::Primary(TokenType::Ident("x".to_string()))),
+                right: Box::new(Node::Binary(BinaryNode {
+                            operator: Operator::Product,
+                            left: Box::new(Node::Binary(BinaryNode {
+                                        operator: Operator::Quotient,
+                                        left: Box::new(Node::Primary(TokenType::Number(8f64))),
+                                        right: Box::new(Node::Primary(TokenType::Number(2f64))),
+                                    }
+                                )
                             ),
-                            right: Box::new(
-                                Node::Primary(
-                                    Precedence::Primary, 
-                                    TokenType::Number(2f64),
-                                ),
-                            ),
+                            right: Box::new(Node::Primary(TokenType::Number(4f64))),
                         }
-                    ),
-                ),
+                    )
+                )
             }
         );
         let mut parser = Parser::new(&input);
-        let output = parser.expression();
-        assert_eq!(output, expected);
+        match parser.expression() {
+            Ok(output) => assert_eq!(expected, output),
+            Err(e) => {
+                dbg!(e);
+                panic!()
+            }
+        }
+    }
+
+    #[test]
+    pub fn assignment_test() {
+        // "num x = 5"
+        let input = [
+            Token {
+                token_type: TokenType::Ident("num".to_string()),
+                range: Range::new((0, 0), (0, 2)),
+            },
+            Token {
+                token_type: TokenType::Ident("x".to_string()),
+                range: Range::new((0, 4), (0, 4)),
+            },
+            Token {
+                token_type: TokenType::Assign,
+                range: Range::new((0, 6), (0, 6)),
+            },
+            Token {
+                token_type: TokenType::Number(5f64),
+                range: Range::new((0, 8), (0, 8)),
+            },
+        ];
+        let expected = Node::Binary(BinaryNode {
+            operator: Operator::Assignment,
+            left: Box::new(Node::Binary(BinaryNode {
+                operator: Operator::Declaration,
+                left: Box::new(Node::Primary(TokenType::Ident("num".to_string()))),
+                right: Box::new(Node::Primary(TokenType::Ident("x".to_string()))),
+            })),
+            right: Box::new(Node::Primary(TokenType::Number(5f64))),
+        });
+        let mut parser = Parser::new(&input);
+        match parser.statement() {
+            Ok(output) => assert_eq!(expected, output),
+            Err(e) => {
+                dbg!(e);
+                panic!()
+            }
+        }
     }
 }
