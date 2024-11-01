@@ -4,7 +4,7 @@ use errors::{LexerError, LexerErrorKind};
 use types::{Keyword, Position, Range, Token, TokenType};
 
 mod errors;
-mod types;
+pub mod types;
 
 #[derive(Debug)]
 pub struct Lexer<'a> {
