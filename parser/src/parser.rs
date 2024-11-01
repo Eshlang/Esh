@@ -34,6 +34,7 @@ pub enum ParserError {
     InvalidStatement,
     MissingIdentifier,
     MissingSemicolon,
+    MissingParenthesis,
 }
 
 #[derive(Debug, PartialEq)]
@@ -70,12 +71,12 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn curr(&mut self) -> TokenType {
-        self.tokens[self.current].token_type.clone()
+    fn curr(&self) -> &TokenType {
+        &self.tokens[self.current].token_type
     }
 
-    fn prev(&mut self) -> TokenType {
-        self.tokens[self.current - 1].token_type.clone()
+    fn prev(&self) -> &TokenType {
+        &self.tokens[self.current - 1].token_type
     }
 
     fn is_at_end(&mut self) -> bool {
@@ -86,7 +87,7 @@ impl<'a> Parser<'a> {
         let mut block = vec![];
         while !self.is_at_end() {
             block.push(self.statement()?);
-            if self.curr() == TokenType::Semicolon {
+            if *self.curr() == TokenType::Semicolon {
                 self.current += 1;
             } else {
                 return Err(ParserError::MissingSemicolon);
@@ -106,7 +107,7 @@ impl<'a> Parser<'a> {
 
     fn assignment(&mut self) -> Result<Node, ParserError> {
         let mut expr = self.declaration()?;
-        if !self.is_at_end() && self.curr() == TokenType::Assign {
+        if !self.is_at_end() && *self.curr() == TokenType::Assign {
             self.current += 1;
             expr = Node::Binary(BinaryNode {
                 operator: Operator::Assignment,
@@ -300,11 +301,18 @@ impl<'a> Parser<'a> {
         match self.curr() {
             TokenType::Number(_) | TokenType::String(_) | TokenType::Ident(_) => {
                 self.current += 1;
-                Ok(Node::Primary(self.prev()))
+                Ok(Node::Primary(self.prev().clone()))
             },
             TokenType::LParen => {
                 self.current += 1;
-                todo!("implement parenthesis")
+                let expr = self.expression()?;
+                match self.curr() {
+                    TokenType::RParen => {
+                        self.current += 1;
+                        Ok(expr)
+                    },
+                    _ => Err(ParserError::MissingParenthesis)
+                }
             },
             _ => {
                 Err(ParserError::InvalidToken)
@@ -369,6 +377,79 @@ mod tests {
                         }
                     )
                 )
+            }
+        );
+        let mut parser = Parser::new(&input);
+        match parser.expression() {
+            Ok(output) => assert_eq!(expected, output),
+            Err(e) => {
+                dbg!(e);
+                panic!()
+            }
+        }
+    }
+
+    #[test]
+    pub fn parenthesis_test() {
+        // (x + 8) / (2 * 4)
+        let input = [
+            Token {
+                token_type: TokenType::LParen,
+                range: Range::new((0, 0), (0, 0)),
+            },
+            Token {
+                token_type: TokenType::Ident("x".to_string()),
+                range: Range::new((0, 1), (0, 1)),
+            },
+            Token {
+                token_type: TokenType::Plus,
+                range: Range::new((0, 3), (0, 3)),
+            },
+            Token {
+                token_type: TokenType::Number(8f64),
+                range: Range::new((0, 5), (0, 5)),
+            },
+            Token {
+                token_type: TokenType::RParen,
+                range: Range::new((0, 6), (0, 6)),
+            },
+            Token {
+                token_type: TokenType::Slash,
+                range: Range::new((0, 8), (0, 8)),
+            },
+            Token {
+                token_type: TokenType::LParen,
+                range: Range::new((0, 10), (0, 10)),
+            },
+            Token {
+                token_type: TokenType::Number(2f64),
+                range: Range::new((0, 11), (0, 11)),
+            },
+            Token {
+                token_type: TokenType::Asterisk,
+                range: Range::new((0, 13), (0, 13)),
+            },
+            Token {
+                token_type: TokenType::Number(4f64),
+                range: Range::new((0, 15), (0, 15)),
+            },
+            Token {
+                token_type: TokenType::RParen,
+                range: Range::new((0, 16), (0, 16)),
+            },
+        ];
+        let expected = Node::Binary(BinaryNode {
+                operator: Operator::Quotient,
+                left: Box::new(Node::Binary(BinaryNode {
+                    operator: Operator::Sum,
+                    left: Box::new(Node::Primary(TokenType::Ident("x".to_string()))),
+                    right: Box::new(Node::Primary(TokenType::Number(8f64)))
+                })),
+                right: Box::new(Node::Binary(BinaryNode {
+                    operator: Operator::Product,
+                    left: Box::new(Node::Primary(TokenType::Number(2f64))),
+                    right: Box::new(Node::Primary(TokenType::Number(4f64)))
+                })),
             }
         );
         let mut parser = Parser::new(&input);
