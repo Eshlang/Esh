@@ -1,3 +1,6 @@
+use core::error;
+use std::collections::btree_set::Union;
+
 use lexer::{types::Token, types::TokenType};
 
 #[derive(Debug, PartialEq)]
@@ -22,6 +25,7 @@ pub enum Operator {
     GreaterThan,
     LessThanOrEqualTo,
     GreaterThanOrEqualTo,
+    Tuple,
     Equal,
     NotEqual,
     Declaration,
@@ -79,6 +83,10 @@ impl<'a> Parser<'a> {
         &self.tokens[self.current - 1].token_type
     }
 
+    fn advance(&mut self) {
+        self.current += 1;
+    }
+
     fn is_at_end(&mut self) -> bool {
         self.current == self.tokens.len()
     }
@@ -88,7 +96,7 @@ impl<'a> Parser<'a> {
         while !self.is_at_end() {
             block.push(self.statement()?);
             if *self.curr() == TokenType::Semicolon {
-                self.current += 1;
+                self.advance();
             } else {
                 return Err(ParserError::MissingSemicolon);
             }
@@ -108,7 +116,7 @@ impl<'a> Parser<'a> {
     fn assignment(&mut self) -> Result<Node, ParserError> {
         let mut expr = self.declaration()?;
         if !self.is_at_end() && *self.curr() == TokenType::Assign {
-            self.current += 1;
+            self.advance();
             expr = Node::Binary(BinaryNode {
                 operator: Operator::Assignment,
                 left: Box::new(expr),
@@ -137,24 +145,24 @@ impl<'a> Parser<'a> {
     }
 
     fn equality(&mut self) -> Result<Node, ParserError> {
-        let mut expr = self.comparison()?;
+        let mut expr = self.tuple()?;
         while !self.is_at_end() {
             match self.curr() {
                 TokenType::Equal => {
-                    self.current += 1;
+                    self.advance();
                     expr = Node::Binary(BinaryNode {
                             operator: Operator::Equal, 
                             left: Box::new(expr), 
-                            right: Box::new(self.comparison()?),
+                            right: Box::new(self.tuple()?),
                         }
                     )
                 },
                 TokenType::NotEqual => {
-                    self.current += 1;
+                    self.advance();
                     expr = Node::Binary(BinaryNode {
                             operator: Operator::NotEqual, 
                             left: Box::new(expr), 
-                            right: Box::new(self.comparison()?),
+                            right: Box::new(self.tuple()?),
                         }
                     )
                 },
@@ -164,12 +172,45 @@ impl<'a> Parser<'a> {
         return Ok(expr);
     }
 
+    fn tuple(&mut self) -> Result<Node, ParserError> {
+        if *self.curr() != TokenType::LParen {
+            return self.comparison();
+        }
+        let start = self.current;
+        self.advance();
+        let expr = self.comparison()?;
+        match self.curr() {
+            TokenType::Comma => (),
+            TokenType::RParen => {
+                self.current = start;
+                return self.comparison();
+            },
+            _ => return Err(ParserError::MissingParenthesis),
+        }
+        let mut block = vec![expr];
+        while !self.is_at_end() {
+            self.advance();
+            block.push(self.comparison()?);
+            match self.curr() {
+                TokenType::Comma => (),
+                TokenType::RParen => {
+                    return Ok(Node::Unary(UnaryNode {
+                        operator: Operator::Tuple,
+                        operand: Box::new(Node::Block(Box::new(block)))
+                    }));
+                },
+                _ => break,
+            }
+        }
+        return Err(ParserError::MissingParenthesis)
+    }
+
     fn comparison(&mut self) -> Result<Node, ParserError> {
         let mut expr = self.term()?;
         while !self.is_at_end() {
             match self.curr() {
                 TokenType::LAngle => {
-                    self.current += 1;
+                    self.advance();
                     expr = Node::Binary(BinaryNode {
                             operator: Operator::LessThan, 
                             left: Box::new(expr), 
@@ -178,7 +219,7 @@ impl<'a> Parser<'a> {
                     )
                 },
                 TokenType::RAngle => {
-                    self.current += 1;
+                    self.advance();
                     expr = Node::Binary(BinaryNode {
                             operator: Operator::GreaterThan, 
                             left: Box::new(expr), 
@@ -187,7 +228,7 @@ impl<'a> Parser<'a> {
                     )
                 },
                 TokenType::LTEqual => {
-                    self.current += 1;
+                    self.advance();
                     expr = Node::Binary(BinaryNode {
                             operator: Operator::LessThanOrEqualTo, 
                             left: Box::new(expr), 
@@ -196,7 +237,7 @@ impl<'a> Parser<'a> {
                     )
                 },
                 TokenType::GTEqual => {
-                    self.current += 1;
+                    self.advance();
                     expr = Node::Binary(BinaryNode {
                             operator: Operator::GreaterThanOrEqualTo, 
                             left: Box::new(expr), 
@@ -215,7 +256,7 @@ impl<'a> Parser<'a> {
         while !self.is_at_end() {
             match self.curr() {
                 TokenType::Plus => {
-                    self.current += 1;
+                    self.advance();
                     expr = Node::Binary(BinaryNode {
                             operator: Operator::Sum, 
                             left: Box::new(expr), 
@@ -224,7 +265,7 @@ impl<'a> Parser<'a> {
                     )
                 },
                 TokenType::Dash => {
-                    self.current += 1;
+                    self.advance();
                     expr = Node::Binary(BinaryNode {
                             operator: Operator::Difference, 
                             left: Box::new(expr), 
@@ -243,7 +284,7 @@ impl<'a> Parser<'a> {
         while !self.is_at_end() {
             match self.curr() {
                 TokenType::Asterisk => {
-                    self.current += 1;
+                    self.advance();
                     expr = Node::Binary(BinaryNode {
                             operator: Operator::Product, 
                             left: Box::new(expr), 
@@ -252,7 +293,7 @@ impl<'a> Parser<'a> {
                     )
                 },
                 TokenType::Slash => {
-                    self.current += 1;
+                    self.advance();
                     expr = Node::Binary(BinaryNode {
                             operator: Operator::Quotient, 
                             left: Box::new(expr), 
@@ -261,7 +302,7 @@ impl<'a> Parser<'a> {
                     )
                 },
                 TokenType::Perc => {
-                    self.current += 1;
+                    self.advance();
                     expr = Node::Binary(BinaryNode {
                             operator: Operator::Modulo, 
                             left: Box::new(expr), 
@@ -278,7 +319,7 @@ impl<'a> Parser<'a> {
     fn unary(&mut self) -> Result<Node, ParserError> {
         match self.curr() {
             TokenType::Bang => {
-                self.current += 1;
+                self.advance();
                 Ok(Node::Unary(UnaryNode {
                         operator: Operator::Not,
                         operand: Box::new(self.unary()?),
@@ -286,7 +327,7 @@ impl<'a> Parser<'a> {
                 ))
             },
             TokenType::Dash => {
-                self.current += 1;
+                self.advance();
                 Ok(Node::Unary(UnaryNode {
                         operator: Operator::Negative,
                         operand: Box::new(self.unary()?),
@@ -300,15 +341,15 @@ impl<'a> Parser<'a> {
     fn primary(&mut self) -> Result<Node, ParserError> {
         match self.curr() {
             TokenType::Number(_) | TokenType::String(_) | TokenType::Ident(_) => {
-                self.current += 1;
+                self.advance();
                 Ok(Node::Primary(self.prev().clone()))
             },
             TokenType::LParen => {
-                self.current += 1;
+                self.advance();
                 let expr = self.expression()?;
                 match self.curr() {
                     TokenType::RParen => {
-                        self.current += 1;
+                        self.advance();
                         Ok(expr)
                     },
                     _ => Err(ParserError::MissingParenthesis)
@@ -452,6 +493,57 @@ mod tests {
                 })),
             }
         );
+        let mut parser = Parser::new(&input);
+        match parser.expression() {
+            Ok(output) => assert_eq!(expected, output),
+            Err(e) => {
+                dbg!(e);
+                panic!()
+            }
+        }
+    }
+
+    #[test]
+    pub fn tuple_test() {
+        // (x, 3, "test")
+        let input = [
+            Token {
+                token_type: TokenType::LParen,
+                range: Range::new((0, 0), (0, 0)),
+            },
+            Token {
+                token_type: TokenType::Ident("x".to_string()),
+                range: Range::new((0, 1), (0, 1)),
+            },
+            Token {
+                token_type: TokenType::Comma,
+                range: Range::new((0, 2), (0, 2)),
+            },
+            Token {
+                token_type: TokenType::Number(3f64),
+                range: Range::new((0, 4), (0, 4)),
+            },
+            Token {
+                token_type: TokenType::Comma,
+                range: Range::new((0, 5), (0, 5)),
+            },
+            Token {
+                token_type: TokenType::String("test".to_string()),
+                range: Range::new((0, 7), (0, 12)),
+            },
+            Token {
+                token_type: TokenType::RParen,
+                range: Range::new((0, 13), (0, 13)),
+            },
+        ];
+        let expected = Node::Unary(UnaryNode {
+            operator: Operator::Tuple,
+            operand: Box::new(Node::Block(Box::new(vec![
+                Node::Primary(TokenType::Ident("x".to_string())),
+                Node::Primary(TokenType::Number(3f64)),
+                Node::Primary(TokenType::String("test".to_string())),
+            ]))),
+        });
         let mut parser = Parser::new(&input);
         match parser.expression() {
             Ok(output) => assert_eq!(expected, output),
