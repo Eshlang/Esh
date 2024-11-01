@@ -6,7 +6,7 @@ pub enum Node {
     Unary(UnaryNode),
     Binary(BinaryNode),
     Ternary(TernaryNode),
-    Block(BlockNode),
+    Block(Box<Vec<Node>>),
 }
 
 #[derive(Debug, PartialEq)]
@@ -15,6 +15,7 @@ pub enum Operator {
     Negative,
     Product,
     Quotient,
+    Modulo,
     Sum,
     Difference,
     LessThan,
@@ -53,12 +54,6 @@ pub struct TernaryNode {
     left: Box<Node>,
     middle: Box<Node>,
     right: Box<Node>,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct BlockNode {
-    operator: Operator,
-    operands: Box<Vec<Node>>,
 }
 
 pub struct Parser<'a> {
@@ -250,6 +245,15 @@ impl<'a> Parser<'a> {
                         }
                     )
                 },
+                TokenType::Perc => {
+                    self.current += 1;
+                    expr = Node::Binary(BinaryNode {
+                            operator: Operator::Modulo, 
+                            left: Box::new(expr), 
+                            right: Box::new(self.unary()?),
+                        }
+                    )
+                },
                 _ => break
             }
         }
@@ -297,8 +301,6 @@ impl<'a> Parser<'a> {
 
 #[cfg(test)]
 mod tests {
-
-    use std::thread::panicking;
 
     use lexer::types::Range;
 
