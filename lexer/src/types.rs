@@ -53,6 +53,7 @@ pub enum TokenType {
     GTEqual,  // >=
     Or,       // ||
     And,      // &&
+    Arrow,    // ->
 
     Plus,      // +
     Dash,      // -
@@ -65,6 +66,7 @@ pub enum TokenType {
     Semicolon, // ;
     Bar,       // |
     Ampersand, // &
+    Colon,     // :
 
     LBrace,   // {
     RBrace,   // }

@@ -264,8 +264,10 @@ impl<'a> Iterator for Lexer<'a> {
             '.' => Some(Ok(self.type_to_token(TokenType::Dot))),
             ',' => Some(Ok(self.type_to_token(TokenType::Comma))),
             ';' => Some(Ok(self.type_to_token(TokenType::Semicolon))),
+            ':' => Some(Ok(self.type_to_token(TokenType::Colon))),
             // TODO Make these guys have a += and maybe even a ++??!!
-            '-' => Some(Ok(self.type_to_token(TokenType::Dash))),
+            // '-' => Some(Ok(self.type_to_token(TokenType::Dash))),
+            '-' => Some(self.parse_char_lookahead(TokenType::Dash, ('>', TokenType::Arrow))),
             '+' => Some(Ok(self.type_to_token(TokenType::Plus))),
             '*' => Some(Ok(self.type_to_token(TokenType::Asterisk))),
             '/' => Some(Ok(self.type_to_token(TokenType::Slash))),
