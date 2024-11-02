@@ -35,7 +35,7 @@ pub enum Operator {
     Return,                 // return a;
     Assignment,             // a = b
     If,                     // if a { b }
-    IfElse,                 // TODO if a { b } else { c }
+    Else,                   // a else { c }
     While,                  // TODO while a { b }
     Func,                   // func foo (a, b) { c }
     Struct,                 // TODO struct foo { a }
@@ -171,7 +171,7 @@ impl<'a> Parser<'a> {
                 self.func()
             },
             TokenType::Keyword(Keyword::If) => {
-                self.if_block()
+                self.if_else_block()
             },
             TokenType::Keyword(Keyword::Return) => {
                 self.return_block()
@@ -223,6 +223,36 @@ impl<'a> Parser<'a> {
         });
         expect!(self, TokenType::RBrace);
         self.advance();
+        return Ok(expr);
+    }
+
+    fn if_else_block(&mut self) -> Result<Node, ParserError> {
+        let mut expr = self.if_block()?;
+        while !self.is_at_end() {
+            match self.curr() {
+                TokenType::Keyword(Keyword::Else) => {
+                    self.advance();
+                    expr = Node::Binary(BinaryNode {
+                            operator: Operator::Else, 
+                            left: Box::new(expr), 
+                            right: Box::new({
+                                match self.curr() {
+                                    TokenType::Keyword(Keyword::If) => self.if_else_block()?,
+                                    TokenType::LBrace => {
+                                        self.advance();
+                                        self.statement_block()?
+                                    },
+                                    _ => return Err(ParserError::MissingBrace)
+                                }
+                            }),
+                        }
+                    );
+                    expect!(self, TokenType::RBrace);
+                    self.advance();
+                },
+                _ => break
+            }
+        }
         return Ok(expr);
     }
 
@@ -901,6 +931,132 @@ mod tests {
                     right: Box::new(Node::Primary(Some(TokenType::Ident("hello".to_string())))),
                 }),
             ])),
+        });
+        let mut parser = Parser::new(&input);
+        match parser.statement() {
+            Ok(output) => assert_eq!(expected, output),
+            Err(e) => {
+                dbg!(e);
+                panic!()
+            }
+        }
+    }
+
+    #[test]
+    pub fn if_else_test() {
+        // if x == 5 {
+        // str y = "hello";
+        // } else {
+        // str y = "evil hello";
+        // }
+        let input = [
+            Token {
+                token_type: TokenType::Keyword(Keyword::If),
+                range: Range::new((0, 0), (0, 1)),
+            },
+            Token {
+                token_type: TokenType::Ident("x".to_string()),
+                range: Range::new((0, 3), (0, 3)),
+            },
+            Token {
+                token_type: TokenType::Equal,
+                range: Range::new((0, 5), (0, 6)),
+            },
+            Token {
+                token_type: TokenType::Number(5f64),
+                range: Range::new((0, 8), (0, 8)),
+            },
+            Token {
+                token_type: TokenType::LBrace,
+                range: Range::new((0, 10), (0, 10)),
+            },
+            Token {
+                token_type: TokenType::Ident("str".to_string()),
+                range: Range::new((1, 0), (1, 2)),
+            },
+            Token {
+                token_type: TokenType::Ident("y".to_string()),
+                range: Range::new((1, 4), (1, 4)),
+            },
+            Token {
+                token_type: TokenType::Assign,
+                range: Range::new((1, 6), (1, 6)),
+            },
+            Token {
+                token_type: TokenType::Ident("hello".to_string()),
+                range: Range::new((1, 8), (1, 14)),
+            },
+            Token {
+                token_type: TokenType::Semicolon,
+                range: Range::new((1, 15), (1, 15)),
+            },
+            Token {
+                token_type: TokenType::RBrace,
+                range: Range::new((2, 0), (2, 0)),
+            },
+            Token {
+                token_type: TokenType::Keyword(Keyword::Else),
+                range: Range::new((2, 2), (2, 5)),
+            },
+            Token {
+                token_type: TokenType::LBrace,
+                range: Range::new((2, 7), (2, 7)),
+            },
+            Token {
+                token_type: TokenType::Ident("str".to_string()),
+                range: Range::new((3, 0), (3, 2)),
+            },
+            Token {
+                token_type: TokenType::Ident("y".to_string()),
+                range: Range::new((3, 4), (3, 4)),
+            },
+            Token {
+                token_type: TokenType::Assign,
+                range: Range::new((3, 6), (3, 6)),
+            },
+            Token {
+                token_type: TokenType::Ident("evil hello".to_string()),
+                range: Range::new((3, 8), (3, 19)),
+            },
+            Token {
+                token_type: TokenType::Semicolon,
+                range: Range::new((3, 20), (3, 20)),
+            },
+            Token {
+                token_type: TokenType::RBrace,
+                range: Range::new((4, 0), (4, 0)),
+            },
+        ];
+        let expected = Node::Binary(BinaryNode {
+            operator: Operator::Else,
+            left: Box::new(Node::Binary(BinaryNode {
+                operator: Operator::If,
+                left: Box::new(Node::Binary(BinaryNode {
+                    operator: Operator::Equal,
+                    left: Box::new(Node::Primary(Some(TokenType::Ident("x".to_string())))),
+                    right: Box::new(Node::Primary(Some(TokenType::Number(5f64)))),
+                })),
+                right: Box::new(Node::Block(vec![
+                    Node::Binary(BinaryNode {
+                        operator: Operator::Assignment,
+                        left: Box::new(Node::Binary(BinaryNode {
+                            operator: Operator::Declaration,
+                            left: Box::new(Node::Primary(Some(TokenType::Ident("str".to_string())))),
+                            right: Box::new(Node::Primary(Some(TokenType::Ident("y".to_string())))),
+                        })),
+                        right: Box::new(Node::Primary(Some(TokenType::Ident("hello".to_string())))),
+                    }),
+                ])),
+            })),
+            right: Box::new(Node::Block(vec![Node::Binary(BinaryNode { 
+                    operator: Operator::Assignment, 
+                    left: Box::new(Node::Binary(BinaryNode { 
+                        operator: Operator::Declaration, 
+                        left: Box::new(Node::Primary(Some(TokenType::Ident("str".to_string())))), 
+                        right: Box::new(Node::Primary(Some(TokenType::Ident("y".to_string())))),
+                    })), 
+                    right: Box::new(Node::Primary(Some(TokenType::Ident("evil hello".to_string())))),
+            })])),
         });
         let mut parser = Parser::new(&input);
         match parser.statement() {
