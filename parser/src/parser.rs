@@ -1,7 +1,4 @@
-use core::error;
-use std::collections::btree_set::Union;
-
-use lexer::{types::Token, types::TokenType};
+use lexer::types::{Keyword, Token, TokenType};
 
 #[derive(Debug, PartialEq)]
 pub enum Node {
@@ -30,6 +27,7 @@ pub enum Operator {
     NotEqual,
     Declaration,
     Assignment,
+    If,
 }
 
 #[derive(Debug, PartialEq)]
@@ -39,6 +37,7 @@ pub enum ParserError {
     MissingIdentifier,
     MissingSemicolon,
     MissingParenthesis,
+    MissingBrace,
 }
 
 #[derive(Debug, PartialEq)]
@@ -95,8 +94,14 @@ impl<'a> Parser<'a> {
         let mut block = vec![];
         while !self.is_at_end() {
             block.push(self.statement()?);
+            if self.is_at_end() {
+                break;
+            }
             if *self.curr() == TokenType::Semicolon {
                 self.advance();
+                if self.is_at_end() || *self.curr() == TokenType::RBrace {
+                    break;
+                }
             } else {
                 return Err(ParserError::MissingSemicolon);
             }
@@ -108,7 +113,10 @@ impl<'a> Parser<'a> {
         match self.curr() {
             TokenType::Ident(_) => {
                 self.assignment()
-            }
+            },
+            TokenType::Keyword(Keyword::If) => {
+                self.if_block()
+            },
             _ => Err(ParserError::InvalidStatement)
         }
     }
@@ -124,6 +132,26 @@ impl<'a> Parser<'a> {
             });
         }
         return Ok(expr);
+    }
+
+    fn if_block(&mut self) -> Result<Node, ParserError> {
+        self.advance();
+        let expr = self.equality()?;
+        if *self.curr() != TokenType::LBrace {
+            return Err(ParserError::MissingBrace)
+        }
+        self.advance();
+        let block = self.statement_block()?;
+        if *self.curr() == TokenType::RBrace {
+            self.advance();
+        } else {
+            return Err(ParserError::MissingBrace)
+        }
+        return Ok(Node::Binary(BinaryNode {
+            operator: Operator::If,
+            left: Box::new(expr),
+            right: Box::new(block),
+        }));
     }
 
     fn declaration(&mut self) -> Result<Node, ParserError> {
@@ -662,6 +690,86 @@ mod tests {
         ]));
         let mut parser = Parser::new(&input);
         match parser.statement_block() {
+            Ok(output) => assert_eq!(expected, output),
+            Err(e) => {
+                dbg!(e);
+                panic!()
+            }
+        }
+    }
+
+    #[test]
+    pub fn if_statement_test() {
+        // if x == 5 {
+        // str y = "hello";
+        // }
+        let input = [
+            Token {
+                token_type: TokenType::Keyword(Keyword::If),
+                range: Range::new((0, 0), (0, 1)),
+            },
+            Token {
+                token_type: TokenType::Ident("x".to_string()),
+                range: Range::new((0, 3), (0, 3)),
+            },
+            Token {
+                token_type: TokenType::Equal,
+                range: Range::new((0, 5), (0, 6)),
+            },
+            Token {
+                token_type: TokenType::Number(5f64),
+                range: Range::new((0, 8), (0, 8)),
+            },
+            Token {
+                token_type: TokenType::LBrace,
+                range: Range::new((0, 10), (0, 10)),
+            },
+            Token {
+                token_type: TokenType::Ident("str".to_string()),
+                range: Range::new((1, 0), (1, 0)),
+            },
+            Token {
+                token_type: TokenType::Ident("y".to_string()),
+                range: Range::new((1, 4), (1, 4)),
+            },
+            Token {
+                token_type: TokenType::Assign,
+                range: Range::new((1, 6), (1, 6)),
+            },
+            Token {
+                token_type: TokenType::Ident("hello".to_string()),
+                range: Range::new((1, 8), (1, 14)),
+            },
+            Token {
+                token_type: TokenType::Semicolon,
+                range: Range::new((1, 15), (1, 15)),
+            },
+            Token {
+                token_type: TokenType::RBrace,
+                range: Range::new((2, 0), (2, 0)),
+            },
+        ];
+        let expected = Node::Binary(BinaryNode {
+            operator: Operator::If,
+            left: Box::new(Node::Binary(BinaryNode {
+                operator: Operator::Equal,
+                left: Box::new(Node::Primary(TokenType::Ident("x".to_string()))),
+                right: Box::new(Node::Primary(TokenType::Number(5f64))),
+            })),
+            right: Box::new(Node::Block(Box::new(vec![
+                Node::Binary(BinaryNode {
+                    operator: Operator::Assignment,
+                    left: Box::new(Node::Binary(BinaryNode {
+                        operator: Operator::Declaration,
+                        left: Box::new(Node::Primary(TokenType::Ident("str".to_string()))),
+                        right: Box::new(Node::Primary(TokenType::Ident("y".to_string()))),
+                    })),
+                    right: Box::new(Node::Primary(TokenType::Ident("hello".to_string()))),
+                }),
+            ]))),
+        });
+        let mut parser = Parser::new(&input);
+        match parser.statement() {
             Ok(output) => assert_eq!(expected, output),
             Err(e) => {
                 dbg!(e);
