@@ -31,7 +31,10 @@ pub enum Operator {
     Return,
     Assignment,
     If,
+    IfElse, //TODO
+    While, // TODO
     Func,
+    Struct, // TODO
 }
 
 #[derive(Debug, PartialEq)]
@@ -476,16 +479,16 @@ impl<'a> Parser<'a> {
     fn primary(&mut self) -> Result<Node, ParserError> {
         match self.curr() {
             TokenType::Ident(_) => {
-                self.advance();
+                let expr = self.ident()?;
                 match self.curr() {
                     TokenType::LParen => {
                         Ok(Node::Binary(BinaryNode {
                             operator: Operator::FunctionCall,
-                            left: Box::new(Node::Primary(self.prev().clone())),
+                            left: Box::new(expr),
                             right: Box::new(self.tuple()?),
                         }))
                     },
-                    _ => Ok(Node::Primary(self.prev().clone()))
+                    _ => Ok(expr)
                 }
             }
             TokenType::Number(_) | TokenType::String(_) => {
@@ -510,8 +513,13 @@ impl<'a> Parser<'a> {
     }
 
     fn ident(&mut self) -> Result<Node, ParserError> {
-        self.advance();
-        Ok(Node::Primary(self.prev().clone()))
+        match self.curr() {
+            TokenType::Ident(_) => {
+                self.advance();
+                Ok(Node::Primary(self.prev().clone()))
+            },
+            _ => Err(ParserError::InvalidToken)
+        }
     }
 }
 
