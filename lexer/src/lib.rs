@@ -279,7 +279,7 @@ impl<'a> Iterator for Lexer<'a> {
             '=' => Some(self.parse_char_lookahead(TokenType::Assign, ('=', TokenType::Equal))),
             '!' => Some(self.parse_char_lookahead(TokenType::Bang, ('=', TokenType::NotEqual))),
             '|' => Some(self.parse_char_lookahead(TokenType::Bar, ('|', TokenType::Or))),
-            '&' => Some(self.parse_char_lookahead(TokenType::Bar, ('&', TokenType::Or))),
+            '&' => Some(self.parse_char_lookahead(TokenType::Ampersand, ('&', TokenType::And))),
 
             '\0' => None,
             _ => todo!(),
