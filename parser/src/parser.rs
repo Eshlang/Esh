@@ -1,5 +1,8 @@
+use std::result;
+
 use lexer::types::{Keyword, Token, TokenType};
 
+/// A syntactical node
 #[derive(Debug, PartialEq)]
 pub enum Node {
     Primary(Option<TokenType>),
@@ -10,33 +13,35 @@ pub enum Node {
     Block(Vec<Node>),
 }
 
+/// A syntactical operator
 #[derive(Debug, PartialEq)]
 pub enum Operator {
-    FunctionCall,
-    Not,
-    Negative,
-    Product,
-    Quotient,
-    Modulo,
-    Sum,
-    Difference,
-    LessThan,
-    GreaterThan,
-    LessThanOrEqualTo,
-    GreaterThanOrEqualTo,
-    Tuple,
-    Equal,
-    NotEqual,
-    Declaration,
-    Return,
-    Assignment,
-    If,
-    IfElse, //TODO
-    While, // TODO
-    Func,
-    Struct, // TODO
+    FunctionCall,           // foo(a)
+    Not,                    // !a
+    Negative,               // -a
+    Product,                // a * b
+    Quotient,               // a / b
+    Modulo,                 // a % b
+    Sum,                    // a + b
+    Difference,             // a - b
+    LessThan,               // a < b
+    GreaterThan,            // a > b
+    LessThanOrEqualTo,      // a <= b
+    GreaterThanOrEqualTo,   // a >= b
+    Tuple,                  // (a, b, c)
+    Equal,                  // a == b
+    NotEqual,               // a != b
+    Declaration,            // foo a
+    Return,                 // return a;
+    Assignment,             // a = b
+    If,                     // if a { b }
+    IfElse,                 // TODO if a { b } else { c }
+    While,                  // TODO while a { b }
+    Func,                   // func foo (a, b) { c }
+    Struct,                 // TODO struct foo { a }
 }
 
+/// A parser error
 #[derive(Debug, PartialEq)]
 pub enum ParserError {
     InvalidToken,
@@ -47,12 +52,14 @@ pub enum ParserError {
     MissingBrace,
 }
 
+/// A node with a single operand
 #[derive(Debug, PartialEq)]
 pub struct UnaryNode {
     operator: Operator,
     operand: Box<Node>,
 }
 
+/// A node with two operands
 #[derive(Debug, PartialEq)]
 pub struct BinaryNode {
     operator: Operator,
@@ -60,6 +67,7 @@ pub struct BinaryNode {
     right: Box<Node>,
 }
 
+/// A node with three operands
 #[derive(Debug, PartialEq)]
 pub struct TernaryNode {
     operator: Operator,
@@ -68,6 +76,7 @@ pub struct TernaryNode {
     node_3: Box<Node>,
 }
 
+/// A node with four operands
 #[derive(Debug, PartialEq)]
 pub struct QuaternionNode {
     operator: Operator,
@@ -75,6 +84,31 @@ pub struct QuaternionNode {
     node_2: Box<Node>,
     node_3: Box<Node>,
     node_4: Box<Node>,
+}
+    
+macro_rules! expect {
+    ($self:expr, $token:pat) => {
+        if $self.is_at_end() || match $self.curr() {
+            $token => false,
+            _ => true
+        } {
+            return Err(if let $token = TokenType::Ident("".to_string()) {
+                ParserError::MissingIdentifier
+            } else if let $token = TokenType::Semicolon {
+                ParserError::MissingSemicolon
+            } else if let $token = TokenType::LParen {
+                ParserError::MissingParenthesis
+            } else if let $token = TokenType::RParen {
+                ParserError::MissingParenthesis
+            } else if let $token = TokenType::LBrace {
+                ParserError::MissingBrace
+            } else if let $token = TokenType::RBrace {
+                ParserError::MissingBrace
+            } else {
+                ParserError::InvalidToken
+            })
+        }
+    }
 }
 
 pub struct Parser<'a> {
@@ -90,22 +124,27 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Gets the current token
     fn curr(&self) -> &TokenType {
         &self.tokens[self.current].token_type
     }
 
+    /// Gets the previous token
     fn prev(&self) -> &TokenType {
         &self.tokens[self.current - 1].token_type
     }
 
+    /// Advances to the next token
     fn advance(&mut self) {
         self.current += 1;
     }
 
+    /// If the current token is out of range
     fn is_at_end(&mut self) -> bool {
-        self.current == self.tokens.len()
+        self.current >= self.tokens.len()
     }
 
+    /// Returns the current statement block
     fn statement_block(&mut self) -> Result<Node, ParserError> {
         let mut block = vec![];
         while !self.is_at_end() {
@@ -113,18 +152,16 @@ impl<'a> Parser<'a> {
             if self.is_at_end() {
                 break;
             }
-            if *self.curr() == TokenType::Semicolon {
-                self.advance();
-                if self.is_at_end() || *self.curr() == TokenType::RBrace {
-                    break;
-                }
-            } else {
-                return Err(ParserError::MissingSemicolon);
+            expect!(self, TokenType::Semicolon);
+            self.advance();
+            if self.is_at_end() || *self.curr() == TokenType::RBrace {
+                break;
             }
         }
         return Ok(Node::Block(block));
     }
 
+    /// Returns the current statement
     fn statement(&mut self) -> Result<Node, ParserError> {
         match self.curr() {
             TokenType::Ident(_) => {
@@ -143,6 +180,7 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Returns the current assignment statement
     fn assignment(&mut self) -> Result<Node, ParserError> {
         let mut expr = self.declaration()?;
         if !self.is_at_end() && *self.curr() == TokenType::Assign {
@@ -156,91 +194,93 @@ impl<'a> Parser<'a> {
         return Ok(expr);
     }
 
+    /// Returns the current function declaration statement
     fn func(&mut self) -> Result<Node, ParserError> {
+        let expr = Node::Quaternion(QuaternionNode {
+            operator: Operator::Func,
+            node_1: Box::new({  // Function name
+                self.advance();
+                expect!(self, TokenType::Ident(_));
+                self.ident()?
+            }),
+            node_2: Box::new({  // Function parameters
+                expect!(self, TokenType::LParen);
+                self.primary()?
+            }),
+            node_3: Box::new({  // Return type
+                if *self.curr() == TokenType::Arrow {
+                    self.advance();
+                    self.primary()?
+                } else {
+                    Node::Primary(None)
+                }
+            }),
+            node_4: Box::new({  // Function body
+                expect!(self, TokenType::LBrace);
+                self.advance();
+                self.statement_block()?
+            }),
+        });
+        expect!(self, TokenType::RBrace);
         self.advance();
+        return Ok(expr);
+    }
+
+    /// Returns the current if statement
+    fn if_block(&mut self) -> Result<Node, ParserError> {
+        let expr = Node::Binary(BinaryNode {
+            operator: Operator::If,
+            left: Box::new({    // If statement expression
+                self.advance();
+                self.equality()?
+            }),
+            right: Box::new({   // If statement body
+                expect!(self, TokenType::LBrace);
+                self.advance();
+                self.statement_block()?
+            }),
+        });
+        expect!(self, TokenType::RBrace);
+        self.advance();
+        return Ok(expr);
+    }
+
+    /// Returns the current return statement
+    fn return_block(&mut self) -> Result<Node, ParserError> {
+        Ok(Node::Unary(UnaryNode {
+            operator: Operator::Return,
+            operand: Box::new({
+                self.advance();
+                self.expression()?
+            }),
+        }))
+    }
+
+    /// Returns the current variable declaration
+    fn declaration(&mut self) -> Result<Node, ParserError> {
         match self.curr() {
             TokenType::Ident(_) => (),
-            _ => return Err(ParserError::MissingIdentifier)
+            _ => return self.expression()
         }
-        let name = self.ident()?;
-        if *self.curr() != TokenType::LParen {
-            return Err(ParserError::MissingParenthesis)
-        }
-        let params = self.tuple()?;
-        let r_type = if *self.curr() == TokenType::Arrow {
-            self.advance();
-            self.tuple()?
-        } else {
-            Node::Primary(None)
-        };
-        if *self.curr() != TokenType::LBrace {
-            return Err(ParserError::MissingBrace)
-        }
-        self.advance();
-        let block = self.statement_block()?;
-        if *self.curr() == TokenType::RBrace {
-            self.advance();
-        } else {
-            return Err(ParserError::MissingBrace)
-        }
-        return Ok(Node::Quaternion(QuaternionNode {
-            operator: Operator::Func,
-            node_1: Box::new(name),
-            node_2: Box::new(params),
-            node_3: Box::new(r_type),
-            node_4: Box::new(block),
-        }));
-    }
-
-    fn if_block(&mut self) -> Result<Node, ParserError> {
-        self.advance();
-        let expr = self.equality()?;
-        if *self.curr() != TokenType::LBrace {
-            return Err(ParserError::MissingBrace)
-        }
-        self.advance();
-        let block = self.statement_block()?;
-        if *self.curr() == TokenType::RBrace {
-            self.advance();
-        } else {
-            return Err(ParserError::MissingBrace)
-        }
-        return Ok(Node::Binary(BinaryNode {
-            operator: Operator::If,
-            left: Box::new(expr),
-            right: Box::new(block),
-        }));
-    }
-
-    fn return_block(&mut self) -> Result<Node, ParserError> {
-        self.advance();
         let expr = self.expression()?;
-        return Ok(Node::Unary(UnaryNode {
-            operator: Operator::Return,
-            operand: Box::new(expr),
-        }));
-    }
-
-    fn declaration(&mut self) -> Result<Node, ParserError> {
-        let expr = self.primary()?;
-        match self.curr() {
-            TokenType::Ident(_) => {
-                Ok(Node::Binary(BinaryNode {
-                    operator: Operator::Declaration,
-                    left: Box::new(expr),
-                    right: Box::new(self.primary()?),
-                }))
-            },
-            _ => Ok(expr)
+        if let TokenType::Ident(_) = self.curr() {
+            return Ok(Node::Binary(BinaryNode {
+                operator: Operator::Declaration,
+                left: Box::new(expr),
+                right: Box::new(self.ident()?),
+            }));
         }
+        return Ok(expr);
     }
 
+    /// Returns the current expression
     fn expression(&mut self) -> Result<Node, ParserError> {
         self.equality()
     }
 
+    /// Returns the current equality
     fn equality(&mut self) -> Result<Node, ParserError> {
-        let mut expr = self.tuple()?;
+        let mut expr = self.comparison()?;
         while !self.is_at_end() {
             match self.curr() {
                 TokenType::Equal => {
@@ -248,7 +288,7 @@ impl<'a> Parser<'a> {
                     expr = Node::Binary(BinaryNode {
                             operator: Operator::Equal, 
                             left: Box::new(expr), 
-                            right: Box::new(self.tuple()?),
+                            right: Box::new(self.comparison()?),
                         }
                     )
                 },
@@ -257,7 +297,7 @@ impl<'a> Parser<'a> {
                     expr = Node::Binary(BinaryNode {
                             operator: Operator::NotEqual, 
                             left: Box::new(expr), 
-                            right: Box::new(self.tuple()?),
+                            right: Box::new(self.comparison()?),
                         }
                     )
                 },
@@ -267,76 +307,7 @@ impl<'a> Parser<'a> {
         return Ok(expr);
     }
 
-    fn tuple(&mut self) -> Result<Node, ParserError> {
-        if *self.curr() != TokenType::LParen {
-            return self.comparison();
-        }
-        let start = self.current;
-        self.advance();
-        if *self.curr() == TokenType::RParen {
-            return Ok(Node::Primary(None))
-        }
-        let mut expr = self.comparison()?;
-        match self.curr() {
-            TokenType::Comma => (),
-            TokenType::Ident(_) => {
-                if let TokenType::Ident(_) = self.prev() {
-                    self.current = start + 1;
-                    expr = self.declaration()?;
-                    match self.curr() {
-                        TokenType::Comma => (),
-                        TokenType::RParen => {
-                            self.advance();
-                            return Ok(expr);
-                        },
-                        _ => return Err(ParserError::MissingParenthesis),
-                    }
-                }
-            },
-            TokenType::RParen => {
-                self.current = start;
-                return self.comparison();
-            },
-            _ => return Err(ParserError::MissingParenthesis),
-        }
-        let mut block = vec![expr];
-        while !self.is_at_end() {
-            let start = self.current;
-            self.advance();
-            expr = self.comparison()?;
-            match self.curr() {
-                TokenType::Comma => (),
-                TokenType::Ident(_) => {
-                    if let TokenType::Ident(_) = self.prev() {
-                        self.current = start + 1;
-                        expr = self.declaration()?;
-                        match self.curr() {
-                            TokenType::Comma => (),
-                            TokenType::RParen => {
-                                block.push(expr);
-                                return Ok(Node::Unary(UnaryNode {
-                                    operator: Operator::Tuple,
-                                    operand: Box::new(Node::Block(block))
-                                }));
-                            },
-                            _ => break,
-                        }
-                    }
-                },
-                TokenType::RParen => {
-                    block.push(expr);
-                    return Ok(Node::Unary(UnaryNode {
-                        operator: Operator::Tuple,
-                        operand: Box::new(Node::Block(block))
-                    }));
-                },
-                _ => break,
-            }
-            block.push(expr);
-        }
-        return Err(ParserError::MissingParenthesis)
-    }
-
+    /// Returns the current comparison
     fn comparison(&mut self) -> Result<Node, ParserError> {
         let mut expr = self.term()?;
         while !self.is_at_end() {
@@ -383,6 +354,7 @@ impl<'a> Parser<'a> {
         return Ok(expr);
     }
 
+    /// Returns the current term operation
     fn term(&mut self) -> Result<Node, ParserError> {
         let mut expr = self.factor()?;
         while !self.is_at_end() {
@@ -411,6 +383,7 @@ impl<'a> Parser<'a> {
         return Ok(expr);
     }
 
+    /// Returns the current factor operation
     fn factor(&mut self) -> Result<Node, ParserError> {
         let mut expr = self.unary()?;
         while !self.is_at_end() {
@@ -448,6 +421,7 @@ impl<'a> Parser<'a> {
         return Ok(expr);
     }
 
+    /// Returns the current unary operation
     fn unary(&mut self) -> Result<Node, ParserError> {
         match self.curr() {
             TokenType::Bang => {
@@ -470,32 +444,31 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Returns the current primary node
     fn primary(&mut self) -> Result<Node, ParserError> {
         match self.curr() {
             TokenType::Ident(_) => {
-                let expr = self.ident()?;
-                match self.curr() {
-                    TokenType::LParen => {
-                        Ok(Node::Binary(BinaryNode {
-                            operator: Operator::FunctionCall,
-                            left: Box::new(expr),
-                            right: Box::new(self.tuple()?),
-                        }))
-                    },
-                    _ => Ok(expr)
-                }
+                self.function_call()
             }
             TokenType::Number(_) | TokenType::String(_) => {
                 self.advance();
                 Ok(Node::Primary(Some(self.prev().clone())))
             },
             TokenType::LParen => {
+                let start = self.current;
                 self.advance();
-                let expr = self.expression()?;
+                let expr = match self.curr() {
+                    TokenType::Ident(_) => self.declaration()?,
+                    _ => self.expression()?
+                };
                 match self.curr() {
                     TokenType::RParen => {
                         self.advance();
                         Ok(expr)
+                    },
+                    TokenType::Comma => {
+                        self.current = start;
+                        return self.tuple();
                     },
                     _ => Err(ParserError::MissingParenthesis)
                 }
@@ -506,14 +479,48 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn ident(&mut self) -> Result<Node, ParserError> {
+    fn function_call(&mut self) -> Result<Node, ParserError> {
+        let mut expr = self.ident()?;
         match self.curr() {
-            TokenType::Ident(_) => {
-                self.advance();
-                Ok(Node::Primary(Some(self.prev().clone())))
-            },
-            _ => Err(ParserError::InvalidToken)
+            TokenType::LParen => expr = Node::Binary(BinaryNode {
+                    operator: Operator::FunctionCall,
+                    left: Box::new(expr),
+                    right: Box::new(self.primary()?),
+                }),
+            _ => ()
         }
+        return Ok(expr);
+    }
+
+    /// Returns the current tuple
+    fn tuple(&mut self) -> Result<Node, ParserError> {
+        expect!(self, TokenType::LParen);
+        self.advance();
+        let mut block = vec![self.declaration()?];
+        expect!(self, TokenType::Comma);
+        while !self.is_at_end() {
+            self.advance();
+            block.push(self.declaration()?);
+            match self.curr() {
+                TokenType::Comma => (),
+                TokenType::RParen => {
+                    self.advance();
+                    break;
+                },
+                _ => return Err(ParserError::MissingParenthesis)
+            }
+        }
+        return Ok(Node::Unary(UnaryNode {
+            operator: Operator::Tuple,
+            operand: Box::new(Node::Block(block)),
+        }));
+    }
+
+    /// Returns the current identifier
+    fn ident(&mut self) -> Result<Node, ParserError> {
+        expect!(self, TokenType::Ident(_));
+        self.advance();
+        Ok(Node::Primary(Some(self.prev().clone())))
     }
 }
 
