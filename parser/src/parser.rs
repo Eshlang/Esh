@@ -1,44 +1,33 @@
-use std::result;
-
 use lexer::types::{Keyword, Token, TokenType};
 
 /// A syntactical node
 #[derive(Debug, PartialEq)]
 pub enum Node {
-    Primary(Option<TokenType>),
-    Unary(UnaryNode),
-    Binary(BinaryNode),
-    Ternary(TernaryNode),
-    Quaternion(QuaternionNode),
+    Primary(TokenType),
+    FunctionCall(Box<Node>, Box<Node>),
+    Not(Box<Node>),
+    Negative(Box<Node>),
+    Product(Box<Node>, Box<Node>),
+    Quotient(Box<Node>, Box<Node>),
+    Modulo(Box<Node>, Box<Node>),
+    Sum(Box<Node>, Box<Node>),
+    Difference(Box<Node>, Box<Node>),
+    LessThan(Box<Node>, Box<Node>),
+    GreaterThan(Box<Node>, Box<Node>),
+    LessThanOrEqualTo(Box<Node>, Box<Node>),
+    GreaterThanOrEqualTo(Box<Node>, Box<Node>),
+    Tuple(Vec<Node>),
+    Equal(Box<Node>, Box<Node>),
+    NotEqual(Box<Node>, Box<Node>),
+    Declaration(Box<Node>, Box<Node>),
+    Return(Box<Node>),
+    Assignment(Box<Node>, Box<Node>),
+    If(Box<Node>, Box<Node>),
+    Else(Box<Node>, Box<Node>),
+    While(Box<Node>, Box<Node>),
+    Func(Box<Node>, Box<Node>, Option<Box<Node>>, Box<Node>),
+    Struct(Box<Node>, Box<Node>),
     Block(Vec<Node>),
-}
-
-/// A syntactical operator
-#[derive(Debug, PartialEq)]
-pub enum Operator {
-    FunctionCall,           // foo(a)
-    Not,                    // !a
-    Negative,               // -a
-    Product,                // a * b
-    Quotient,               // a / b
-    Modulo,                 // a % b
-    Sum,                    // a + b
-    Difference,             // a - b
-    LessThan,               // a < b
-    GreaterThan,            // a > b
-    LessThanOrEqualTo,      // a <= b
-    GreaterThanOrEqualTo,   // a >= b
-    Tuple,                  // (a, b, c)
-    Equal,                  // a == b
-    NotEqual,               // a != b
-    Declaration,            // foo a
-    Return,                 // return a;
-    Assignment,             // a = b
-    If,                     // if a { b }
-    Else,                   // a else { c }
-    While,                  // TODO while a { b }
-    Func,                   // func foo (a, b) { c }
-    Struct,                 // TODO struct foo { a }
 }
 
 /// A parser error
@@ -50,40 +39,6 @@ pub enum ParserError {
     MissingSemicolon,
     MissingParenthesis,
     MissingBrace,
-}
-
-/// A node with a single operand
-#[derive(Debug, PartialEq)]
-pub struct UnaryNode {
-    operator: Operator,
-    operand: Box<Node>,
-}
-
-/// A node with two operands
-#[derive(Debug, PartialEq)]
-pub struct BinaryNode {
-    operator: Operator,
-    left: Box<Node>,
-    right: Box<Node>,
-}
-
-/// A node with three operands
-#[derive(Debug, PartialEq)]
-pub struct TernaryNode {
-    operator: Operator,
-    node_1: Box<Node>,
-    node_2: Box<Node>,
-    node_3: Box<Node>,
-}
-
-/// A node with four operands
-#[derive(Debug, PartialEq)]
-pub struct QuaternionNode {
-    operator: Operator,
-    node_1: Box<Node>,
-    node_2: Box<Node>,
-    node_3: Box<Node>,
-    node_4: Box<Node>,
 }
     
 macro_rules! expect {
@@ -185,42 +140,40 @@ impl<'a> Parser<'a> {
         let mut expr = self.declaration()?;
         if !self.is_at_end() && *self.curr() == TokenType::Assign {
             self.advance();
-            expr = Node::Binary(BinaryNode {
-                operator: Operator::Assignment,
-                left: Box::new(expr),
-                right: Box::new(self.expression()?),
-            });
+            expr = Node::Assignment(
+                Box::new(expr),
+                Box::new(self.expression()?),
+            );
         }
         return Ok(expr);
     }
 
     /// Returns the current function declaration statement
     fn func(&mut self) -> Result<Node, ParserError> {
-        let expr = Node::Quaternion(QuaternionNode {
-            operator: Operator::Func,
-            node_1: Box::new({  // Function name
+        let expr = Node::Func(
+            {  // Function name
                 self.advance();
                 expect!(self, TokenType::Ident(_));
-                self.ident()?
-            }),
-            node_2: Box::new({  // Function parameters
+                Box::new(self.ident()?)
+            },
+            {  // Function parameters
                 expect!(self, TokenType::LParen);
-                self.primary()?
-            }),
-            node_3: Box::new({  // Return type
+                Box::new(self.primary()?)
+            },
+            {  // Return type
                 if *self.curr() == TokenType::Arrow {
                     self.advance();
-                    self.primary()?
+                    Some(Box::new(self.primary()?))
                 } else {
-                    Node::Primary(None)
+                    None
                 }
-            }),
-            node_4: Box::new({  // Function body
+            },
+            {  // Function body
                 expect!(self, TokenType::LBrace);
                 self.advance();
-                self.statement_block()?
-            }),
-        });
+                Box::new(self.statement_block()?)
+            },
+        );
         expect!(self, TokenType::RBrace);
         self.advance();
         return Ok(expr);
@@ -232,20 +185,16 @@ impl<'a> Parser<'a> {
             match self.curr() {
                 TokenType::Keyword(Keyword::Else) => {
                     self.advance();
-                    expr = Node::Binary(BinaryNode {
-                            operator: Operator::Else, 
-                            left: Box::new(expr), 
-                            right: Box::new({
-                                match self.curr() {
-                                    TokenType::Keyword(Keyword::If) => self.if_else_block()?,
-                                    TokenType::LBrace => {
-                                        self.advance();
-                                        self.statement_block()?
-                                    },
-                                    _ => return Err(ParserError::MissingBrace)
-                                }
-                            }),
-                        }
+                    expr = Node::Else(
+                        Box::new(expr),  
+                        match self.curr() {
+                            TokenType::Keyword(Keyword::If) => Box::new(self.if_else_block()?),
+                            TokenType::LBrace => {
+                                self.advance();
+                                Box::new(self.statement_block()?)
+                            },
+                            _ => return Err(ParserError::MissingBrace)
+                        },
                     );
                     expect!(self, TokenType::RBrace);
                     self.advance();
@@ -258,18 +207,17 @@ impl<'a> Parser<'a> {
 
     /// Returns the current if statement
     fn if_block(&mut self) -> Result<Node, ParserError> {
-        let expr = Node::Binary(BinaryNode {
-            operator: Operator::If,
-            left: Box::new({    // If statement expression
+        let expr = Node::If(
+            {    // If statement expression
                 self.advance();
-                self.equality()?
-            }),
-            right: Box::new({   // If statement body
+                Box::new(self.equality()?)
+            },
+            {   // If statement body
                 expect!(self, TokenType::LBrace);
                 self.advance();
-                self.statement_block()?
-            }),
-        });
+                Box::new(self.statement_block()?)
+            },
+        );
         expect!(self, TokenType::RBrace);
         self.advance();
         return Ok(expr);
@@ -277,13 +225,8 @@ impl<'a> Parser<'a> {
 
     /// Returns the current return statement
     fn return_block(&mut self) -> Result<Node, ParserError> {
-        Ok(Node::Unary(UnaryNode {
-            operator: Operator::Return,
-            operand: Box::new({
-                self.advance();
-                self.expression()?
-            }),
-        }))
+        self.advance();
+        return Ok(Node::Return(Box::new(self.expression()?)))
     }
 
     /// Returns the current variable declaration
@@ -294,11 +237,10 @@ impl<'a> Parser<'a> {
         }
         let expr = self.expression()?;
         if let TokenType::Ident(_) = self.curr() {
-            return Ok(Node::Binary(BinaryNode {
-                operator: Operator::Declaration,
-                left: Box::new(expr),
-                right: Box::new(self.ident()?),
-            }));
+            return Ok(Node::Declaration(
+                Box::new(expr),
+                Box::new(self.ident()?),
+            ));
         }
         return Ok(expr);
     }
@@ -315,20 +257,16 @@ impl<'a> Parser<'a> {
             match self.curr() {
                 TokenType::Equal => {
                     self.advance();
-                    expr = Node::Binary(BinaryNode {
-                            operator: Operator::Equal, 
-                            left: Box::new(expr), 
-                            right: Box::new(self.comparison()?),
-                        }
+                    expr = Node::Equal( 
+                        Box::new(expr), 
+                        Box::new(self.comparison()?),
                     )
                 },
                 TokenType::NotEqual => {
                     self.advance();
-                    expr = Node::Binary(BinaryNode {
-                            operator: Operator::NotEqual, 
-                            left: Box::new(expr), 
-                            right: Box::new(self.comparison()?),
-                        }
+                    expr = Node::NotEqual(
+                        Box::new(expr), 
+                        Box::new(self.comparison()?),
                     )
                 },
                 _ => break
@@ -344,38 +282,30 @@ impl<'a> Parser<'a> {
             match self.curr() {
                 TokenType::LAngle => {
                     self.advance();
-                    expr = Node::Binary(BinaryNode {
-                            operator: Operator::LessThan, 
-                            left: Box::new(expr), 
-                            right: Box::new(self.term()?),
-                        }
+                    expr = Node::LessThan(
+                        Box::new(expr), 
+                        Box::new(self.term()?),
                     )
                 },
                 TokenType::RAngle => {
                     self.advance();
-                    expr = Node::Binary(BinaryNode {
-                            operator: Operator::GreaterThan, 
-                            left: Box::new(expr), 
-                            right: Box::new(self.term()?),
-                        }
+                    expr = Node::GreaterThan(
+                        Box::new(expr), 
+                        Box::new(self.term()?),
                     )
                 },
                 TokenType::LTEqual => {
                     self.advance();
-                    expr = Node::Binary(BinaryNode {
-                            operator: Operator::LessThanOrEqualTo, 
-                            left: Box::new(expr), 
-                            right: Box::new(self.term()?),
-                        }
+                    expr = Node::LessThanOrEqualTo(
+                        Box::new(expr), 
+                        Box::new(self.term()?),
                     )
                 },
                 TokenType::GTEqual => {
                     self.advance();
-                    expr = Node::Binary(BinaryNode {
-                            operator: Operator::GreaterThanOrEqualTo, 
-                            left: Box::new(expr), 
-                            right: Box::new(self.term()?),
-                        }
+                    expr = Node::GreaterThanOrEqualTo( 
+                        Box::new(expr), 
+                        Box::new(self.term()?),
                     )
                 },
                 _ => break
@@ -391,20 +321,16 @@ impl<'a> Parser<'a> {
             match self.curr() {
                 TokenType::Plus => {
                     self.advance();
-                    expr = Node::Binary(BinaryNode {
-                            operator: Operator::Sum, 
-                            left: Box::new(expr), 
-                            right: Box::new(self.factor()?),
-                        }
+                    expr = Node::Sum(
+                        Box::new(expr), 
+                        Box::new(self.factor()?),
                     )
                 },
                 TokenType::Dash => {
                     self.advance();
-                    expr = Node::Binary(BinaryNode {
-                            operator: Operator::Difference, 
-                            left: Box::new(expr), 
-                            right: Box::new(self.factor()?),
-                        }
+                    expr = Node::Difference(
+                        Box::new(expr), 
+                        Box::new(self.factor()?),
                     )
                 },
                 _ => break
@@ -420,29 +346,23 @@ impl<'a> Parser<'a> {
             match self.curr() {
                 TokenType::Asterisk => {
                     self.advance();
-                    expr = Node::Binary(BinaryNode {
-                            operator: Operator::Product, 
-                            left: Box::new(expr), 
-                            right: Box::new(self.unary()?),
-                        }
+                    expr = Node::Product(
+                        Box::new(expr), 
+                        Box::new(self.unary()?),
                     )
                 },
                 TokenType::Slash => {
                     self.advance();
-                    expr = Node::Binary(BinaryNode {
-                            operator: Operator::Quotient, 
-                            left: Box::new(expr), 
-                            right: Box::new(self.unary()?),
-                        }
+                    expr = Node::Quotient(
+                        Box::new(expr), 
+                        Box::new(self.unary()?),
                     )
                 },
                 TokenType::Perc => {
                     self.advance();
-                    expr = Node::Binary(BinaryNode {
-                            operator: Operator::Modulo, 
-                            left: Box::new(expr), 
-                            right: Box::new(self.unary()?),
-                        }
+                    expr = Node::Modulo(
+                        Box::new(expr), 
+                        Box::new(self.unary()?),
                     )
                 },
                 _ => break
@@ -456,19 +376,11 @@ impl<'a> Parser<'a> {
         match self.curr() {
             TokenType::Bang => {
                 self.advance();
-                Ok(Node::Unary(UnaryNode {
-                        operator: Operator::Not,
-                        operand: Box::new(self.unary()?),
-                    }
-                ))
+                Ok(Node::Not(Box::new(self.unary()?)))
             },
             TokenType::Dash => {
                 self.advance();
-                Ok(Node::Unary(UnaryNode {
-                        operator: Operator::Negative,
-                        operand: Box::new(self.unary()?),
-                    }
-                ))
+                Ok(Node::Negative(Box::new(self.unary()?)))
             },
             _ => self.primary(),
         }
@@ -482,7 +394,7 @@ impl<'a> Parser<'a> {
             }
             TokenType::Number(_) | TokenType::String(_) => {
                 self.advance();
-                Ok(Node::Primary(Some(self.prev().clone())))
+                Ok(Node::Primary(self.prev().clone()))
             },
             TokenType::LParen => {
                 let start = self.current;
@@ -512,11 +424,10 @@ impl<'a> Parser<'a> {
     fn function_call(&mut self) -> Result<Node, ParserError> {
         let mut expr = self.ident()?;
         match self.curr() {
-            TokenType::LParen => expr = Node::Binary(BinaryNode {
-                    operator: Operator::FunctionCall,
-                    left: Box::new(expr),
-                    right: Box::new(self.primary()?),
-                }),
+            TokenType::LParen => expr = Node::FunctionCall(
+                    Box::new(expr),
+                    Box::new(self.primary()?),
+                ),
             _ => ()
         }
         return Ok(expr);
@@ -540,17 +451,14 @@ impl<'a> Parser<'a> {
                 _ => return Err(ParserError::MissingParenthesis)
             }
         }
-        return Ok(Node::Unary(UnaryNode {
-            operator: Operator::Tuple,
-            operand: Box::new(Node::Block(block)),
-        }));
+        return Ok(Node::Tuple(block));
     }
 
     /// Returns the current identifier
     fn ident(&mut self) -> Result<Node, ParserError> {
         expect!(self, TokenType::Ident(_));
         self.advance();
-        Ok(Node::Primary(Some(self.prev().clone())))
+        Ok(Node::Primary(self.prev().clone()))
     }
 }
 
@@ -594,23 +502,15 @@ mod tests {
                 range: Range::new((0, 12), (0, 12)),
             },
         ];
-        let expected = Node::Binary(BinaryNode {
-                operator: Operator::Sum,
-                left: Box::new(Node::Primary(Some(TokenType::Ident("x".to_string())))),
-                right: Box::new(Node::Binary(BinaryNode {
-                            operator: Operator::Product,
-                            left: Box::new(Node::Binary(BinaryNode {
-                                        operator: Operator::Quotient,
-                                        left: Box::new(Node::Primary(Some(TokenType::Number(8f64)))),
-                                        right: Box::new(Node::Primary(Some(TokenType::Number(2f64)))),
-                                    }
-                                )
-                            ),
-                            right: Box::new(Node::Primary(Some(TokenType::Number(4f64)))),
-                        }
-                    )
-                )
-            }
+        let expected = Node::Sum(
+            Box::new(Node::Primary(TokenType::Ident("x".to_string()))),
+            Box::new(Node::Product(
+                Box::new(Node::Quotient(
+                    Box::new(Node::Primary(TokenType::Number(8f64))),
+                    Box::new(Node::Primary(TokenType::Number(2f64))),
+                )),
+                Box::new(Node::Primary(TokenType::Number(4f64))),
+            )),
         );
         let mut parser = Parser::new(&input);
         match parser.expression() {
@@ -671,19 +571,15 @@ mod tests {
                 range: Range::new((0, 16), (0, 16)),
             },
         ];
-        let expected = Node::Binary(BinaryNode {
-                operator: Operator::Quotient,
-                left: Box::new(Node::Binary(BinaryNode {
-                    operator: Operator::Sum,
-                    left: Box::new(Node::Primary(Some(TokenType::Ident("x".to_string())))),
-                    right: Box::new(Node::Primary(Some(TokenType::Number(8f64))))
-                })),
-                right: Box::new(Node::Binary(BinaryNode {
-                    operator: Operator::Product,
-                    left: Box::new(Node::Primary(Some(TokenType::Number(2f64)))),
-                    right: Box::new(Node::Primary(Some(TokenType::Number(4f64))))
-                })),
-            }
+        let expected = Node::Quotient(
+            Box::new(Node::Sum(
+                Box::new(Node::Primary(TokenType::Ident("x".to_string()))),
+                Box::new(Node::Primary(TokenType::Number(8f64)))
+            )),
+            Box::new(Node::Product(
+                Box::new(Node::Primary(TokenType::Number(2f64))),
+                Box::new(Node::Primary(TokenType::Number(4f64)))
+            ))
         );
         let mut parser = Parser::new(&input);
         match parser.expression() {
@@ -728,14 +624,11 @@ mod tests {
                 range: Range::new((0, 13), (0, 13)),
             },
         ];
-        let expected = Node::Unary(UnaryNode {
-            operator: Operator::Tuple,
-            operand: Box::new(Node::Block(vec![
-                Node::Primary(Some(TokenType::Ident("x".to_string()))),
-                Node::Primary(Some(TokenType::Number(3f64))),
-                Node::Primary(Some(TokenType::String("test".to_string()))),
-            ])),
-        });
+        let expected = Node::Tuple(vec![
+            Node::Primary(TokenType::Ident("x".to_string())),
+            Node::Primary(TokenType::Number(3f64)),
+            Node::Primary(TokenType::String("test".to_string())),
+        ]);
         let mut parser = Parser::new(&input);
         match parser.expression() {
             Ok(output) => assert_eq!(expected, output),
@@ -767,15 +660,13 @@ mod tests {
                 range: Range::new((0, 8), (0, 8)),
             },
         ];
-        let expected = Node::Binary(BinaryNode {
-            operator: Operator::Assignment,
-            left: Box::new(Node::Binary(BinaryNode {
-                operator: Operator::Declaration,
-                left: Box::new(Node::Primary(Some(TokenType::Ident("num".to_string())))),
-                right: Box::new(Node::Primary(Some(TokenType::Ident("x".to_string())))),
-            })),
-            right: Box::new(Node::Primary(Some(TokenType::Number(5f64)))),
-        });
+        let expected = Node::Assignment(
+            Box::new(Node::Declaration(
+                Box::new(Node::Primary(TokenType::Ident("num".to_string()))),
+                Box::new(Node::Primary(TokenType::Ident("x".to_string()))),
+            )),
+            Box::new(Node::Primary(TokenType::Number(5f64))),
+        );
         let mut parser = Parser::new(&input);
         match parser.statement() {
             Ok(output) => assert_eq!(expected, output),
@@ -788,7 +679,7 @@ mod tests {
 
     #[test]
     pub fn statement_block_test() {
-        // num x = 5;
+        // num x;
         // str y = "hello";
         let input = [
             Token {
@@ -800,16 +691,8 @@ mod tests {
                 range: Range::new((0, 4), (0, 4)),
             },
             Token {
-                token_type: TokenType::Assign,
-                range: Range::new((0, 6), (0, 6)),
-            },
-            Token {
-                token_type: TokenType::Number(5f64),
-                range: Range::new((0, 8), (0, 8)),
-            },
-            Token {
                 token_type: TokenType::Semicolon,
-                range: Range::new((0, 9), (0, 9)),
+                range: Range::new((0, 5), (0, 5)),
             },
             Token {
                 token_type: TokenType::Ident("str".to_string()),
@@ -829,28 +712,21 @@ mod tests {
             },
             Token {
                 token_type: TokenType::Semicolon,
-                range: Range::new((0, 15), (0, 15)),
+                range: Range::new((1, 15), (1, 15)),
             },
         ];
         let expected = Node::Block(vec![
-            Node::Binary(BinaryNode {
-                operator: Operator::Assignment,
-                left: Box::new(Node::Binary(BinaryNode {
-                    operator: Operator::Declaration,
-                    left: Box::new(Node::Primary(Some(TokenType::Ident("num".to_string())))),
-                    right: Box::new(Node::Primary(Some(TokenType::Ident("x".to_string())))),
-                })),
-                right: Box::new(Node::Primary(Some(TokenType::Number(5f64)))),
-            }),
-            Node::Binary(BinaryNode {
-                operator: Operator::Assignment,
-                left: Box::new(Node::Binary(BinaryNode {
-                    operator: Operator::Declaration,
-                    left: Box::new(Node::Primary(Some(TokenType::Ident("str".to_string())))),
-                    right: Box::new(Node::Primary(Some(TokenType::Ident("y".to_string())))),
-                })),
-                right: Box::new(Node::Primary(Some(TokenType::String("hello".to_string())))),
-            }),
+            Node::Declaration(
+                Box::new(Node::Primary(TokenType::Ident("num".to_string()))),
+                Box::new(Node::Primary(TokenType::Ident("x".to_string()))),
+            ),
+            Node::Assignment(
+                Box::new(Node::Declaration(
+                    Box::new(Node::Primary(TokenType::Ident("str".to_string()))),
+                    Box::new(Node::Primary(TokenType::Ident("y".to_string()))),
+                )),
+                Box::new(Node::Primary(TokenType::String("hello".to_string()))),
+            ),
         ]);
         let mut parser = Parser::new(&input);
         match parser.statement_block() {
@@ -913,25 +789,21 @@ mod tests {
                 range: Range::new((2, 0), (2, 0)),
             },
         ];
-        let expected = Node::Binary(BinaryNode {
-            operator: Operator::If,
-            left: Box::new(Node::Binary(BinaryNode {
-                operator: Operator::Equal,
-                left: Box::new(Node::Primary(Some(TokenType::Ident("x".to_string())))),
-                right: Box::new(Node::Primary(Some(TokenType::Number(5f64)))),
-            })),
-            right: Box::new(Node::Block(vec![
-                Node::Binary(BinaryNode {
-                    operator: Operator::Assignment,
-                    left: Box::new(Node::Binary(BinaryNode {
-                        operator: Operator::Declaration,
-                        left: Box::new(Node::Primary(Some(TokenType::Ident("str".to_string())))),
-                        right: Box::new(Node::Primary(Some(TokenType::Ident("y".to_string())))),
-                    })),
-                    right: Box::new(Node::Primary(Some(TokenType::Ident("hello".to_string())))),
-                }),
+        let expected = Node::If(
+            Box::new(Node::Equal(
+                Box::new(Node::Primary(TokenType::Ident("x".to_string()))),
+                Box::new(Node::Primary(TokenType::Number(5f64))),
+            )),
+            Box::new(Node::Block(vec![
+                Node::Assignment(
+                    Box::new(Node::Declaration(
+                        Box::new(Node::Primary(TokenType::Ident("str".to_string()))),
+                        Box::new(Node::Primary(TokenType::Ident("y".to_string()))),
+                    )),
+                    Box::new(Node::Primary(TokenType::Ident("hello".to_string()))),
+                ),
             ])),
-        });
+        );
         let mut parser = Parser::new(&input);
         match parser.statement() {
             Ok(output) => assert_eq!(expected, output),
@@ -1027,37 +899,32 @@ mod tests {
                 range: Range::new((4, 0), (4, 0)),
             },
         ];
-        let expected = Node::Binary(BinaryNode {
-            operator: Operator::Else,
-            left: Box::new(Node::Binary(BinaryNode {
-                operator: Operator::If,
-                left: Box::new(Node::Binary(BinaryNode {
-                    operator: Operator::Equal,
-                    left: Box::new(Node::Primary(Some(TokenType::Ident("x".to_string())))),
-                    right: Box::new(Node::Primary(Some(TokenType::Number(5f64)))),
-                })),
-                right: Box::new(Node::Block(vec![
-                    Node::Binary(BinaryNode {
-                        operator: Operator::Assignment,
-                        left: Box::new(Node::Binary(BinaryNode {
-                            operator: Operator::Declaration,
-                            left: Box::new(Node::Primary(Some(TokenType::Ident("str".to_string())))),
-                            right: Box::new(Node::Primary(Some(TokenType::Ident("y".to_string())))),
-                        })),
-                        right: Box::new(Node::Primary(Some(TokenType::Ident("hello".to_string())))),
-                    }),
+        let expected = Node::Else(
+            Box::new(Node::If(
+                Box::new(Node::Equal(
+                    Box::new(Node::Primary(TokenType::Ident("x".to_string()))),
+                    Box::new(Node::Primary(TokenType::Number(5f64))),
+                )),
+                Box::new(Node::Block(vec![
+                    Node::Assignment(
+                        Box::new(Node::Declaration(
+                            Box::new(Node::Primary(TokenType::Ident("str".to_string()))),
+                            Box::new(Node::Primary(TokenType::Ident("y".to_string()))),
+                        )),
+                        Box::new(Node::Primary(TokenType::Ident("hello".to_string()))),
+                    ),
                 ])),
-            })),
-            right: Box::new(Node::Block(vec![Node::Binary(BinaryNode { 
-                    operator: Operator::Assignment, 
-                    left: Box::new(Node::Binary(BinaryNode { 
-                        operator: Operator::Declaration, 
-                        left: Box::new(Node::Primary(Some(TokenType::Ident("str".to_string())))), 
-                        right: Box::new(Node::Primary(Some(TokenType::Ident("y".to_string())))),
-                    })), 
-                    right: Box::new(Node::Primary(Some(TokenType::Ident("evil hello".to_string())))),
-            })])),
-        });
+            )),
+            Box::new(Node::Block(vec![
+                Node::Assignment(
+                    Box::new(Node::Declaration(
+                        Box::new(Node::Primary(TokenType::Ident("str".to_string()))), 
+                        Box::new(Node::Primary(TokenType::Ident("y".to_string()))),
+                    )), 
+                    Box::new(Node::Primary(TokenType::Ident("evil hello".to_string()))),
+                )
+            ])),
+        );
         let mut parser = Parser::new(&input);
         match parser.statement() {
             Ok(output) => assert_eq!(expected, output),
@@ -1127,23 +994,20 @@ mod tests {
                 range: Range::new((2, 0), (2, 0)),
             },
         ];
-        let expected = Node::Quaternion(QuaternionNode {
-            operator: Operator::Func,
-            node_1: Box::new(Node::Primary(Some(TokenType::Ident("foo".to_string())))),
-            node_2: Box::new(Node::Binary(BinaryNode {
-                        operator: Operator::Declaration,
-                        left: Box::new(Node::Primary(Some(TokenType::Ident("num".to_string())))),
-                        right: Box::new(Node::Primary(Some(TokenType::Ident("x".to_string())))),
-            })),
-            node_3: Box::new(Node::Primary(None)),
-            node_4: Box::new(Node::Block(vec![
-                Node::Binary(BinaryNode {
-                    operator: Operator::FunctionCall,
-                    left: Box::new(Node::Primary(Some(TokenType::Ident("bar".to_string())))),
-                    right: Box::new(Node::Primary(Some(TokenType::Ident("x".to_string())))),
-                }),
+        let expected = Node::Func(
+            Box::new(Node::Primary(TokenType::Ident("foo".to_string()))),
+            Box::new(Node::Declaration(
+                Box::new(Node::Primary(TokenType::Ident("num".to_string()))),
+                Box::new(Node::Primary(TokenType::Ident("x".to_string()))),
+            )),
+            None,
+            Box::new(Node::Block(vec![
+                Node::FunctionCall(
+                    Box::new(Node::Primary(TokenType::Ident("bar".to_string()))),
+                    Box::new(Node::Primary(TokenType::Ident("x".to_string()))),
+                ),
             ])),
-        });
+        );
         let mut parser = Parser::new(&input);
         match parser.statement() {
             Ok(output) => assert_eq!(expected, output),
@@ -1233,30 +1097,25 @@ mod tests {
                 range: Range::new((2, 0), (2, 0)),
             },
         ];
-        let expected = Node::Quaternion(QuaternionNode {
-            operator: Operator::Func,
-            node_1: Box::new(Node::Primary(Some(TokenType::Ident("foo".to_string())))),
-            node_2: Box::new(Node::Binary(BinaryNode {
-                        operator: Operator::Declaration,
-                        left: Box::new(Node::Primary(Some(TokenType::Ident("num".to_string())))),
-                        right: Box::new(Node::Primary(Some(TokenType::Ident("x".to_string())))),
-            })),
-            node_3: Box::new(Node::Primary(Some(TokenType::Ident("num".to_string())))),
-            node_4: Box::new(Node::Block(vec![
-                Node::Unary(UnaryNode {
-                    operator: Operator::Return,
-                    operand: Box::new(Node::Binary(BinaryNode {
-                        operator: Operator::Product,
-                        left: Box::new(Node::Primary(Some(TokenType::Ident("x".to_string())))),
-                        right: Box::new(Node::Binary(BinaryNode {
-                            operator: Operator::FunctionCall,
-                            left: Box::new(Node::Primary(Some(TokenType::Ident("bar".to_string())))),
-                            right: Box::new(Node::Primary(Some(TokenType::Number(2f64)))),
-                        })),
-                    })),
-                }),
+        let expected = Node::Func(
+            Box::new(Node::Primary(TokenType::Ident("foo".to_string()))),
+            Box::new(Node::Declaration(
+                Box::new(Node::Primary(TokenType::Ident("num".to_string()))),
+                Box::new(Node::Primary(TokenType::Ident("x".to_string()))),
+            )),
+            Some(Box::new(Node::Primary(TokenType::Ident("num".to_string())))),
+            Box::new(Node::Block(vec![
+                Node::Return(
+                    Box::new(Node::Product(
+                        Box::new(Node::Primary(TokenType::Ident("x".to_string()))),
+                        Box::new(Node::FunctionCall(
+                            Box::new(Node::Primary(TokenType::Ident("bar".to_string()))),
+                            Box::new(Node::Primary(TokenType::Number(2f64))),
+                        )),
+                    )),
+                ),
             ])),
-        });
+        );
         let mut parser = Parser::new(&input);
         match parser.statement() {
             Ok(output) => assert_eq!(expected, output),
