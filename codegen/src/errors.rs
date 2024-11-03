@@ -6,7 +6,7 @@ use parser::parser::Node;
 #[error("Compiler error.")]
 pub struct CodegenError {
     token: Option<ErrorToken>,
-    pub source: CodegenErrorKind,
+    pub source: ErrorRepr,
 }
 
 #[derive(Debug, PartialEq)]
@@ -21,7 +21,7 @@ impl fmt::Display for ErrorToken {
 }
 
 impl CodegenError {
-    pub fn new(node: Node, position: usize, source: CodegenErrorKind) -> CodegenError {
+    pub fn new(node: Node, position: usize, source: ErrorRepr) -> CodegenError {
         Self {
             token: Some(ErrorToken {
                 token: node,
@@ -30,7 +30,7 @@ impl CodegenError {
             source
         }
     }
-    pub fn new_headless(source: CodegenErrorKind) -> CodegenError {
+    pub fn new_headless(source: ErrorRepr) -> CodegenError {
         Self {
             token: None,
             source
@@ -39,7 +39,7 @@ impl CodegenError {
 }
 
 #[derive(thiserror::Error, Debug, PartialEq)]
-pub enum CodegenErrorKind {
+pub enum ErrorRepr {
     #[error("Generic Error")]
     Generic,
 }
