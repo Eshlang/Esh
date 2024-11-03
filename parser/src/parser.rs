@@ -3,6 +3,7 @@ use lexer::types::{Keyword, Token, TokenType};
 /// A syntactical node
 #[derive(Debug, PartialEq)]
 pub enum Node {
+    None,
     Primary(TokenType),
     FunctionCall(Box<Node>, Box<Node>),
     Not(Box<Node>),
@@ -25,7 +26,7 @@ pub enum Node {
     If(Box<Node>, Box<Node>),
     Else(Box<Node>, Box<Node>),
     While(Box<Node>, Box<Node>),
-    Func(Box<Node>, Box<Node>, Option<Box<Node>>, Box<Node>),
+    Func(Box<Node>, Box<Node>, Box<Node>, Box<Node>),
     Struct(Box<Node>, Box<Node>),
     Block(Vec<Node>),
 }
@@ -103,15 +104,15 @@ impl<'a> Parser<'a> {
     fn statement_block(&mut self) -> Result<Node, ParserError> {
         let mut block = vec![];
         while !self.is_at_end() {
+            if self.is_at_end() || *self.curr() == TokenType::RBrace {
+                break;
+            }
             block.push(self.statement()?);
-            if self.is_at_end() {
+            if self.is_at_end() || *self.curr() == TokenType::RBrace {
                 break;
             }
             expect!(self, TokenType::Semicolon);
             self.advance();
-            if self.is_at_end() || *self.curr() == TokenType::RBrace {
-                break;
-            }
         }
         return Ok(Node::Block(block));
     }
@@ -121,6 +122,9 @@ impl<'a> Parser<'a> {
         match self.curr() {
             TokenType::Ident(_) => {
                 self.assignment()
+            },
+            TokenType::Keyword(Keyword::Struct) => {
+                self.struct_statement()
             },
             TokenType::Keyword(Keyword::Func) => {
                 self.func()
@@ -135,21 +139,29 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Returns the current assignment statement
-    fn assignment(&mut self) -> Result<Node, ParserError> {
-        let mut expr = self.declaration()?;
-        if !self.is_at_end() && *self.curr() == TokenType::Assign {
-            self.advance();
-            expr = Node::Assignment(
-                Box::new(expr),
-                Box::new(self.expression()?),
-            );
-        }
+    /// Returns the current function declaration statement
+    fn struct_statement(&mut self) -> Result<Node, ParserError> {
+        expect!(self, TokenType::Keyword(Keyword::Struct));
+        let expr = Node::Struct(
+            {  // Struct name
+                self.advance();
+                expect!(self, TokenType::Ident(_));
+                Box::new(self.ident()?)
+            },
+            {  // Struct body
+                expect!(self, TokenType::LBrace);
+                self.advance();
+                Box::new(self.statement_block()?)
+            },
+        );
+        expect!(self, TokenType::RBrace);
+        self.advance();
         return Ok(expr);
     }
 
     /// Returns the current function declaration statement
     fn func(&mut self) -> Result<Node, ParserError> {
+        expect!(self, TokenType::Keyword(Keyword::Func));
         let expr = Node::Func(
             {  // Function name
                 self.advance();
@@ -163,9 +175,9 @@ impl<'a> Parser<'a> {
             {  // Return type
                 if *self.curr() == TokenType::Arrow {
                     self.advance();
-                    Some(Box::new(self.primary()?))
+                    Box::new(self.primary()?)
                 } else {
-                    None
+                    Box::new(Node::None)
                 }
             },
             {  // Function body
@@ -180,6 +192,7 @@ impl<'a> Parser<'a> {
     }
 
     fn if_else_block(&mut self) -> Result<Node, ParserError> {
+        expect!(self, TokenType::Keyword(Keyword::If));
         let mut expr = self.if_block()?;
         while !self.is_at_end() {
             match self.curr() {
@@ -207,6 +220,7 @@ impl<'a> Parser<'a> {
 
     /// Returns the current if statement
     fn if_block(&mut self) -> Result<Node, ParserError> {
+        expect!(self, TokenType::Keyword(Keyword::If));
         let expr = Node::If(
             {    // If statement expression
                 self.advance();
@@ -223,10 +237,17 @@ impl<'a> Parser<'a> {
         return Ok(expr);
     }
 
-    /// Returns the current return statement
-    fn return_block(&mut self) -> Result<Node, ParserError> {
-        self.advance();
-        return Ok(Node::Return(Box::new(self.expression()?)))
+    /// Returns the current assignment statement
+    fn assignment(&mut self) -> Result<Node, ParserError> {
+        let mut expr = self.declaration()?;
+        if !self.is_at_end() && *self.curr() == TokenType::Assign {
+            self.advance();
+            expr = Node::Assignment(
+                Box::new(expr),
+                Box::new(self.expression()?),
+            );
+        }
+        return Ok(expr);
     }
 
     /// Returns the current variable declaration
@@ -243,6 +264,12 @@ impl<'a> Parser<'a> {
             ));
         }
         return Ok(expr);
+    }
+
+    /// Returns the current return statement
+    fn return_block(&mut self) -> Result<Node, ParserError> {
+        self.advance();
+        return Ok(Node::Return(Box::new(self.expression()?)))
     }
 
     /// Returns the current expression
@@ -401,6 +428,10 @@ impl<'a> Parser<'a> {
                 self.advance();
                 let expr = match self.curr() {
                     TokenType::Ident(_) => self.declaration()?,
+                    TokenType::RParen => {
+                        self.advance();
+                        return Ok(Node::None)
+                    },
                     _ => self.expression()?
                 };
                 match self.curr() {
@@ -741,7 +772,7 @@ mod tests {
     #[test]
     pub fn if_statement_test() {
         // if x == 5 {
-        // str y = "hello";
+        //    str y = "hello";
         // }
         let input = [
             Token {
@@ -817,9 +848,9 @@ mod tests {
     #[test]
     pub fn if_else_test() {
         // if x == 5 {
-        // str y = "hello";
+        //    str y = "hello";
         // } else {
-        // str y = "evil hello";
+        //    str y = "evil hello";
         // }
         let input = [
             Token {
@@ -938,7 +969,7 @@ mod tests {
     #[test]
     pub fn no_return_function_test() {
         // func foo(num x) {
-        // bar(x);
+        //    bar(x);
         // }
         let input = [
             Token {
@@ -1000,7 +1031,7 @@ mod tests {
                 Box::new(Node::Primary(TokenType::Ident("num".to_string()))),
                 Box::new(Node::Primary(TokenType::Ident("x".to_string()))),
             )),
-            None,
+            Box::new(Node::None),
             Box::new(Node::Block(vec![
                 Node::FunctionCall(
                     Box::new(Node::Primary(TokenType::Ident("bar".to_string()))),
@@ -1021,7 +1052,7 @@ mod tests {
     #[test]
     pub fn return_function_test() {
         // func foo(num x) -> num {
-        // return x * bar(2);
+        //    return x * bar(2);
         // }
         let input = [
             Token {
@@ -1103,7 +1134,7 @@ mod tests {
                 Box::new(Node::Primary(TokenType::Ident("num".to_string()))),
                 Box::new(Node::Primary(TokenType::Ident("x".to_string()))),
             )),
-            Some(Box::new(Node::Primary(TokenType::Ident("num".to_string())))),
+            Box::new(Node::Primary(TokenType::Ident("num".to_string()))),
             Box::new(Node::Block(vec![
                 Node::Return(
                     Box::new(Node::Product(
@@ -1113,6 +1144,172 @@ mod tests {
                             Box::new(Node::Primary(TokenType::Number(2f64))),
                         )),
                     )),
+                ),
+            ])),
+        );
+        let mut parser = Parser::new(&input);
+        match parser.statement() {
+            Ok(output) => assert_eq!(expected, output),
+            Err(e) => {
+                dbg!(e);
+                panic!()
+            }
+        }
+    }
+
+    #[test]
+    pub fn struct_test() {
+        // struct foo {
+        //    num x;
+        //    str y;
+        //    func bar() -> (num, str) {
+        //       return (x, y);
+        //    }
+        // }
+        let input = [
+            Token {
+                token_type: TokenType::Keyword(Keyword::Struct),
+                range: Range::new((0, 0), (0, 5)),
+            },
+            Token {
+                token_type: TokenType::Ident("foo".to_string()),
+                range: Range::new((0, 7), (0, 9)),
+            },
+            Token {
+                token_type: TokenType::LBrace,
+                range: Range::new((0, 11), (0, 11)),
+            },
+            Token {
+                token_type: TokenType::Ident("num".to_string()),
+                range: Range::new((1, 0), (1, 2)),
+            },
+            Token {
+                token_type: TokenType::Ident("x".to_string()),
+                range: Range::new((1, 4), (1, 4)),
+            },
+            Token {
+                token_type: TokenType::Semicolon,
+                range: Range::new((1, 5), (1, 5)),
+            },
+            Token {
+                token_type: TokenType::Ident("str".to_string()),
+                range: Range::new((2, 0), (2, 2)),
+            },
+            Token {
+                token_type: TokenType::Ident("y".to_string()),
+                range: Range::new((2, 4), (2, 4)),
+            },
+            Token {
+                token_type: TokenType::Semicolon,
+                range: Range::new((2, 5), (2, 5)),
+            },
+            Token {
+                token_type: TokenType::Keyword(Keyword::Func),
+                range: Range::new((3, 0), (3, 3)),
+            },
+            Token {
+                token_type: TokenType::Ident("bar".to_string()),
+                range: Range::new((3, 5), (3, 7)),
+            },
+            Token {
+                token_type: TokenType::LParen,
+                range: Range::new((3, 8), (3, 8)),
+            },
+            Token {
+                token_type: TokenType::RParen,
+                range: Range::new((3, 9), (3, 9)),
+            },
+            Token {
+                token_type: TokenType::Arrow,
+                range: Range::new((3, 11), (3, 12)),
+            },
+            Token {
+                token_type: TokenType::LParen,
+                range: Range::new((3, 14), (3, 14)),
+            },
+            Token {
+                token_type: TokenType::Ident("num".to_string()),
+                range: Range::new((3, 15), (3, 17)),
+            },
+            Token {
+                token_type: TokenType::Comma,
+                range: Range::new((3, 18), (3, 18)),
+            },
+            Token {
+                token_type: TokenType::Ident("str".to_string()),
+                range: Range::new((3, 19), (3, 21)),
+            },
+            Token {
+                token_type: TokenType::RParen,
+                range: Range::new((3, 22), (3, 22)),
+            },
+            Token {
+                token_type: TokenType::LBrace,
+                range: Range::new((3, 24), (3, 24)),
+            },
+            Token {
+                token_type: TokenType::Keyword(Keyword::Return),
+                range: Range::new((4, 0), (4, 5)),
+            },
+            Token {
+                token_type: TokenType::LParen,
+                range: Range::new((4, 7), (4, 7)),
+            },
+            Token {
+                token_type: TokenType::Ident("x".to_string()),
+                range: Range::new((4, 8), (4, 8)),
+            },
+            Token {
+                token_type: TokenType::Comma,
+                range: Range::new((4, 9), (4, 9)),
+            },
+            Token {
+                token_type: TokenType::Ident("y".to_string()),
+                range: Range::new((4, 11), (4, 11)),
+            },
+            Token {
+                token_type: TokenType::RParen,
+                range: Range::new((4, 12), (4, 12)),
+            },
+            Token {
+                token_type: TokenType::Semicolon,
+                range: Range::new((4, 13), (4, 13)),
+            },
+            Token {
+                token_type: TokenType::RBrace,
+                range: Range::new((5, 0), (5, 0)),
+            },
+            Token {
+                token_type: TokenType::RBrace,
+                range: Range::new((6, 0), (6, 0)),
+            },
+        ];
+        let expected = Node::Struct(
+            Box::new(Node::Primary(TokenType::Ident("foo".to_string()))), 
+            Box::new(Node::Block(vec![
+                Node::Declaration(
+                    Box::new(Node::Primary(TokenType::Ident("num".to_string()))), 
+                    Box::new(Node::Primary(TokenType::Ident("x".to_string()))),
+                ), 
+                Node::Declaration(
+                    Box::new(Node::Primary(TokenType::Ident("str".to_string()))), 
+                    Box::new(Node::Primary(TokenType::Ident("y".to_string()))),
+                ), 
+                Node::Func(
+                    Box::new(Node::Primary(TokenType::Ident("bar".to_string()))), 
+                    Box::new(Node::None), 
+                    Box::new(Node::Tuple(vec![
+                        Node::Primary(TokenType::Ident("num".to_string())), 
+                        Node::Primary(TokenType::Ident("str".to_string())),
+                    ])), 
+                    Box::new(Node::Block(vec![
+                        Node::Return(
+                            Box::new(Node::Tuple(vec![
+                                Node::Primary(TokenType::Ident("x".to_string())), 
+                                Node::Primary(TokenType::Ident("y".to_string())),
+                            ])),
+                        ),
+                    ])),
                 ),
             ])),
         );
