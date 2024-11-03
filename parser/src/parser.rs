@@ -3,45 +3,48 @@ use lexer::types::{Keyword, Token, TokenType};
 /// A syntactical node
 #[derive(Debug, PartialEq)]
 pub enum Node {
-    None,
-    Primary(TokenType),
-    FunctionCall(Box<Node>, Box<Node>),
-    Not(Box<Node>),
-    Negative(Box<Node>),
-    Product(Box<Node>, Box<Node>),
-    Quotient(Box<Node>, Box<Node>),
-    Modulo(Box<Node>, Box<Node>),
-    Sum(Box<Node>, Box<Node>),
-    Difference(Box<Node>, Box<Node>),
-    LessThan(Box<Node>, Box<Node>),
-    GreaterThan(Box<Node>, Box<Node>),
-    LessThanOrEqualTo(Box<Node>, Box<Node>),
-    GreaterThanOrEqualTo(Box<Node>, Box<Node>),
-    Tuple(Vec<Node>),
-    Equal(Box<Node>, Box<Node>),
-    NotEqual(Box<Node>, Box<Node>),
-    Declaration(Box<Node>, Box<Node>),
-    Return(Box<Node>),
-    Assignment(Box<Node>, Box<Node>),
-    If(Box<Node>, Box<Node>),
-    Else(Box<Node>, Box<Node>),
-    While(Box<Node>, Box<Node>),
-    Func(Box<Node>, Box<Node>, Box<Node>, Box<Node>),
-    Struct(Box<Node>, Box<Node>),
-    Block(Vec<Node>),
+    None,                                               // ()
+    Primary(TokenType),                                 // prim
+    FunctionCall(Box<Node>, Box<Node>),                 // ident(tuple/expr)
+    Not(Box<Node>),                                     // !expr
+    Negative(Box<Node>),                                // -expr
+    Product(Box<Node>, Box<Node>),                      // expr * expr
+    Quotient(Box<Node>, Box<Node>),                     // expr / expr
+    Modulo(Box<Node>, Box<Node>),                       // expr % expr
+    Sum(Box<Node>, Box<Node>),                          // expr + expr
+    Difference(Box<Node>, Box<Node>),                   // expr - expr
+    LessThan(Box<Node>, Box<Node>),                     // expr < expr
+    GreaterThan(Box<Node>, Box<Node>),                  // expr > expr
+    LessThanOrEqualTo(Box<Node>, Box<Node>),            // expr <= expr
+    GreaterThanOrEqualTo(Box<Node>, Box<Node>),         // expr >= expr
+    Tuple(Vec<Node>),                                   // (decl/expr, decl/expr, decl/expr)
+    Equal(Box<Node>, Box<Node>),                        // expr == expr
+    NotEqual(Box<Node>, Box<Node>),                     // expr != expr
+    And(Box<Node>, Box<Node>),                          // expr && expr
+    Or(Box<Node>, Box<Node>),                           // expr || expr
+    Declaration(Box<Node>, Box<Node>),                  // ident ident
+    Return(Box<Node>),                                  // return expr;
+    Assignment(Box<Node>, Box<Node>),                   // decl/ident = expr;
+    If(Box<Node>, Box<Node>),                           // if cond {block}
+    Else(Box<Node>, Box<Node>),                         // stmt else {block}
+    While(Box<Node>, Box<Node>),                        // while cond {block}
+    Func(Box<Node>, Box<Node>, Box<Node>, Box<Node>),   // func ident tuple/decl -> tuple/ident {block}
+    Struct(Box<Node>, Box<Node>),                       // struct ident {block}
+    Block(Vec<Node>),                                   // stmt; stmt; stmt;
 }
 
 /// A parser error
 #[derive(Debug, PartialEq)]
 pub enum ParserError {
-    InvalidToken,
-    InvalidStatement,
-    MissingIdentifier,
-    MissingSemicolon,
-    MissingParenthesis,
-    MissingBrace,
+    InvalidToken,       // Token is not recognized
+    InvalidStatement,   // Statement is not recognized
+    MissingIdentifier,  // Expected an ident
+    MissingSemicolon,   // Expected a semicolon
+    MissingParenthesis, // Expected opening/closing parenthesis
+    MissingBrace,       // Expected opening/closing brace
 }
-    
+
+/// Returns a [ParserError] if [self.curr()](Parser::curr()) does not match the input.
 macro_rules! expect {
     ($self:expr, $token:pat) => {
         if $self.is_at_end() || match $self.curr() {
@@ -224,7 +227,7 @@ impl<'a> Parser<'a> {
         let expr = Node::If(
             {    // If statement expression
                 self.advance();
-                Box::new(self.equality()?)
+                Box::new(self.logic()?)
             },
             {   // If statement body
                 expect!(self, TokenType::LBrace);
@@ -274,7 +277,32 @@ impl<'a> Parser<'a> {
 
     /// Returns the current expression
     fn expression(&mut self) -> Result<Node, ParserError> {
-        self.equality()
+        self.logic()
+    }
+
+    /// Returns the current logic operation
+    fn logic(&mut self) -> Result<Node, ParserError> {
+        let mut expr = self.equality()?;
+        while !self.is_at_end() {
+            match self.curr() {
+                TokenType::And => {
+                    self.advance();
+                    expr = Node::And( 
+                        Box::new(expr), 
+                        Box::new(self.equality()?),
+                    )
+                },
+                TokenType::Or => {
+                    self.advance();
+                    expr = Node::Or(
+                        Box::new(expr), 
+                        Box::new(self.equality()?),
+                    )
+                },
+                _ => break
+            }
+        }
+        return Ok(expr);
     }
 
     /// Returns the current equality
@@ -418,8 +446,8 @@ impl<'a> Parser<'a> {
         match self.curr() {
             TokenType::Ident(_) => {
                 self.function_call()
-            }
-            TokenType::Number(_) | TokenType::String(_) => {
+            },
+            TokenType::Number(_) | TokenType::String(_) | TokenType::Keyword(Keyword::True) | TokenType::Keyword(Keyword::False) => {
                 self.advance();
                 Ok(Node::Primary(self.prev().clone()))
             },
@@ -452,6 +480,7 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Returns the current function call
     fn function_call(&mut self) -> Result<Node, ParserError> {
         let mut expr = self.ident()?;
         match self.curr() {
@@ -771,7 +800,7 @@ mod tests {
 
     #[test]
     pub fn if_statement_test() {
-        // if x == 5 {
+        // if x == 5 && true != false {
         //    str y = "hello";
         // }
         let input = [
@@ -792,8 +821,24 @@ mod tests {
                 range: Range::new((0, 8), (0, 8)),
             },
             Token {
+                token_type: TokenType::And,
+                range: Range::new((0, 10), (0, 11)),
+            },
+            Token {
+                token_type: TokenType::Keyword(Keyword::True),
+                range: Range::new((0, 13), (0, 16)),
+            },
+            Token {
+                token_type: TokenType::NotEqual,
+                range: Range::new((0, 18), (0, 19)),
+            },
+            Token {
+                token_type: TokenType::Keyword(Keyword::False),
+                range: Range::new((0, 21), (0, 25)),
+            },
+            Token {
                 token_type: TokenType::LBrace,
-                range: Range::new((0, 10), (0, 10)),
+                range: Range::new((0, 27), (0, 27)),
             },
             Token {
                 token_type: TokenType::Ident("str".to_string()),
@@ -821,9 +866,15 @@ mod tests {
             },
         ];
         let expected = Node::If(
-            Box::new(Node::Equal(
-                Box::new(Node::Primary(TokenType::Ident("x".to_string()))),
-                Box::new(Node::Primary(TokenType::Number(5f64))),
+            Box::new(Node::And(
+                Box::new(Node::Equal(
+                    Box::new(Node::Primary(TokenType::Ident("x".to_string()))),
+                    Box::new(Node::Primary(TokenType::Number(5f64))),
+                )),
+                Box::new(Node::NotEqual(
+                    Box::new(Node::Primary(TokenType::Keyword(Keyword::True))),
+                    Box::new(Node::Primary(TokenType::Keyword(Keyword::False))),
+                )),
             )),
             Box::new(Node::Block(vec![
                 Node::Assignment(
