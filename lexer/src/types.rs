@@ -90,6 +90,7 @@ pub enum Keyword {
     False,  // false (boolean)
     Struct, // struct definition
     For,    // for loop
+    While,    // while loop
 }
 
 #[derive(Debug, PartialEq)]

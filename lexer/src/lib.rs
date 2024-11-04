@@ -115,6 +115,7 @@ impl<'a> Lexer<'a> {
             "false" => Some(Keyword::False),
             "struct" => Some(Keyword::Struct),
             "for" => Some(Keyword::For),
+            "while" => Some(Keyword::While),
 
             _ => None,
         }
