@@ -179,7 +179,7 @@ impl<'a> Parser<'a> {
             },
             {  // Function parameters
                 expect!(self, TokenType::LParen);
-                Box::new(self.primary()?)
+                Box::new(self.tuple()?)
             },
             {  // Return type
                 match self.curr() {
@@ -536,7 +536,7 @@ impl<'a> Parser<'a> {
         match self.curr() {
             TokenType::LParen => expr = Node::FunctionCall(
                     Box::new(expr),
-                    Box::new(self.primary()?),
+                    Box::new(self.tuple()?),
                 ),
             _ => ()
         }
@@ -565,10 +565,12 @@ impl<'a> Parser<'a> {
     fn tuple(&mut self) -> Result<Node, ParserError> {
         expect!(self, TokenType::LParen);
         self.advance();
-        let mut block = vec![self.declaration()?];
-        expect!(self, TokenType::Comma);
-        while !self.is_at_end() {
+        let mut block = vec![];
+        if *self.curr() == TokenType::RParen {
             self.advance();
+            return Ok(Node::Tuple(block));
+        }
+        while !self.is_at_end() {
             block.push(self.declaration()?);
             match self.curr() {
                 TokenType::Comma => (),
@@ -578,6 +580,7 @@ impl<'a> Parser<'a> {
                 },
                 _ => return Err(ParserError::MissingParenthesis)
             }
+            self.advance();
         }
         return Ok(Node::Tuple(block));
     }
@@ -1248,15 +1251,19 @@ mod tests {
         ];
         let expected = Node::Func(
             Box::new(Node::Primary(TokenType::Ident("foo".to_string()))),
-            Box::new(Node::Declaration(
-                Box::new(Node::Primary(TokenType::Ident("num".to_string()))),
-                Box::new(Node::Primary(TokenType::Ident("x".to_string()))),
-            )),
+            Box::new(Node::Tuple(vec![
+                Node::Declaration(
+                    Box::new(Node::Primary(TokenType::Ident("num".to_string()))),
+                    Box::new(Node::Primary(TokenType::Ident("x".to_string()))),
+                ),
+            ])),
             Box::new(Node::None),
             Box::new(Node::Block(vec![
                 Node::FunctionCall(
                     Box::new(Node::Primary(TokenType::Ident("bar".to_string()))),
-                    Box::new(Node::Primary(TokenType::Ident("x".to_string()))),
+                    Box::new(Node::Tuple(vec![
+                        Node::Primary(TokenType::Ident("x".to_string())),
+                    ])),
                 ),
             ])),
         );
@@ -1351,10 +1358,12 @@ mod tests {
         ];
         let expected = Node::Func(
             Box::new(Node::Primary(TokenType::Ident("foo".to_string()))),
-            Box::new(Node::Declaration(
-                Box::new(Node::Primary(TokenType::Ident("num".to_string()))),
-                Box::new(Node::Primary(TokenType::Ident("x".to_string()))),
-            )),
+            Box::new(Node::Tuple(vec![
+                Node::Declaration(
+                    Box::new(Node::Primary(TokenType::Ident("num".to_string()))),
+                    Box::new(Node::Primary(TokenType::Ident("x".to_string()))),
+                )
+            ])),
             Box::new(Node::Primary(TokenType::Ident("num".to_string()))),
             Box::new(Node::Block(vec![
                 Node::Return(
@@ -1362,7 +1371,9 @@ mod tests {
                         Box::new(Node::Primary(TokenType::Ident("x".to_string()))),
                         Box::new(Node::FunctionCall(
                             Box::new(Node::Primary(TokenType::Ident("bar".to_string()))),
-                            Box::new(Node::Primary(TokenType::Number(2f64))),
+                            Box::new(Node::Tuple(vec![
+                                Node::Primary(TokenType::Number(2f64)),
+                            ])),
                         )),
                     )),
                 ),
@@ -1647,7 +1658,7 @@ mod tests {
                     ), 
                     Node::Func(
                         Box::new(Node::Primary(TokenType::Ident("bar".to_string()))), 
-                        Box::new(Node::None), 
+                        Box::new(Node::Tuple(vec![])), 
                         Box::new(Node::Tuple(vec![
                             Node::Primary(TokenType::Ident("num".to_string())), 
                             Node::Primary(TokenType::Ident("str".to_string())),
@@ -1665,7 +1676,7 @@ mod tests {
             ),
             Node::Func(
                 Box::new(Node::Primary(TokenType::Ident("main".to_string()))),
-                Box::new(Node::None),
+                Box::new(Node::Tuple(vec![])), 
                 Box::new(Node::None),
                 Box::new(Node::Block(vec![
                     Node::Assignment(
@@ -1689,13 +1700,15 @@ mod tests {
                     ),
                     Node::FunctionCall(
                         Box::new(Node::Primary(TokenType::Ident("print".to_string()))),
-                        Box::new(Node::FunctionCall(
-                            Box::new(Node::Access(
-                                Box::new(Node::Primary(TokenType::Ident("z".to_string()))),
-                                Box::new(Node::Primary(TokenType::Ident("bar".to_string()))),
-                            )),
-                            Box::new(Node::None),
-                        )),
+                        Box::new(Node::Tuple(vec![
+                            Node::FunctionCall(
+                                Box::new(Node::Access(
+                                    Box::new(Node::Primary(TokenType::Ident("z".to_string()))),
+                                    Box::new(Node::Primary(TokenType::Ident("bar".to_string()))),
+                                )),
+                                Box::new(Node::Tuple(vec![])),
+                            ),
+                        ])), 
                     ),
                 ])),
             ),
