@@ -6,7 +6,7 @@ pub enum Node {
     None,                                               // ()
     Primary(TokenType),                                 // prim
     FunctionCall(Box<Node>, Box<Node>),                 // ident(tuple/expr)
-    Access(Box<Node>, Box<Node>),                       // ident/func_call.ident/func_call
+    Access(Box<Node>, Box<Node>),                       // ident.ident
     Construct(Box<Node>, Box<Node>),                    // ident {block} 
     Not(Box<Node>),                                     // !expr
     Negative(Box<Node>),                                // -expr
@@ -30,7 +30,7 @@ pub enum Node {
     If(Box<Node>, Box<Node>),                           // if cond {block}
     Else(Box<Node>, Box<Node>),                         // stmt else {block}
     While(Box<Node>, Box<Node>),                        // while cond {block}
-    Func(Box<Node>, Box<Node>, Box<Node>, Box<Node>),   // func ident tuple/decl -> tuple/ident {block}
+    Func(Box<Node>, Box<Node>, Box<Node>, Box<Node>),   // func ident (tuple/decl) -> tuple/ident {block}
     Struct(Box<Node>, Box<Node>),                       // struct ident {block}
     Block(Vec<Node>),                                   // stmt; stmt; stmt;
 }
@@ -53,7 +53,6 @@ macro_rules! expect {
             $token => false,
             _ => true
         } {
-            dbg!($self.current);
             return Err(if let $token = TokenType::Ident("".to_string()) {
                 ParserError::MissingIdentifier
             } else if let $token = TokenType::Semicolon {
@@ -135,6 +134,9 @@ impl<'a> Parser<'a> {
             },
             TokenType::Keyword(Keyword::If) => {
                 self.if_else_block()
+            },
+            TokenType::Keyword(Keyword::While) => {
+                self.while_block()
             },
             TokenType::Keyword(Keyword::Return) => {
                 let expr = self.return_block();
@@ -238,6 +240,25 @@ impl<'a> Parser<'a> {
                 Box::new(self.logic()?)
             },
             {   // If statement body
+                expect!(self, TokenType::LBrace);
+                self.advance();
+                Box::new(self.statement_block()?)
+            },
+        );
+        expect!(self, TokenType::RBrace);
+        self.advance();
+        return Ok(expr);
+    }
+
+    /// Returns the current while statement
+    fn while_block(&mut self) -> Result<Node, ParserError> {
+        expect!(self, TokenType::Keyword(Keyword::While));
+        let expr = Node::While(
+            {    // While statement expression
+                self.advance();
+                Box::new(self.logic()?)
+            },
+            {   // While statement body
                 expect!(self, TokenType::LBrace);
                 self.advance();
                 Box::new(self.statement_block()?)
@@ -841,6 +862,104 @@ mod tests {
         ]);
         let mut parser = Parser::new(&input);
         match parser.statement_block() {
+            Ok(output) => assert_eq!(expected, output),
+            Err(e) => {
+                dbg!(e);
+                panic!()
+            }
+        }
+    }
+
+    #[test]
+    pub fn while_test() {
+        // while x == 5 && true != false {
+        //    str y = "hello";
+        // }
+        let input = [
+            Token {
+                token_type: TokenType::Keyword(Keyword::While),
+                range: Range::new((0, 0), (0, 4)),
+            },
+            Token {
+                token_type: TokenType::Ident("x".to_string()),
+                range: Range::new((0, 6), (0, 6)),
+            },
+            Token {
+                token_type: TokenType::Equal,
+                range: Range::new((0, 8), (0, 9)),
+            },
+            Token {
+                token_type: TokenType::Number(5f64),
+                range: Range::new((0, 11), (0, 11)),
+            },
+            Token {
+                token_type: TokenType::And,
+                range: Range::new((0, 13), (0, 14)),
+            },
+            Token {
+                token_type: TokenType::Keyword(Keyword::True),
+                range: Range::new((0, 16), (0, 19)),
+            },
+            Token {
+                token_type: TokenType::NotEqual,
+                range: Range::new((0, 21), (0, 22)),
+            },
+            Token {
+                token_type: TokenType::Keyword(Keyword::False),
+                range: Range::new((0, 24), (0, 28)),
+            },
+            Token {
+                token_type: TokenType::LBrace,
+                range: Range::new((0, 30), (0, 30)),
+            },
+            Token {
+                token_type: TokenType::Ident("str".to_string()),
+                range: Range::new((1, 0), (1, 2)),
+            },
+            Token {
+                token_type: TokenType::Ident("y".to_string()),
+                range: Range::new((1, 4), (1, 4)),
+            },
+            Token {
+                token_type: TokenType::Assign,
+                range: Range::new((1, 6), (1, 6)),
+            },
+            Token {
+                token_type: TokenType::Ident("hello".to_string()),
+                range: Range::new((1, 8), (1, 14)),
+            },
+            Token {
+                token_type: TokenType::Semicolon,
+                range: Range::new((1, 15), (1, 15)),
+            },
+            Token {
+                token_type: TokenType::RBrace,
+                range: Range::new((2, 0), (2, 0)),
+            },
+        ];
+        let expected = Node::While(
+            Box::new(Node::And(
+                Box::new(Node::Equal(
+                    Box::new(Node::Primary(TokenType::Ident("x".to_string()))),
+                    Box::new(Node::Primary(TokenType::Number(5f64))),
+                )),
+                Box::new(Node::NotEqual(
+                    Box::new(Node::Primary(TokenType::Keyword(Keyword::True))),
+                    Box::new(Node::Primary(TokenType::Keyword(Keyword::False))),
+                )),
+            )),
+            Box::new(Node::Block(vec![
+                Node::Assignment(
+                    Box::new(Node::Declaration(
+                        Box::new(Node::Primary(TokenType::Ident("str".to_string()))),
+                        Box::new(Node::Primary(TokenType::Ident("y".to_string()))),
+                    )),
+                    Box::new(Node::Primary(TokenType::Ident("hello".to_string()))),
+                ),
+            ])),
+        );
+        let mut parser = Parser::new(&input);
+        match parser.statement() {
             Ok(output) => assert_eq!(expected, output),
             Err(e) => {
                 dbg!(e);
