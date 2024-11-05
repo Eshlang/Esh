@@ -3,50 +3,31 @@ use std::collections::HashMap;
 use dfbin::DFBin;
 use parser::parser::Node;
 use crate::errors::CodegenError;
-use crate::definition::CodeDefinition;
+use crate::definition::{CodeDefinition, CodeContext};
 
 pub struct CodeGen {
-    pub token_tree: Vec<Node>,
-    pub general_pointer: usize,
-    pub context: HashMap<String, CodeDefinition>,
+    pub context_map: HashMap<String, usize>,
     pub buffer: DFBin,
 }
 
 impl CodeGen {
     pub fn new() -> CodeGen {
         Self {
-            token_tree: Vec::new(),
-            general_pointer: 0,
-            context: HashMap::new(),
+            context_map: HashMap::new(),
             buffer: DFBin::new(),
         }
     }
 
-    pub fn from_tokens(tokens: Vec<Node>) -> CodeGen {
-        Self {
-            token_tree: tokens,
-            general_pointer: 0,
-            context: HashMap::new(),
-            buffer: DFBin::new(),
+    fn scan_context(&mut self, node: &Node, parent_context: &CodeContext) -> Result<CodeContext, CodegenError> {
+        let context = todo!();
+        match node {
+            _ => {}
         }
+        Ok(todo!())
     }
 
-    pub fn scan(&mut self) -> Result<(), CodegenError> {
-        self.general_pointer = 0;
-        loop {
-            self.scan_next()?;
-        }
-        Ok(())
-    }
-
-    fn scan_next(&mut self) -> Result<(), CodegenError> {
-        Ok(())
-    }
-
-
-    pub fn generate(&mut self) -> Result<(), CodegenError> {
-        self.general_pointer = 0;
-        self.scan()?;
+    pub fn generate(&mut self, node: &Node, parent_context: &CodeContext) -> Result<(), CodegenError> {
+        let context = self.scan_context(&node, parent_context)?;
 
 
         Ok(())
@@ -78,8 +59,8 @@ func hello(string hell, num add) -> string {
         let g = parser.statement_block().expect("Parser statement block should unwrap");
         println!("{:#?}", g);
 
-        let mut codegen = CodeGen::from_tokens(vec![g]);
-        codegen.generate().expect("Codegen should generate.");
+        let mut codegen = CodeGen::new();
+        // codegen.generate().expect("Codegen should generate.");
         
     }
 }
