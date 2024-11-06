@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, rc::Rc};
 
 use parser::parser::Node;
 
@@ -11,7 +11,7 @@ pub struct CodegenError {
 
 #[derive(Debug, PartialEq)]
 pub struct ErrorToken {
-    pub token: Node,
+    pub token: Rc<Node>,
     pub position: usize
 }
 impl fmt::Display for ErrorToken {
@@ -21,7 +21,19 @@ impl fmt::Display for ErrorToken {
 }
 
 impl CodegenError {
-    pub fn new(node: Node, position: usize, source: ErrorRepr) -> CodegenError {
+    pub fn new(node: Rc<Node>, source: ErrorRepr) -> CodegenError {
+        Self {
+            token: Some(ErrorToken {
+                token: node,
+                position: 0
+            }),
+            source
+        }
+    }
+    pub fn err<T>(node: Rc<Node>, source: ErrorRepr) -> Result<T, CodegenError> {
+        Err(Self::new(node, source))
+    }
+    pub fn new_position(node: Rc<Node>, position: usize, source: ErrorRepr) -> CodegenError {
         Self {
             token: Some(ErrorToken {
                 token: node,
@@ -42,4 +54,8 @@ impl CodegenError {
 pub enum ErrorRepr {
     #[error("Generic Error")]
     Generic,
+    #[error("Expected a code block.")]
+    ExpectedBlock,
+    #[error("Expected a scannable code block.")]
+    ExpectedScannableBlock,
 }

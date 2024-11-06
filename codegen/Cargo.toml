@@ -6,5 +6,5 @@ edition = "2021"
 [dependencies]
 parser = { path = "../parser" }
 lexer = { path = "../lexer" }
-dfbin = { path = "../../dfasm/dfbin"}
+dfbin = { path = "K:/Programming/GitHub/dfasm/dfbin"}
 thiserror = "1.0.65"
