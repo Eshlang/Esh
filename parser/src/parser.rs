@@ -5,7 +5,7 @@ use lexer::types::{Keyword, Token, TokenType};
 #[derive(Debug, PartialEq)]
 pub enum Node {
     None,                                               // ()
-    Primary(Token),                                     // prim
+    Primary(Rc<Token>),                                     // prim
     FunctionCall(Rc<Node>, Rc<Node>),                 // ident(tuple/expr)
     Access(Rc<Node>, Rc<Node>),                       // ident.ident
     Construct(Rc<Node>, Rc<Node>),                    // ident {block} 
@@ -39,12 +39,12 @@ pub enum Node {
 /// A parser error
 #[derive(Debug, PartialEq)]
 pub enum ParserError {
-    InvalidToken(Token),        // Token is not recognized
-    InvalidStatement(Token),    // Statement is not recognized
-    MissingIdentifier(Token),   // Expected an ident
-    MissingSemicolon(Token),    // Expected a semicolon
-    MissingParenthesis(Token),  // Expected opening/closing parenthesis
-    MissingBrace(Token),        // Expected opening/closing brace
+    InvalidToken(Rc<Token>),        // token is not recognized
+    InvalidStatement(Rc<Token>),    // Statement is not recognized
+    MissingIdentifier(Rc<Token>),   // Expected an ident
+    MissingSemicolon(Rc<Token>),    // Expected a semicolon
+    MissingParenthesis(Rc<Token>),  // Expected opening/closing parenthesis
+    MissingBrace(Rc<Token>),        // Expected opening/closing brace
 }
 
 /// Returns a [ParserError] if [self.curr()](Parser::curr()) does not match the input.
@@ -74,12 +74,12 @@ macro_rules! expect {
 }
 
 pub struct Parser<'a> {
-    tokens: &'a [Token],
+    tokens: &'a [Rc<Token>],
     current: usize,
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(input: &'a [Token]) -> Self {
+    pub fn new(input: &'a [Rc<Token>]) -> Self {
         Self {
             tokens: input,
             current: 0,
@@ -91,12 +91,12 @@ impl<'a> Parser<'a> {
     }
 
     /// Gets the current token
-    pub(crate) fn curr(&self) -> &Token {
+    pub(crate) fn curr(&self) -> &Rc<Token> {
         &self.tokens[self.current]
     }
 
     /// Gets the previous token
-    pub(crate) fn prev(&self) -> &Token {
+    pub(crate) fn prev(&self) -> &Rc<Token> {
         &self.tokens[self.current - 1]
     }
 
