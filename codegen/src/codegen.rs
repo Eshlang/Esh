@@ -1,10 +1,10 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-
 use dfbin::DFBin;
 use lexer::types::TokenType;
 use parser::parser::Node;
+use crate::buffer::CodeGenBuffer;
 use crate::errors::{CodegenError, ErrorRepr};
 use crate::context::{CodeDefinition, CodeScope, Context, ContextType};
 use crate::types::{Field, FieldModifier, FieldType, PrimitiveType};
@@ -14,7 +14,7 @@ pub struct CodeGen {
     pub root_context: usize,
     pub contexts: Vec<Rc<RefCell<Context>>>,
     pub current_id: usize,
-    pub buffer: DFBin,
+    pub buffer: CodeGenBuffer,
     pub run: usize,
 }
 
@@ -25,7 +25,7 @@ impl CodeGen {
             root_context: 0,
             contexts: Vec::new(),
             current_id: 0,
-            buffer: DFBin::new(),
+            buffer: CodeGenBuffer::new(),
             run: 0
         }
     }
@@ -236,27 +236,27 @@ impl CodeGen {
             drop(context_borrow);
         }
     }
-    
-    fn scan_all_bodies(&mut self) -> Result<(), CodegenError> {
+
+    fn generate_all_code(&mut self) -> Result<(), CodegenError> {
         for context_id in 0..self.contexts.len() {
-            self.scan_body(context_id)?;
+            self.generate_code(context_id)?;
         }
         Ok(())
     }
 
-    fn scan_body(&mut self, context: usize) -> Result<(), CodegenError> {
+    fn generate_code(&mut self, context: usize) -> Result<(), CodegenError> {
         let context_modify = self.context_borrow(context)?;
 
         drop(context_modify);
         Ok(())
     }
 
-
-    pub fn generate_at_root(&mut self, node: Rc<Node>) -> Result<(), CodegenError> {
+    pub fn codegen_from_node(&mut self, node: Rc<Node>) -> Result<(), CodegenError> {
         let _root_context = self.scan_block_outline(node, ContextType::Namespace, 0, 0, CodeScope::Public)?;
         self.fill_all_field_types()?;
-        self.scan_all_bodies()?;
         self.root_context = 0;
+        self.buffer.clear();
+        self.generate_all_code()?;
         Ok(())
     }
 }
@@ -304,7 +304,7 @@ func test2(num number1) {
         println!("PARSER TREE\n----------------------\n{:#?}\n----------------------", parser_tree);
 
         let mut codegen = CodeGen::new();
-        codegen.generate_at_root(parser_tree.clone()).expect("Codegen should generate");
+        codegen.codegen_from_node(parser_tree.clone()).expect("Codegen should generate");
         println!("CODEGEN CONTEXTS\n----------------------\n{:#?}\n----------------------", codegen.contexts);
     
     
