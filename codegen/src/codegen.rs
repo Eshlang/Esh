@@ -236,11 +236,24 @@ impl CodeGen {
             drop(context_borrow);
         }
     }
+    
+    fn scan_all_bodies(&mut self) -> Result<(), CodegenError> {
+        for context_id in 0..self.contexts.len() {
+            self.scan_body(context_id)?;
+        }
+        Ok(())
+    }
+
+    fn scan_body(&mut self, context_id: usize) -> Result<(), CodegenError> {
+        
+        Ok(())
+    }
 
 
     pub fn generate_at_root(&mut self, node: Rc<Node>) -> Result<(), CodegenError> {
         let context = self.scan_block_outline(node, ContextType::Namespace, 0, 0, CodeScope::Public)?;
         self.fill_all_field_types()?;
+        self.scan_all_bodies()?;
         self.root_context = 0;
         Ok(())
     }
@@ -250,7 +263,7 @@ impl CodeGen {
 #[cfg(test)]
 mod tests {
     use parser::parser::*;
-    use lexer::{Lexer, types};
+    use lexer::{Lexer, types::Token};
     use super::*;
 
     #[test]
@@ -278,7 +291,7 @@ func damagePlayer(Player player) -> Player {
     return player;
 }
 "##);
-        let lexer_tokens: Vec<types::Token> = lexer.map(|v| v.expect("Lexer token should unwrap")).collect();
+        let lexer_tokens: Vec<Rc<Token>> = lexer.map(|v| Rc::new(v.expect("Lexer token should unwrap"))).collect();
         println!("LEXER TOKENS\n----------------------\n{:#?}\n----------------------", lexer_tokens);
         let mut parser = Parser::new(lexer_tokens.as_slice());
         let parser_tree = Rc::new(parser.parse().expect("Parser statement block should unwrap"));
