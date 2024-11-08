@@ -140,30 +140,34 @@ impl CodeGen {
     
     
     fn fill_all_field_types(&mut self) -> Result<(), CodegenError> {
-        let mut context_id = 0;
-        for context in self.contexts.iter() {
-            let mut context_modify = CodegenError::map_headless(context.try_borrow_mut(), ErrorRepr::BadBorrow)?;
-            if let ContextType::Function(func_return_type) = std::borrow::BorrowMut::borrow_mut(&mut context_modify.context_type) {
+        for context_id in 0..self.contexts.len() {
+            let context_get = self.context_borrow(context_id)?;
+            let context_type = context_get.context_type.clone();
+            let fields_len = context_get.fields.len();
+            drop(context_get);
+
+            if let ContextType::Function(func_return_type) = context_type {
                 if let FieldType::Ident(func_return_type_node) = func_return_type {
                     if !matches!(func_return_type_node.as_ref(), Node::None) {
-                        self.fill_field_type(func_return_type, context_id)?;
+                        let return_type_set = self.find_type_by_ident(&func_return_type_node, context_id)?;
+                        let mut context_get_mut = self.context_borrow_mut(context_id)?;
+                        context_get_mut.context_type = ContextType::Function(return_type_set);
+                        drop(context_get_mut);
                     }
                 };
             }
-            for field in context_modify.fields.iter_mut() {
-                self.fill_field_type(&mut field.field_type, context_id)?;
+            for field in 0..fields_len {
+                let context_get = self.context_borrow(context_id)?;
+                let FieldType::Ident(field_ident) = context_get.fields.get(field).unwrap().field_type.clone() else {
+                    continue;
+                };
+                drop(context_get);
+                let field_type_set =  self.find_type_by_ident(&field_ident, context_id)?;
+                let mut context_get_mut = self.context_borrow_mut(context_id)?;
+                context_get_mut.fields[field].field_type = field_type_set;
+                drop(context_get_mut);
             }
-            drop(context_modify);
-            context_id += 1;
-        }
-        Ok(())
-    }
-
-    fn fill_field_type(&self, field: &mut FieldType, context: usize) -> Result<(), CodegenError> {
-        let FieldType::Ident(field_ident) = field else {
-            return Ok(());
-        };
-        *field = self.find_type_by_ident(field_ident, context)?;
+            }
         Ok(())
     }
 
