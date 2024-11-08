@@ -1,44 +1,54 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use crate::types::{Field, FieldMap, FieldType};
+use crate::types::{Field, FieldType};
 use crate::Node;
 
-pub struct CodeDefinition {
-    pub definition_type: CodeDefinitionType,
-    pub context: Rc<CodeContext>,
+#[derive(Clone, Debug)]
+pub enum CodeDefinition {
+    Context(usize),
+    Field(usize),
+    Multiple(Vec<CodeDefinition>),
 }
 
-pub enum CodeDefinitionType {
+#[derive(Clone, Debug, PartialEq)]
+pub enum ContextType {
     Struct,
-    Func, //Later on, i'll add a namespace here.
-}
-impl CodeDefinition{
-    
+    Function(FieldType),
+    Namespace,
 }
 
+#[derive(Debug)]
+pub enum CodeScope {
+    Public,
+    Private
+}
 
-pub struct CodeContext {
-    pub parent_context: Option<Rc<CodeContext>>,
+#[derive(Debug)]
+pub struct Context {
+    pub context_type: ContextType,
+    pub parent_id: usize,
+    pub id: usize,
     pub depth: u32,
-    pub definition_map: HashMap<String, CodeDefinition>,
+    pub fields: Vec<Field>,
+    pub definition_lookup: HashMap<String, CodeDefinition>,
     pub body: Vec<Rc<Node>>,
+    pub scope: CodeScope,
+    pub children: Vec<usize>,
 }
 
-impl CodeContext {
-    pub fn new(parent_context: Rc<CodeContext>, body: Vec<Rc<Node>>) -> CodeContext {
+impl Context {
+    pub fn new_empty(context_type: ContextType, parent_id: usize, id: usize, depth: u32, body: Vec<Rc<Node>>, scope: CodeScope) -> Context {
         Self {
-            depth: parent_context.depth + 1,
-            parent_context: Some(parent_context),
-            definition_map: HashMap::new(),
-            body
-        }
-    }
-    pub fn with_map(parent_context: Rc<CodeContext>, body: Vec<Rc<Node>>, definitions: HashMap<String, CodeDefinition>) -> CodeContext {
-        Self {
-            depth: parent_context.depth + 1,
-            parent_context: Some(parent_context),
-            definition_map: definitions,
-            body
+            context_type,
+            parent_id,
+            children: Vec::new(),
+            id,
+            depth,
+            fields: Vec::new(),
+            definition_lookup: HashMap::new(),
+            body,
+            scope,
         }
     }
 }

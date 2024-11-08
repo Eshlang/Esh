@@ -1,18 +1,28 @@
-use std::collections::HashMap;
+use std::rc::Rc;
+use parser::parser::Node;
+use crate::context::CodeScope;
 
+#[derive(Debug)]
 pub struct Field {
-    pub field_type: FieldType
+    pub field_type: FieldType,
+    pub modifier: FieldModifier,
+    pub scope: CodeScope,
 }
 
-pub struct FieldMap {
-    pub map: HashMap<String, Field>
-}
-
+#[derive(Clone, Debug, PartialEq)]
 pub enum FieldType {
     Primitive(PrimitiveType),
     Struct(usize),
+    Ident(Rc<Node>),
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub enum PrimitiveType {
     Number, String
+}
+
+#[derive(Debug)]
+pub enum FieldModifier {
+    None,
+    List
 }

@@ -33,6 +33,15 @@ impl CodegenError {
     pub fn err<T>(node: Rc<Node>, source: ErrorRepr) -> Result<T, CodegenError> {
         Err(Self::new(node, source))
     }
+    pub fn err_headless<T>(source: ErrorRepr) -> Result<T, CodegenError> {
+        Err(Self::new_headless(source))
+    }
+    pub fn map<T, U>(err: Result<T, U>, node: Rc<Node>, source: ErrorRepr) -> Result<T, CodegenError> {
+        err.map_err(|_| Self::new(node, source))
+    }
+    pub fn map_headless<T, U>(err: Result<T, U>, source: ErrorRepr) -> Result<T, CodegenError> {
+        err.map_err(|_| Self::new_headless(source))
+    }
     pub fn new_position(node: Rc<Node>, position: usize, source: ErrorRepr) -> CodegenError {
         Self {
             token: Some(ErrorToken {
@@ -58,4 +67,22 @@ pub enum ErrorRepr {
     ExpectedBlock,
     #[error("Expected a scannable code block.")]
     ExpectedScannableBlock,
+    #[error("Expected a function identifier string.")]
+    ExpectedFunctionIdentifier,
+    #[error("Expected a struct identifier string.")]
+    ExpectedStructIdentifier,
+    #[error("Borrowing error. (Yeah you know the system in rust thats supposed to fix errors? it errored)")]
+    BadBorrow,
+    #[error("Unexpected unstructured code in struct.")]
+    UnstructuredStructCode,
+    #[error("Expected proper function parameter declarations.")]
+    ExpectedFunctionParamDeclaration,
+    #[error("Expected function parameter identifier.")]
+    ExpectedFunctionParamIdent,
+    #[error("Expected type identifier.")]
+    ExpectedTypeIdent,
+    #[error("Type identifier not recognized.")]
+    TypeIdentNotRecognized,
+    #[error("Expected a struct.")]
+    ExpectedStruct,
 }
