@@ -1,14 +1,15 @@
 use std::rc::Rc;
 use lexer::types::{Token, TokenType};
+use crate::types::PrimitiveType;
 
 // WIP!
 
 pub enum SemanticInstruction {
     Primary(Rc<Token>),                                     // prim
     FunctionCall(SemanticFunctionCall),                 // func(expr)
-    TypeConstruction(SemanticType, Rc<Node>),                    // type {block} 
-    Declaration(Rc<Node>, Rc<Node>),                  // ident ident
-    Return(Rc<Node>),                                  // return expr;
+    TypeConstruction(SemanticType, SemanticFields),                    // type {block} 
+    Declaration(SemanticType, SemanticVariable, Option<SemanticExpression>),                  // ident ident
+    Return(Rc<SemanticExpression>),                                  // return expr;
     Assignment(Rc<Node>, Rc<Node>),                   // decl/ident = expr;
     If(Rc<Node>, Rc<Node>),                           // if cond {block}
     Else(Rc<Node>, Rc<Node>),                         // stmt else {block}
@@ -23,13 +24,21 @@ pub struct SemanticNode {
     pub token: Rc<Token>,
     
 }
+pub struct SemanticTypeToken {
+    pub token: Rc<Token>,
+    pub semantic_type: SemanticType
+}
 pub enum SemanticType {
-
+    Primitive(PrimitiveType),
+    Struct(usize),
 }
 pub struct SemanticVariable {
     pub token: Rc<Token>,
     pub var_type: SemanticType,
     pub var_id: SemanticVariableID
+}
+pub struct SemanticFields {
+    pub fields: Vec<SemanticVariable>
 }
 pub enum SemanticVariableID {
     Field(usize),

@@ -246,6 +246,7 @@ impl CodeGen {
 
     fn scan_body(&mut self, context: usize) -> Result<(), CodegenError> {
         let context_modify = self.context_borrow(context)?;
+
         drop(context_modify);
         Ok(())
     }
@@ -290,6 +291,10 @@ func hello(string hell, num add) -> string {
 func damagePlayer(Player player) -> Player {
     player.damage(5);
     return player;
+}
+func test2(num number1) {
+    num number2;
+    num number3 = 5;
 }
 "##);
         let lexer_tokens: Vec<Rc<Token>> = lexer.map(|v| Rc::new(v.expect("Lexer token should unwrap"))).collect();
