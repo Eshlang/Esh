@@ -46,16 +46,12 @@ impl CodeGen {
                 (Node::Func(ident, params, return_type, body), _) => {
                     let return_type_field = FieldType::Ident(return_type.clone());
                     let child_id = self.scan_block_outline(body.clone(), ContextType::Function(return_type_field), depth, current_id, CodeScope::Public)?;
-                    let Node::Primary(TokenType::Ident(ident_string)) = ident.as_ref() else {
-                        return CodegenError::err(ident.clone(), ErrorRepr::ExpectedFunctionIdentifier)
-                    };
+                    let ident_string = Self::get_primary_as_ident(ident, ErrorRepr::ExpectedFunctionIdentifier)?;
 
                     let mut child_modify = self.context_borrow_mut(child_id)?;
                     let params = Self::extract_declaration_vec(params)?;
                     for (param_type, param_name) in params {
-                        let Node::Primary(TokenType::Ident(param_name_ident)) = param_name.as_ref() else {
-                            return CodegenError::err(param_name.clone(), ErrorRepr::ExpectedFunctionParamIdent)
-                        };
+                        let param_name_ident = Self::get_primary_as_ident(param_name, ErrorRepr::ExpectedFunctionParamIdent)?;
                         let field_id = child_modify.fields.len();
                         child_modify.fields.push(Field {
                             field_type: FieldType::Ident(param_type.clone()),
@@ -71,16 +67,12 @@ impl CodeGen {
                 },
                 (Node::Struct(ident, body), _) => {
                     let child_id = self.scan_block_outline(body.clone(), ContextType::Struct, depth, current_id, CodeScope::Public)?;
-                    let Node::Primary(TokenType::Ident(ident_string)) = ident.as_ref() else {
-                        return CodegenError::err(ident.clone(), ErrorRepr::ExpectedStructIdentifier)
-                    };
+                    let ident_string = Self::get_primary_as_ident(ident, ErrorRepr::ExpectedStructIdentifier)?;
                     Self::add_definition(&mut current_context, ident_string.clone(), CodeDefinition::Context(child_id))?;
                     current_context.children.push(child_id);
                 },
                 (Node::Declaration(field_type, field_name), ContextType::Struct) => {
-                    let Node::Primary(TokenType::Ident(field_name_ident)) = field_name.as_ref() else {
-                        return CodegenError::err(field_name.clone(), ErrorRepr::ExpectedStructIdentifier)
-                    };
+                    let field_name_ident = Self::get_primary_as_ident(field_name, ErrorRepr::ExpectedStructFieldIdentifier)?;
                     let field_id = current_context.fields.len();
                     Self::add_definition(&mut current_context, field_name_ident.clone(), CodeDefinition::Field(field_id))?;
                     current_context.fields.push(Field{
@@ -100,6 +92,16 @@ impl CodeGen {
         
         drop(current_context);
         Ok(current_id)
+    }
+
+    fn get_primary_as_ident(node: &Rc<Node>, err: ErrorRepr) -> Result<&String, CodegenError> {
+        let Node::Primary(node_token) = node.as_ref() else {
+            return CodegenError::err(node.clone(), err);
+        };
+        let TokenType::Ident(node_ident) = &node_token.token_type else {
+            return CodegenError::err(node.clone(), err);
+        };
+        Ok(node_ident)
     }
 
     fn add_definition(context: &mut Context, ident: String, definition: CodeDefinition) -> Result<(), CodegenError> {
@@ -172,28 +174,15 @@ impl CodeGen {
     }
 
     fn context_borrow(&self, context: usize) -> Result<std::cell::Ref<'_, Context>, CodegenError> {
-        println!("[!] Borrowing {}", context);
-        let g = CodegenError::map_headless(self.contexts[context].try_borrow(), ErrorRepr::BadBorrow);
-        if g.is_err() {
-            panic!();
-        }
-        g
+        CodegenError::map_headless(self.contexts[context].try_borrow(), ErrorRepr::BadBorrow)
     }
 
     fn context_borrow_mut(&self, context: usize) -> Result<std::cell::RefMut<'_, Context>, CodegenError> {
-        println!("[!] Mutably Borrowing {}", context);
-        let g = CodegenError::map_headless(self.contexts[context].try_borrow_mut(), ErrorRepr::BadBorrow);
-        if g.is_err() {
-            panic!();
-        }
-        g
+        CodegenError::map_headless(self.contexts[context].try_borrow_mut(), ErrorRepr::BadMutBorrow)
     }
 
     fn find_type_by_ident(&self, ident: &Rc<Node>, context: usize) -> Result<FieldType, CodegenError> {
-        let Node::Primary(TokenType::Ident(ident_string)) = ident.as_ref() else {
-            println!("{:?}", ident);
-            return CodegenError::err(ident.clone(), ErrorRepr::ExpectedTypeIdent)
-        };
+        let ident_string = Self::get_primary_as_ident(ident, ErrorRepr::ExpectedTypeIdent)?;
         match Self::is_definition_primitive(ident_string) {
             Some(primitive) => Ok(FieldType::Primitive(primitive)),
             None => {
@@ -230,9 +219,7 @@ impl CodeGen {
     }
 
     fn find_definition_by_ident(&self, ident: &Rc<Node>, mut context: usize) -> Result<CodeDefinition, CodegenError> {
-        let Node::Primary(TokenType::Ident(ident_string)) = ident.as_ref() else {
-            return CodegenError::err(ident.clone(), ErrorRepr::ExpectedTypeIdent)
-        };
+        let ident_string = Self::get_primary_as_ident(ident, ErrorRepr::ExpectedTypeIdent)?;
         loop {
             let context_borrow = self.context_borrow(context)?;
             match context_borrow.definition_lookup.get(ident_string) {
@@ -253,7 +240,6 @@ impl CodeGen {
 
     pub fn generate_at_root(&mut self, node: Rc<Node>) -> Result<(), CodegenError> {
         let context = self.scan_block_outline(node, ContextType::Namespace, 0, 0, CodeScope::Public)?;
-        println!("\nFilling in all field types:\n");
         self.fill_all_field_types()?;
         self.root_context = 0;
         Ok(())
@@ -295,7 +281,7 @@ func damagePlayer(Player player) -> Player {
         let lexer_tokens: Vec<types::Token> = lexer.map(|v| v.expect("Lexer token should unwrap")).collect();
         println!("LEXER TOKENS\n----------------------\n{:#?}\n----------------------", lexer_tokens);
         let mut parser = Parser::new(lexer_tokens.as_slice());
-        let parser_tree = Rc::new(parser.statement_block().expect("Parser statement block should unwrap"));
+        let parser_tree = Rc::new(parser.parse().expect("Parser statement block should unwrap"));
         println!("PARSER TREE\n----------------------\n{:#?}\n----------------------", parser_tree);
 
         let mut codegen = CodeGen::new();

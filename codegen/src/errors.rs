@@ -71,8 +71,12 @@ pub enum ErrorRepr {
     ExpectedFunctionIdentifier,
     #[error("Expected a struct identifier string.")]
     ExpectedStructIdentifier,
+    #[error("Expected a struct field identifier string.")]
+    ExpectedStructFieldIdentifier,
     #[error("Borrowing error. (Yeah you know the system in rust thats supposed to fix errors? it errored)")]
     BadBorrow,
+    #[error("Mutable borrowing error. (Yeah you know the system in rust thats supposed to fix errors? it errored)")]
+    BadMutBorrow,
     #[error("Unexpected unstructured code in struct.")]
     UnstructuredStructCode,
     #[error("Expected proper function parameter declarations.")]
