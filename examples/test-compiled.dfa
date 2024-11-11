@@ -1,0 +1,9 @@
+seg func
+
+seg param
+    dp var _myVar "My Variable" #scope:local
+
+seg code
+    plev join
+        var inc _myVar
+        plac sendmessage _myVar

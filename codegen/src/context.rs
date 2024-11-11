@@ -17,7 +17,7 @@ pub enum ContextType {
     Namespace,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum CodeScope {
     Public,
     Private
@@ -31,13 +31,13 @@ pub struct Context {
     pub depth: u32,
     pub fields: Vec<Field>,
     pub definition_lookup: HashMap<String, CodeDefinition>,
-    pub body: Vec<Rc<Node>>,
+    pub body: Rc<Vec<Rc<Node>>>,
     pub scope: CodeScope,
     pub children: Vec<usize>,
 }
 
 impl Context {
-    pub fn new_empty(context_type: ContextType, parent_id: usize, id: usize, depth: u32, body: Vec<Rc<Node>>, scope: CodeScope) -> Context {
+    pub fn new_empty(context_type: ContextType, parent_id: usize, id: usize, depth: u32, body: Rc<Vec<Rc<Node>>>, scope: CodeScope) -> Context {
         Self {
             context_type,
             parent_id,

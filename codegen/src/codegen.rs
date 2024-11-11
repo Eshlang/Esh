@@ -1,21 +1,30 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use dfbin::DFBin;
+use dfbin::enums::{Parameter, ParameterValue};
+use dfbin::instruction;
+use dfbin::Constants::Tags::DP;
 use lexer::types::TokenType;
 use parser::parser::Node;
 use crate::buffer::CodeGenBuffer;
 use crate::errors::{CodegenError, ErrorRepr};
 use crate::context::{CodeDefinition, CodeScope, Context, ContextType};
-use crate::types::{Field, FieldModifier, FieldType, PrimitiveType};
+use crate::types::{Field, FieldModifier, FieldType, PrimitiveType, RuntimeVariable};
 
 pub struct CodeGen {
     pub context_map: HashMap<String, usize>,
     pub root_context: usize,
     pub contexts: Vec<Rc<RefCell<Context>>>,
-    pub current_id: usize,
-    pub buffer: CodeGenBuffer,
-    pub run: usize,
+
+    current_id: usize,
+    buffer: CodeGenBuffer,
+    parents: Vec<usize>,
+    runtime_vars: Vec<HashMap<String, RuntimeVariable>>,
+    return_runtimes: Vec<Option<RuntimeVariable>>,
+    function_idents: Vec<u32>,
+    field_names: Vec<Vec<String>>,
+    context_names: Vec<String>,
+    run: usize,
 }
 
 impl CodeGen {
@@ -26,58 +35,81 @@ impl CodeGen {
             contexts: Vec::new(),
             current_id: 0,
             buffer: CodeGenBuffer::new(),
+            parents: Vec::new(),
+            runtime_vars: Vec::new(),
+            return_runtimes: Vec::new(),
+            function_idents: Vec::new(),
+            field_names: Vec::new(),
+            context_names: Vec::new(),
             run: 0
         }
     }
 
-    fn scan_block_outline(&mut self, node_block: Rc<Node>, context_type: ContextType, mut depth: u32, parent_id: usize, scope: CodeScope) -> Result<usize, CodegenError> {
+    fn scan_block_outline(&mut self, node_block: Rc<Node>, context_type: ContextType, mut depth: u32, parent_id: usize, scope: CodeScope, fields_base: Vec<String>, context_name: String) -> Result<usize, CodegenError> {
         self.run += 1;
         let Node::Block(node_block) = node_block.as_ref() else {
             return CodegenError::err(node_block, ErrorRepr::ExpectedBlock);
         };
         let current_id = self.current_id;
-        let current_context_cell = Rc::new(RefCell::new(Context::new_empty(context_type.clone(), parent_id, current_id, depth, Vec::new(), scope)));
+        println!("{:?}, {:?}", current_id, depth);
+        let current_context_cell = Rc::new(RefCell::new(Context::new_empty(context_type.clone(), parent_id, current_id, depth, Rc::new(Vec::new()), scope)));
         depth += 1;
         self.contexts.push(current_context_cell.clone());
+        self.parents.push(parent_id);
+        self.runtime_vars.push(HashMap::new());
+        self.return_runtimes.push(None);
+        self.field_names.push(Vec::new());
+        let mut field_names = fields_base;
+        self.context_names.push(context_name);
+        let mut context_names = Vec::new();
         let mut current_context = current_context_cell.borrow_mut();
         self.current_id += 1;
+        let mut body = Vec::new();
         for node in node_block {
             match (node.as_ref(), &context_type) {
                 (Node::Func(ident, params, return_type, body), _) => {
                     let return_type_field = FieldType::Ident(return_type.clone());
-                    let child_id = self.scan_block_outline(body.clone(), ContextType::Function(return_type_field), depth, current_id, CodeScope::Public)?;
+                    let params = Self::extract_declaration_vec(params)?;
+                    let func_fields_base = {
+                        let mut res = Vec::new();
+                        for (_param_type, param_name) in params.iter() {
+                            let param_name_ident = Self::get_primary_as_ident(param_name, ErrorRepr::ExpectedFunctionParamIdent)?;
+                            res.push(param_name_ident.clone());
+                        }
+                        res
+                    };
+                    let child_id = self.scan_block_outline(body.clone(), ContextType::Function(return_type_field), depth, current_id, CodeScope::Public, func_fields_base)?;
                     let ident_string = Self::get_primary_as_ident(ident, ErrorRepr::ExpectedFunctionIdentifier)?;
 
                     let mut child_modify = self.context_borrow_mut(child_id)?;
-                    let params = Self::extract_declaration_vec(params)?;
                     for (param_type, param_name) in params {
                         let param_name_ident = Self::get_primary_as_ident(param_name, ErrorRepr::ExpectedFunctionParamIdent)?;
                         let field_id = child_modify.fields.len();
                         child_modify.fields.push(Field {
                             field_type: FieldType::Ident(param_type.clone()),
-                            modifier: FieldModifier::None,
                             scope: CodeScope::Public,
                         });
                         Self::add_definition(&mut child_modify, param_name_ident.clone(), CodeDefinition::Field(field_id))?;
                     }
                     drop(child_modify);
-
+                    context_names.push(ident_string.clone());
                     Self::add_definition(&mut current_context, ident_string.clone(), CodeDefinition::Context(child_id))?;
                     current_context.children.push(child_id);
                 },
                 (Node::Struct(ident, body), _) => {
-                    let child_id = self.scan_block_outline(body.clone(), ContextType::Struct, depth, current_id, CodeScope::Public)?;
+                    let child_id = self.scan_block_outline(body.clone(), ContextType::Struct, depth, current_id, CodeScope::Public, Vec::new())?;
                     let ident_string = Self::get_primary_as_ident(ident, ErrorRepr::ExpectedStructIdentifier)?;
+                    context_names.push(ident_string.clone());
                     Self::add_definition(&mut current_context, ident_string.clone(), CodeDefinition::Context(child_id))?;
                     current_context.children.push(child_id);
                 },
                 (Node::Declaration(field_type, field_name), ContextType::Struct) => {
                     let field_name_ident = Self::get_primary_as_ident(field_name, ErrorRepr::ExpectedStructFieldIdentifier)?;
                     let field_id = current_context.fields.len();
+                    field_names.push(field_name_ident.clone());
                     Self::add_definition(&mut current_context, field_name_ident.clone(), CodeDefinition::Field(field_id))?;
                     current_context.fields.push(Field{
                         field_type: FieldType::Ident(field_type.clone()),
-                        modifier: FieldModifier::None,
                         scope: CodeScope::Public,
                     })
                 }
@@ -85,10 +117,14 @@ impl CodeGen {
                     return CodegenError::err(node.clone(), ErrorRepr::UnstructuredStructCode);
                 }
                 _ => {
-                    current_context.body.push(node.clone());
+                    body.push(node.clone());
                 }
             };
         };
+        println!("WOWWWWW {:?}\n{:?}\n\n", current_id, field_names);
+        self.field_names[current_id] = field_names;
+        self.context_names[current_id] = context_names;
+        current_context.body = Rc::new(body);
         
         drop(current_context);
         Ok(current_id)
@@ -169,7 +205,7 @@ impl CodeGen {
                 context_get_mut.fields[field].field_type = field_type_set;
                 drop(context_get_mut);
             }
-            }
+        }
         Ok(())
     }
 
@@ -245,17 +281,118 @@ impl CodeGen {
     }
 
     fn generate_code(&mut self, context: usize) -> Result<(), CodegenError> {
-        let context_modify = self.context_borrow(context)?;
+        let (body, context_type, fields) = {
+            let context_borrow = self.context_borrow(context)?;
+            println!("\nGenerating for {:?}\nContext Type: {:?}\n\n", context_borrow.id, context_borrow.context_type);
+            (context_borrow.body.clone(), context_borrow.context_type.clone(), context_borrow.fields.clone())
+        };
+        match context_type {
+            ContextType::Struct => {
 
-        drop(context_modify);
+            },
+            ContextType::Function(return_type) => {
+                self.generate_function_code(context, body, fields, return_type)?;
+            },
+            ContextType::Namespace => {
+
+            },
+        }
+        Ok(())
+    }
+    
+    fn make_var_name(var_name: &str) -> String {
+        let mut result = String::from("_v_");
+        result.push_str(var_name);
+        result
+    }
+
+    fn find_variable_by_name_full(&mut self, mut context: usize, var_name: &str, node: &Rc<Node>) -> Result<&RuntimeVariable, CodegenError> {
+        loop {
+            if let Some(var) = self.runtime_vars[context].get(var_name) {
+                return Ok(var);
+            }
+            if context == 0 {
+                return CodegenError::err(node.clone(), ErrorRepr::InvalidVariableName)
+            }
+            context = self.parents[context];
+        }
+    }
+
+    fn find_variable_by_name(&mut self, context: usize, node: &Rc<Node>) -> Result<&RuntimeVariable, CodegenError> {
+        let var_name = Self::get_primary_as_ident(node, ErrorRepr::ExpectedVariableIdentifier)?;
+        self.find_variable_by_name_full(context, var_name, node)
+    }
+
+    fn get_context_name(&self, context: usize) -> &String {
+        &self.context_names[self.parents[context]][context]
+    }
+
+    fn generate_function_code(&mut self, context: usize, body: Rc<Vec<Rc<Node>>>, fields: Vec<Field>, return_type: FieldType) -> Result<(), CodegenError> {
+        // self.return_runtimes[context] = 
+        let func_name = self.get_context_name(context).clone();
+        let func_id = self.buffer.use_function(func_name.as_str());
+        self.buffer.code_buffer.push_instruction(instruction!(
+            Func, [
+                (Ident, func_id)
+            ]
+        ));
+        let mut field_id = 0;
+        for field in fields {
+            let var_name = Self::make_var_name(&self.field_names[context][field_id]);
+            let param_and_var_ident = self.buffer.use_param(var_name.as_ref());
+            self.runtime_vars[context].insert(
+                self.field_names[context][field_id].to_owned(), 
+                RuntimeVariable::new_param(
+                    field.field_type,
+                    var_name,
+                    param_and_var_ident
+                )
+            );
+            self.buffer.code_buffer.push_parameter(Parameter{
+                value: ParameterValue::Ident(param_and_var_ident.0),
+                slot: None
+            });
+            field_id += 1;
+        }
+        
+        for statement in body.as_ref() {
+            match statement.as_ref() {
+                Node::Declaration(decl_type, decl_ident) => {
+                    let decl_ident = Self::get_primary_as_ident(decl_ident, ErrorRepr::ExpectedVariableIdentifier)?;
+                    let decl_type = self.find_type_by_ident(decl_type, context)?;
+                    let var_name = Self::make_var_name(decl_ident);
+                    let var_ident = self.buffer.use_variable(var_name.as_ref(), DP::Var::Scope::Line);
+                    let runtime_str = decl_ident.to_owned();
+                    self.runtime_vars[context].insert(
+                        decl_ident.to_owned(), 
+                        RuntimeVariable::new(
+                            decl_type,
+                            var_name,
+                            var_ident
+                        )
+                    );
+                },
+                Node::Assignment(assign_var, assign_value) => {
+                    let runtime_var_ident = self.find_variable_by_name(context, assign_var)?.ident;
+                    self.buffer.code_buffer.push_instruction(instruction!(
+                        Var::Set, [
+                            (Ident, runtime_var_ident),
+                            (Int, 1)
+                        ]
+                    ));
+                },
+                _ => {}
+            }
+        }
         Ok(())
     }
 
     pub fn codegen_from_node(&mut self, node: Rc<Node>) -> Result<(), CodegenError> {
-        let _root_context = self.scan_block_outline(node, ContextType::Namespace, 0, 0, CodeScope::Public)?;
+        let _root_context = self.scan_block_outline(node, ContextType::Namespace, 0, 0, CodeScope::Public, Vec::new(), "main".to_owned())?;
         self.fill_all_field_types()?;
         self.root_context = 0;
         self.buffer.clear();
+        println!("\n\n\n\n{:#?}\n\n\n\n", self.context_names);
         self.generate_all_code()?;
         Ok(())
     }
@@ -267,6 +404,44 @@ mod tests {
     use parser::parser::*;
     use lexer::{Lexer, types::Token};
     use super::*;
+
+
+    #[test]
+    pub fn decompile_test() {
+        let lexer = Lexer::new(r##"
+struct Player {
+    string uuid;
+    num hp;
+}
+func hello(string hell, num add) -> string {
+    num wowvar;
+    wowvar = 2;
+    add = add + wowvar;
+    hell = "crazy" + add;
+    return hell;
+}
+func hello2(string hell, num add) {
+    num wowvar;
+    wowvar = 2;
+    add = add + wowvar;
+    hell = "crazy" + add;
+}
+"##);
+        let lexer_tokens: Vec<Rc<Token>> = lexer.map(|v| Rc::new(v.expect("Lexer token should unwrap"))).collect();
+        // println!("LEXER TOKENS\n----------------------\n{:#?}\n----------------------", lexer_tokens);
+        let mut parser = Parser::new(lexer_tokens.as_slice());
+        let parser_tree = Rc::new(parser.parse().expect("Parser statement block should unwrap"));
+        // println!("PARSER TREE\n----------------------\n{:#?}\n----------------------", parser_tree);
+
+        let mut codegen = CodeGen::new();
+        codegen.codegen_from_node(parser_tree.clone()).expect("Codegen should generate");
+        // println!("CODEGEN CONTEXTS\n----------------------\n{:#?}\n----------------------", codegen.contexts);
+        let code = codegen.buffer.flush();
+        let mut decompiler = decompiler::Decompiler::new(code).expect("Decompiler should create");
+        decompiler.set_capitalization(decompiler::decompiler::DecompilerCapitalization::camelCase);
+        let decompiled = decompiler.decompile().expect("Decompiler should decompile");
+        println!("DECOMPILED\n----------------------\n{}\n----------------------", decompiled);
+    }
 
     #[test]
     pub fn parse_string_test() {
@@ -306,7 +481,5 @@ func test2(num number1) {
         let mut codegen = CodeGen::new();
         codegen.codegen_from_node(parser_tree.clone()).expect("Codegen should generate");
         println!("CODEGEN CONTEXTS\n----------------------\n{:#?}\n----------------------", codegen.contexts);
-    
-    
     }
 }

@@ -89,4 +89,8 @@ pub enum ErrorRepr {
     TypeIdentNotRecognized,
     #[error("Expected a struct.")]
     ExpectedStruct,
+    #[error("Expected a variable identifier.")]
+    ExpectedVariableIdentifier,
+    #[error("Invalid variable name.")]
+    InvalidVariableName,
 }

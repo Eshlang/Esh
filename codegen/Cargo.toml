@@ -7,4 +7,5 @@ edition = "2021"
 parser = { path = "../parser" }
 lexer = { path = "../lexer" }
 dfbin = { path = "K:/Programming/GitHub/dfasm/dfbin"}
+decompiler = { path = "K:/Programming/GitHub/dfasm/decompiler"}
 thiserror = "1.0.65"
