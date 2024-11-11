@@ -1,0 +1,17 @@
+struct Player {
+    string uuid;
+    num hp;
+}
+func hello(string hell, num add) -> string {
+    num wowvar;
+    wowvar = (2 + 1) * 4;
+    add = add + wowvar;
+    hell = "crazy" + add;
+    return hell;
+}
+func hello2(string hell, num add) {
+    num wowvar;
+    wowvar = 2;
+    add = add + wowvar;
+    hell = "crazy" + add;
+}

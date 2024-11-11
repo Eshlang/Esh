@@ -93,4 +93,6 @@ pub enum ErrorRepr {
     ExpectedVariableIdentifier,
     #[error("Invalid variable name.")]
     InvalidVariableName,
+    #[error("Unexpected expression token.")]
+    UnexpectedExpressionToken,
 }

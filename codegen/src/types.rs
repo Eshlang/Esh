@@ -1,4 +1,5 @@
 use std::rc::Rc;
+use dfbin::enums::Instruction;
 use parser::parser::Node;
 use crate::context::CodeScope;
 
@@ -51,4 +52,11 @@ pub enum PrimitiveType {
 pub enum FieldModifier {
     None,
     List
+}
+
+
+#[derive(Debug)]
+pub enum CodegenExpressionStack<'a> {
+    Node(&'a Rc<Node>),
+    Calculate(Instruction, usize, usize)
 }

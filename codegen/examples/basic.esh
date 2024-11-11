@@ -1,0 +1,5 @@
+func hello(string hell, num add) -> string {
+    num wowvar;
+    wowvar = ((2 + 1) * 4) + (3 + 6);
+    wowvar = wowvar + add;
+}

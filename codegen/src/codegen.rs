@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 use dfbin::enums::{Parameter, ParameterValue};
 use dfbin::instruction;
@@ -9,7 +9,7 @@ use parser::parser::Node;
 use crate::buffer::CodeGenBuffer;
 use crate::errors::{CodegenError, ErrorRepr};
 use crate::context::{CodeDefinition, CodeScope, Context, ContextType};
-use crate::types::{Field, FieldModifier, FieldType, PrimitiveType, RuntimeVariable};
+use crate::types::{CodegenExpressionStack, Field, FieldModifier, FieldType, PrimitiveType, RuntimeVariable};
 
 pub struct CodeGen {
     pub context_map: HashMap<String, usize>,
@@ -61,7 +61,6 @@ impl CodeGen {
         self.field_names.push(Vec::new());
         let mut field_names = fields_base;
         self.context_names.push(context_name);
-        let mut context_names = Vec::new();
         let mut current_context = current_context_cell.borrow_mut();
         self.current_id += 1;
         let mut body = Vec::new();
@@ -78,8 +77,8 @@ impl CodeGen {
                         }
                         res
                     };
-                    let child_id = self.scan_block_outline(body.clone(), ContextType::Function(return_type_field), depth, current_id, CodeScope::Public, func_fields_base)?;
                     let ident_string = Self::get_primary_as_ident(ident, ErrorRepr::ExpectedFunctionIdentifier)?;
+                    let child_id = self.scan_block_outline(body.clone(), ContextType::Function(return_type_field), depth, current_id, CodeScope::Public, func_fields_base, ident_string.clone())?;
 
                     let mut child_modify = self.context_borrow_mut(child_id)?;
                     for (param_type, param_name) in params {
@@ -92,14 +91,12 @@ impl CodeGen {
                         Self::add_definition(&mut child_modify, param_name_ident.clone(), CodeDefinition::Field(field_id))?;
                     }
                     drop(child_modify);
-                    context_names.push(ident_string.clone());
                     Self::add_definition(&mut current_context, ident_string.clone(), CodeDefinition::Context(child_id))?;
                     current_context.children.push(child_id);
                 },
                 (Node::Struct(ident, body), _) => {
-                    let child_id = self.scan_block_outline(body.clone(), ContextType::Struct, depth, current_id, CodeScope::Public, Vec::new())?;
                     let ident_string = Self::get_primary_as_ident(ident, ErrorRepr::ExpectedStructIdentifier)?;
-                    context_names.push(ident_string.clone());
+                    let child_id = self.scan_block_outline(body.clone(), ContextType::Struct, depth, current_id, CodeScope::Public, Vec::new(), ident_string.clone())?;
                     Self::add_definition(&mut current_context, ident_string.clone(), CodeDefinition::Context(child_id))?;
                     current_context.children.push(child_id);
                 },
@@ -123,7 +120,6 @@ impl CodeGen {
         };
         println!("WOWWWWW {:?}\n{:?}\n\n", current_id, field_names);
         self.field_names[current_id] = field_names;
-        self.context_names[current_id] = context_names;
         current_context.body = Rc::new(body);
         
         drop(current_context);
@@ -300,8 +296,10 @@ impl CodeGen {
         Ok(())
     }
     
-    fn make_var_name(var_name: &str) -> String {
-        let mut result = String::from("_v_");
+    fn make_var_name(var_name: &str, base_char: &str) -> String {
+        let mut result = String::from('_');
+        result.push_str(base_char);
+        result.push('_');
         result.push_str(var_name);
         result
     }
@@ -324,7 +322,93 @@ impl CodeGen {
     }
 
     fn get_context_name(&self, context: usize) -> &String {
-        &self.context_names[self.parents[context]][context]
+        &self.context_names[context]
+    }
+
+    fn generate_expression(&mut self, context: usize, root_node: &Rc<Node>, set_ident: u32) -> Result<u32, CodegenError> {
+        println!("{:#?}", root_node);
+        let mut expression_stack= VecDeque::new();
+        expression_stack.push_back(CodegenExpressionStack::Node(root_node));
+        let mut ident_stack = Vec::new();
+        let mut ind_counter = 0;
+        let mut register_id = 0;
+        while expression_stack.len() > 0 {
+            let get_expr = expression_stack.pop_front().expect("This should pop since len > 0");
+            println!("\n\n#{} (Ident Stack: {:?})\n----------------\n{:?}", ind_counter, ident_stack, get_expr);
+            match get_expr {
+                CodegenExpressionStack::Node(node) => {
+                    let matches = matches!(node.as_ref(), Node::Primary(..));
+                    let ident = if register_id == 0 || matches {
+                        set_ident
+                    } else {
+                        self.buffer.use_line_register(register_id)
+                    };
+                    match node.as_ref() {
+                        Node::Primary(token) => {
+                            let ident = match &token.as_ref().token_type {
+                                TokenType::Ident(..) => self.find_variable_by_name(context, node)?.ident,
+                                TokenType::String(t) => self.buffer.use_string(t.as_str()),
+                                TokenType::Number(t) => self.buffer.use_number(ParameterValue::Float(*t)),
+                                _ => {
+                                    return CodegenError::err(root_node.clone(), ErrorRepr::UnexpectedExpressionToken)
+                                }
+                            };
+                            ident_stack.push(ident);
+                        },
+                        Node::Sum(nl, nr) => {
+                            expression_stack.push_front(CodegenExpressionStack::Calculate(
+                                instruction!(Var::Add,
+                                    [(Ident, ident)]
+                                ), // Instruction
+                                register_id, //Register ID
+                                2 //How many elements we'll be expecting
+                            ));
+                            expression_stack.push_front(CodegenExpressionStack::Node(nl));
+                            expression_stack.push_front(CodegenExpressionStack::Node(nr));
+                        },
+                        Node::Difference(nl, nr) => {
+                            expression_stack.push_front(CodegenExpressionStack::Calculate(
+                                instruction!(Var::Sub,
+                                    [(Ident, ident)]
+                                ), // Instruction
+                                register_id, //Register ID
+                                2 //How many elements we'll be expecting
+                            ));
+                            expression_stack.push_front(CodegenExpressionStack::Node(nl));
+                            expression_stack.push_front(CodegenExpressionStack::Node(nr));
+                        },
+                        Node::Product(nl, nr) => {
+                            expression_stack.push_front(CodegenExpressionStack::Calculate(
+                                instruction!(Var::Mul,
+                                    [(Ident, ident)]
+                                ), // Instruction
+                                register_id, //Register ID
+                                2 //How many elements we'll be expecting
+                            ));
+                            expression_stack.push_front(CodegenExpressionStack::Node(nl));
+                            expression_stack.push_front(CodegenExpressionStack::Node(nr));
+                        },
+                        _ => {}
+                    }
+                    if !matches {
+                        register_id += 1;
+                    }
+                }
+                CodegenExpressionStack::Calculate(instruction, register, elms) => {
+                    self.buffer.code_buffer.push_instruction(instruction);
+                    for _i in 0..elms {
+                        self.buffer.code_buffer.push_parameter(Parameter{
+                            value: ParameterValue::Ident(ident_stack.pop().expect("Ident stack should pop when calculating.")),
+                            slot: None,
+                        });
+                    }
+                    ident_stack.push(self.buffer.use_line_register(register));
+                }
+                
+            }
+            ind_counter += 1;
+        }
+        Ok(ident_stack.pop().expect("Ident stack should pop final value."))
     }
 
     fn generate_function_code(&mut self, context: usize, body: Rc<Vec<Rc<Node>>>, fields: Vec<Field>, return_type: FieldType) -> Result<(), CodegenError> {
@@ -338,7 +422,7 @@ impl CodeGen {
         ));
         let mut field_id = 0;
         for field in fields {
-            let var_name = Self::make_var_name(&self.field_names[context][field_id]);
+            let var_name = Self::make_var_name(&self.field_names[context][field_id], "rvp");
             let param_and_var_ident = self.buffer.use_param(var_name.as_ref());
             self.runtime_vars[context].insert(
                 self.field_names[context][field_id].to_owned(), 
@@ -360,7 +444,7 @@ impl CodeGen {
                 Node::Declaration(decl_type, decl_ident) => {
                     let decl_ident = Self::get_primary_as_ident(decl_ident, ErrorRepr::ExpectedVariableIdentifier)?;
                     let decl_type = self.find_type_by_ident(decl_type, context)?;
-                    let var_name = Self::make_var_name(decl_ident);
+                    let var_name = Self::make_var_name(decl_ident, "rvl");
                     let var_ident = self.buffer.use_variable(var_name.as_ref(), DP::Var::Scope::Line);
                     let runtime_str = decl_ident.to_owned();
                     self.runtime_vars[context].insert(
@@ -374,12 +458,7 @@ impl CodeGen {
                 },
                 Node::Assignment(assign_var, assign_value) => {
                     let runtime_var_ident = self.find_variable_by_name(context, assign_var)?.ident;
-                    self.buffer.code_buffer.push_instruction(instruction!(
-                        Var::Set, [
-                            (Ident, runtime_var_ident),
-                            (Int, 1)
-                        ]
-                    ));
+                    let expr_id = self.generate_expression(context, assign_value, runtime_var_ident)?;
                 },
                 _ => {}
             }
@@ -401,46 +480,38 @@ impl CodeGen {
 
 #[cfg(test)]
 mod tests {
+    use core::str;
+    use std::fs;
+
     use parser::parser::*;
     use lexer::{Lexer, types::Token};
     use super::*;
 
 
     #[test]
-    pub fn decompile_test() {
-        let lexer = Lexer::new(r##"
-struct Player {
-    string uuid;
-    num hp;
-}
-func hello(string hell, num add) -> string {
-    num wowvar;
-    wowvar = 2;
-    add = add + wowvar;
-    hell = "crazy" + add;
-    return hell;
-}
-func hello2(string hell, num add) {
-    num wowvar;
-    wowvar = 2;
-    add = add + wowvar;
-    hell = "crazy" + add;
-}
-"##);
+    pub fn decompile_from_file_test() {
+        let name = "basic";
+        let path = r"K:\Programming\Projects\Esh\codegen\examples\";
+
+        let file_bytes = fs::read(format!("{}{}.esh", path, name)).expect("File should read");
+        let lexer = Lexer::new(str::from_utf8(&file_bytes).expect("Should encode to utf-8"));
         let lexer_tokens: Vec<Rc<Token>> = lexer.map(|v| Rc::new(v.expect("Lexer token should unwrap"))).collect();
-        // println!("LEXER TOKENS\n----------------------\n{:#?}\n----------------------", lexer_tokens);
+        println!("LEXER TOKENS\n----------------------\n{:#?}\n----------------------", lexer_tokens);
         let mut parser = Parser::new(lexer_tokens.as_slice());
         let parser_tree = Rc::new(parser.parse().expect("Parser statement block should unwrap"));
-        // println!("PARSER TREE\n----------------------\n{:#?}\n----------------------", parser_tree);
+        println!("PARSER TREE\n----------------------\n{:#?}\n----------------------", parser_tree);
 
         let mut codegen = CodeGen::new();
         codegen.codegen_from_node(parser_tree.clone()).expect("Codegen should generate");
-        // println!("CODEGEN CONTEXTS\n----------------------\n{:#?}\n----------------------", codegen.contexts);
+        println!("CODEGEN CONTEXTS\n----------------------\n{:#?}\n----------------------", codegen.contexts);
         let code = codegen.buffer.flush();
+        code.write_to_file(&format!("{}{}.dfbin", path, name)).expect("DFBin should write");
         let mut decompiler = decompiler::Decompiler::new(code).expect("Decompiler should create");
         decompiler.set_capitalization(decompiler::decompiler::DecompilerCapitalization::camelCase);
         let decompiled = decompiler.decompile().expect("Decompiler should decompile");
         println!("DECOMPILED\n----------------------\n{}\n----------------------", decompiled);
+        fs::write(format!("{}{}.dfa", path, name), decompiled).expect("Decompiled DFA should write.");
+
     }
 
     #[test]
