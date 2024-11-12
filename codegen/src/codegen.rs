@@ -9,7 +9,7 @@ use parser::parser::Node;
 use crate::buffer::CodeGenBuffer;
 use crate::errors::{CodegenError, ErrorRepr};
 use crate::context::{CodeDefinition, CodeScope, Context, ContextType};
-use crate::types::{CodegenExpressionStack, Field, FieldModifier, FieldType, PrimitiveType, RuntimeVariable};
+use crate::types::{CodegenExpressionStack, CodegenExpressionType, Field, FieldModifier, FieldType, PrimitiveType, RuntimeVariable};
 
 pub struct CodeGen {
     pub context_map: HashMap<String, usize>,
@@ -24,6 +24,7 @@ pub struct CodeGen {
     function_idents: Vec<u32>,
     field_names: Vec<Vec<String>>,
     context_names: Vec<String>,
+    context_full_names: Vec<String>,
     run: usize,
 }
 
@@ -41,6 +42,7 @@ impl CodeGen {
             function_idents: Vec::new(),
             field_names: Vec::new(),
             context_names: Vec::new(),
+            context_full_names: Vec::new(),
             run: 0
         }
     }
@@ -60,7 +62,17 @@ impl CodeGen {
         self.return_runtimes.push(None);
         self.field_names.push(Vec::new());
         let mut field_names = fields_base;
-        self.context_names.push(context_name);
+        self.context_names.push(context_name.clone());
+        self.context_full_names.push(if parent_id == current_id {
+            let mut str = String::from("__");
+            str.push_str(&context_name);
+            str
+        } else {
+            let mut str = self.context_full_names[parent_id].clone();
+            str.push('.');
+            str.push_str(&context_name);
+            str
+        });
         let mut current_context = current_context_cell.borrow_mut();
         self.current_id += 1;
         let mut body = Vec::new();
@@ -325,7 +337,11 @@ impl CodeGen {
         &self.context_names[context]
     }
 
-    fn generate_expression(&mut self, context: usize, root_node: &Rc<Node>, set_ident: u32) -> Result<u32, CodegenError> {
+    fn get_context_full_name(&self, context: usize) -> &String {
+        &self.context_full_names[context]
+    }
+
+    fn generate_expression(&mut self, context: usize, root_node: &Rc<Node>, set_ident: u32) -> Result<(u32, FieldType), CodegenError> {
         println!("{:#?}", root_node);
         let mut expression_stack= VecDeque::new();
         expression_stack.push_back(CodegenExpressionStack::Node(root_node));
@@ -345,22 +361,23 @@ impl CodeGen {
                     };
                     match node.as_ref() {
                         Node::Primary(token) => {
-                            let ident = match &token.as_ref().token_type {
-                                TokenType::Ident(..) => self.find_variable_by_name(context, node)?.ident,
-                                TokenType::String(t) => self.buffer.use_string(t.as_str()),
-                                TokenType::Number(t) => self.buffer.use_number(ParameterValue::Float(*t)),
+                            let (ident, ident_type) = match &token.as_ref().token_type {
+                                TokenType::Ident(..) => {
+                                    let v = self.find_variable_by_name(context, node)?;
+                                    (v.ident, v.field_type.clone())
+                                },
+                                TokenType::String(t) => (self.buffer.use_string(t.as_str()), FieldType::Primitive(PrimitiveType::String)),
+                                TokenType::Number(t) => (self.buffer.use_number(ParameterValue::Float(*t)), FieldType::Primitive(PrimitiveType::Number)),
                                 _ => {
                                     return CodegenError::err(root_node.clone(), ErrorRepr::UnexpectedExpressionToken)
                                 }
                             };
-                            ident_stack.push(ident);
+                            ident_stack.push((ident, ident_type));
                         },
                         Node::Sum(nl, nr) => {
                             expression_stack.push_front(CodegenExpressionStack::Calculate(
-                                instruction!(Var::Add,
-                                    [(Ident, ident)]
-                                ), // Instruction
-                                register_id, //Register ID
+                                CodegenExpressionType::Add,
+                                (register_id, ident), //Register ID & Identifier
                                 2 //How many elements we'll be expecting
                             ));
                             expression_stack.push_front(CodegenExpressionStack::Node(nl));
@@ -368,21 +385,18 @@ impl CodeGen {
                         },
                         Node::Difference(nl, nr) => {
                             expression_stack.push_front(CodegenExpressionStack::Calculate(
-                                instruction!(Var::Sub,
-                                    [(Ident, ident)]
-                                ), // Instruction
-                                register_id, //Register ID
+                                CodegenExpressionType::Sub,
+                                (register_id, ident), //Register ID & Identifier
                                 2 //How many elements we'll be expecting
                             ));
                             expression_stack.push_front(CodegenExpressionStack::Node(nl));
                             expression_stack.push_front(CodegenExpressionStack::Node(nr));
                         },
+                        
                         Node::Product(nl, nr) => {
                             expression_stack.push_front(CodegenExpressionStack::Calculate(
-                                instruction!(Var::Mul,
-                                    [(Ident, ident)]
-                                ), // Instruction
-                                register_id, //Register ID
+                                CodegenExpressionType::Mul,
+                                (register_id, ident), //Register ID & Identifier
                                 2 //How many elements we'll be expecting
                             ));
                             expression_stack.push_front(CodegenExpressionStack::Node(nl));
@@ -394,15 +408,19 @@ impl CodeGen {
                         register_id += 1;
                     }
                 }
-                CodegenExpressionStack::Calculate(instruction, register, elms) => {
-                    self.buffer.code_buffer.push_instruction(instruction);
+                CodegenExpressionStack::Calculate(expression_type, register_and_ident, elms) => {
+                    let mut parameters = Vec::new();
+                    let mut types = Vec::new();
                     for _i in 0..elms {
-                        self.buffer.code_buffer.push_parameter(Parameter{
-                            value: ParameterValue::Ident(ident_stack.pop().expect("Ident stack should pop when calculating.")),
+                        let ident_from_stack = ident_stack.pop().expect("Ident stack should pop when calculating.");
+                        parameters.push(Parameter{
+                            value: ParameterValue::Ident(ident_from_stack.0),
                             slot: None,
                         });
+                        types.push(ident_from_stack.1)
                     }
-                    ident_stack.push(self.buffer.use_line_register(register));
+                    let result_type = self.calculate_expression(expression_type, register_and_ident, parameters, types, root_node)?;
+                    ident_stack.push((self.buffer.use_line_register(register_and_ident.0), result_type));
                 }
                 
             }
@@ -411,9 +429,103 @@ impl CodeGen {
         Ok(ident_stack.pop().expect("Ident stack should pop final value."))
     }
 
+    fn calculate_expression(&mut self, expression_type: CodegenExpressionType, (_register, ident): (usize, u32), parameters: Vec<Parameter>, types: Vec<FieldType>, root_node: &Rc<Node>) -> Result<FieldType, CodegenError> {
+        let result_type = match expression_type {
+            CodegenExpressionType::Add => {
+                match (types.get(0).unwrap(), types.get(1).unwrap()) {
+                    (FieldType::Primitive(PrimitiveType::String), FieldType::Primitive(PrimitiveType::String)) => {
+                        self.buffer.code_buffer.push_instruction(instruction!(
+                            Var::String, [
+                                (Ident, ident)
+                            ]
+                        ));
+                        self.buffer.code_buffer.push_parameter(parameters[0].clone());
+                        self.buffer.code_buffer.push_parameter(parameters[1].clone());
+                        FieldType::Primitive(PrimitiveType::String)
+                    },
+                    (FieldType::Primitive(PrimitiveType::Number), FieldType::Primitive(PrimitiveType::Number)) => {
+                        self.buffer.code_buffer.push_instruction(instruction!(
+                            Var::Add, [
+                                (Ident, ident)
+                            ]
+                        ));
+                        self.buffer.code_buffer.push_parameter(parameters[0].clone());
+                        self.buffer.code_buffer.push_parameter(parameters[1].clone());
+                        FieldType::Primitive(PrimitiveType::Number)
+                    },
+                    _ => {
+                        return CodegenError::err(root_node.clone(), ErrorRepr::InvalidExpressionTypeConversion)
+                    }
+                }
+            },
+            CodegenExpressionType::Sub => {
+                match (types.get(0).unwrap(), types.get(1).unwrap()) {
+                    (FieldType::Primitive(PrimitiveType::Number), FieldType::Primitive(PrimitiveType::Number)) => {
+                        self.buffer.code_buffer.push_instruction(instruction!(
+                            Var::Sub, [
+                                (Ident, ident)
+                            ]
+                        ));
+                        self.buffer.code_buffer.push_parameter(parameters[0].clone());
+                        self.buffer.code_buffer.push_parameter(parameters[1].clone());
+                        FieldType::Primitive(PrimitiveType::Number)
+                    },
+                    _ => {
+                        return CodegenError::err(root_node.clone(), ErrorRepr::InvalidExpressionTypeConversion)
+                    }
+                }
+            },
+            CodegenExpressionType::Mul => {
+                match (types.get(0).unwrap(), types.get(1).unwrap()) {
+                    (FieldType::Primitive(PrimitiveType::Number), FieldType::Primitive(PrimitiveType::Number)) => {
+                        self.buffer.code_buffer.push_instruction(instruction!(
+                            Var::Mul, [
+                                (Ident, ident)
+                            ]
+                        ));
+                        self.buffer.code_buffer.push_parameter(parameters[0].clone());
+                        self.buffer.code_buffer.push_parameter(parameters[1].clone());
+                        FieldType::Primitive(PrimitiveType::Number)
+                    },
+                    (FieldType::Primitive(PrimitiveType::String), FieldType::Primitive(PrimitiveType::Number)) => {
+                        self.buffer.code_buffer.push_instruction(instruction!(
+                            Var::RepeatString, [
+                                (Ident, ident)
+                            ]
+                        ));
+                        self.buffer.code_buffer.push_parameter(parameters[0].clone());
+                        self.buffer.code_buffer.push_parameter(parameters[1].clone());
+                        FieldType::Primitive(PrimitiveType::String)
+                    },
+                    _ => {
+                        return CodegenError::err(root_node.clone(), ErrorRepr::InvalidExpressionTypeConversion)
+                    }
+                }
+            },
+            CodegenExpressionType::Div => {
+                match (types.get(0).unwrap(), types.get(1).unwrap()) {
+                    (FieldType::Primitive(PrimitiveType::Number), FieldType::Primitive(PrimitiveType::Number)) => {
+                        self.buffer.code_buffer.push_instruction(instruction!(
+                            Var::Div, [
+                                (Ident, ident)
+                            ]
+                        ));
+                        self.buffer.code_buffer.push_parameter(parameters[0].clone());
+                        self.buffer.code_buffer.push_parameter(parameters[1].clone());
+                        FieldType::Primitive(PrimitiveType::Number)
+                    },
+                    _ => {
+                        return CodegenError::err(root_node.clone(), ErrorRepr::InvalidExpressionTypeConversion)
+                    }
+                }
+            },
+        };
+        Ok(result_type)
+    }
+
     fn generate_function_code(&mut self, context: usize, body: Rc<Vec<Rc<Node>>>, fields: Vec<Field>, return_type: FieldType) -> Result<(), CodegenError> {
         // self.return_runtimes[context] = 
-        let func_name = self.get_context_name(context).clone();
+        let func_name = self.get_context_full_name(context).clone();
         let func_id = self.buffer.use_function(func_name.as_str());
         self.buffer.code_buffer.push_instruction(instruction!(
             Func, [
@@ -448,7 +560,7 @@ impl CodeGen {
                     let var_ident = self.buffer.use_variable(var_name.as_ref(), DP::Var::Scope::Line);
                     let runtime_str = decl_ident.to_owned();
                     self.runtime_vars[context].insert(
-                        decl_ident.to_owned(), 
+                        runtime_str, 
                         RuntimeVariable::new(
                             decl_type,
                             var_name,
@@ -457,8 +569,14 @@ impl CodeGen {
                     );
                 },
                 Node::Assignment(assign_var, assign_value) => {
-                    let runtime_var_ident = self.find_variable_by_name(context, assign_var)?.ident;
+                    let (runtime_var_ident, runtime_var_field_type) = {
+                        let runtime_var = self.find_variable_by_name(context, assign_var)?;
+                        (runtime_var.ident, runtime_var.field_type.clone())
+                    };
                     let expr_id = self.generate_expression(context, assign_value, runtime_var_ident)?;
+                    if expr_id.1 != runtime_var_field_type {
+                        return CodegenError::err(statement.clone(), ErrorRepr::InvalidVariableType)
+                    }
                 },
                 _ => {}
             }
@@ -491,7 +609,7 @@ mod tests {
     #[test]
     pub fn decompile_from_file_test() {
         let name = "basic";
-        let path = r"K:\Programming\Projects\Esh\codegen\examples\";
+        let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\codegen\examples\";
 
         let file_bytes = fs::read(format!("{}{}.esh", path, name)).expect("File should read");
         let lexer = Lexer::new(str::from_utf8(&file_bytes).expect("Should encode to utf-8"));
@@ -511,7 +629,6 @@ mod tests {
         let decompiled = decompiler.decompile().expect("Decompiler should decompile");
         println!("DECOMPILED\n----------------------\n{}\n----------------------", decompiled);
         fs::write(format!("{}{}.dfa", path, name), decompiled).expect("Decompiled DFA should write.");
-
     }
 
     #[test]

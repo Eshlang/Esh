@@ -58,5 +58,13 @@ pub enum FieldModifier {
 #[derive(Debug)]
 pub enum CodegenExpressionStack<'a> {
     Node(&'a Rc<Node>),
-    Calculate(Instruction, usize, usize)
+    Calculate(CodegenExpressionType, (usize, u32), usize)
+}
+
+#[derive(Debug)]
+pub enum CodegenExpressionType {
+    Add,
+    Sub,
+    Mul,
+    Div,
 }

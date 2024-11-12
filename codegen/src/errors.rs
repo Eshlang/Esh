@@ -95,4 +95,8 @@ pub enum ErrorRepr {
     InvalidVariableName,
     #[error("Unexpected expression token.")]
     UnexpectedExpressionToken,
+    #[error("Invalid expression type conversion.")]
+    InvalidExpressionTypeConversion,
+    #[error("Invalid variable type.")]
+    InvalidVariableType,
 }
