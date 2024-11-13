@@ -78,7 +78,14 @@ impl CodeGen {
         let mut body = Vec::new();
         for node in node_block {
             match (node.as_ref(), &context_type) {
-                (Node::Func(ident, params, return_type, body), _) => {
+                (Node::Struct(..) | Node::Func(..), ContextType::Function(..)) => {
+                    return CodegenError::err(node.clone(), match node.as_ref() {
+                        Node::Struct(..) => ErrorRepr::StructNestedInFunction,
+                        Node::Func(..) => ErrorRepr::FunctionNestedInFunction,
+                        _ => ErrorRepr::Generic
+                    });
+                }
+                (Node::Func(ident, params, return_type, body), ContextType::Struct | ContextType::Namespace) => {
                     let return_type_field = FieldType::Ident(return_type.clone());
                     let params = Self::extract_declaration_vec(params)?;
                     let func_fields_base = {
@@ -610,6 +617,7 @@ mod tests {
     pub fn decompile_from_file_test() {
         let name = "basic";
         let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\codegen\examples\";
+        let path = r"K:\Programming\Projects\Esh\codegen\examples\";
 
         let file_bytes = fs::read(format!("{}{}.esh", path, name)).expect("File should read");
         let lexer = Lexer::new(str::from_utf8(&file_bytes).expect("Should encode to utf-8"));

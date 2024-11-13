@@ -99,4 +99,10 @@ pub enum ErrorRepr {
     InvalidExpressionTypeConversion,
     #[error("Invalid variable type.")]
     InvalidVariableType,
+    #[error("Functions cannot nest inside functions.")]
+    FunctionNestedInFunction,
+    #[error("Structs cannot nest inside functions.")]
+    StructNestedInFunction,
+    #[error("Namespaces cannot nest inside functions.")]
+    NamespaceNestedInFunction,
 }
