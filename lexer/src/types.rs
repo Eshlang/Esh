@@ -91,6 +91,7 @@ pub enum Keyword {
     Struct, // struct definition
     For,    // for loop
     While,    // while loop
+    Domain, // domain definition
 }
 
 #[derive(Clone, Debug, PartialEq)]

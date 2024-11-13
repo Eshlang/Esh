@@ -33,6 +33,7 @@ pub enum Node {
     While(Rc<Node>, Rc<Node>),                        // while cond {block}
     Func(Rc<Node>, Rc<Node>, Rc<Node>, Rc<Node>),   // func ident (tuple/decl) -> tuple/ident {block}
     Struct(Rc<Node>, Rc<Node>),                       // struct ident {block}
+    Domain(Rc<Node>, Rc<Node>),                       // domain ident {block}
     Block(Vec<Rc<Node>>),                                   // stmt; stmt; stmt;
 }
 
@@ -134,6 +135,9 @@ impl<'a> Parser<'a> {
             TokenType::Keyword(Keyword::Struct) => {
                 self.struct_statement()
             },
+            TokenType::Keyword(Keyword::Domain) => {
+                self.domain_statement()
+            },
             TokenType::Keyword(Keyword::Func) => {
                 self.func()
             },
@@ -163,6 +167,26 @@ impl<'a> Parser<'a> {
                 Rc::new(self.ident()?)
             },
             {  // Struct body
+                expect!(self, TokenType::LBrace);
+                self.advance();
+                Rc::new(self.statement_block()?)
+            },
+        );
+        expect!(self, TokenType::RBrace);
+        self.advance();
+        return Ok(expr);
+    }
+
+    /// Returns the current domain declaration statement
+    pub(crate) fn domain_statement(&mut self) -> Result<Node, ParserError> {
+        expect!(self, TokenType::Keyword(Keyword::Domain));
+        let expr = Node::Domain(
+            {  // Domain name
+                self.advance();
+                expect!(self, TokenType::Ident(_));
+                Rc::new(self.ident()?)
+            },
+            {  // Domain body
                 expect!(self, TokenType::LBrace);
                 self.advance();
                 Rc::new(self.statement_block()?)
