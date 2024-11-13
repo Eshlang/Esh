@@ -103,6 +103,10 @@ pub enum ErrorRepr {
     FunctionNestedInFunction,
     #[error("Structs cannot nest inside functions.")]
     StructNestedInFunction,
-    #[error("Namespaces cannot nest inside functions.")]
-    NamespaceNestedInFunction,
+    #[error("Domains cannot nest inside functions.")]
+    DomainNestedInFunction,
+    #[error("Expected a domain identifier string.")]
+    ExpectedDomainIdentifier,
+    #[error("Domains cannot nest inside structs.")]
+    DomainNestedInStruct,
 }

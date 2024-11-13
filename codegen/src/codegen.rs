@@ -65,10 +65,16 @@ impl CodeGen {
         self.context_names.push(context_name.clone());
         self.context_full_names.push(if parent_id == current_id {
             let mut str = String::from("__");
+            str.push_str(&current_id.to_string());
+            str.push('#');
             str.push_str(&context_name);
             str
         } else {
-            let mut str = self.context_full_names[parent_id].clone();
+            let mut str_parent = self.context_full_names.get(parent_id).expect("Parent context full name should exist.");
+            let mut str = String::from("__");
+            str.push_str(&current_id.to_string());
+            str.push('#');
+            str.push_str(&str_parent[(str_parent.find('#').expect("String parent should have a #.")+1)..str_parent.len()]);
             str.push('.');
             str.push_str(&context_name);
             str
@@ -78,14 +84,15 @@ impl CodeGen {
         let mut body = Vec::new();
         for node in node_block {
             match (node.as_ref(), &context_type) {
-                (Node::Struct(..) | Node::Func(..), ContextType::Function(..)) => {
+                (Node::Struct(..) | Node::Func(..) | Node::Domain(..), ContextType::Function(..)) => {
                     return CodegenError::err(node.clone(), match node.as_ref() {
                         Node::Struct(..) => ErrorRepr::StructNestedInFunction,
                         Node::Func(..) => ErrorRepr::FunctionNestedInFunction,
+                        Node::Domain(..) => ErrorRepr::DomainNestedInFunction,
                         _ => ErrorRepr::Generic
                     });
                 }
-                (Node::Func(ident, params, return_type, body), ContextType::Struct | ContextType::Namespace) => {
+                (Node::Func(ident, params, return_type, body), ContextType::Struct | ContextType::Domain) => {
                     let return_type_field = FieldType::Ident(return_type.clone());
                     let params = Self::extract_declaration_vec(params)?;
                     let func_fields_base = {
@@ -129,6 +136,15 @@ impl CodeGen {
                         scope: CodeScope::Public,
                     })
                 }
+                (Node::Domain(ident, body), ContextType::Domain) => {
+                    let ident_string = Self::get_primary_as_ident(ident, ErrorRepr::ExpectedDomainIdentifier)?;
+                    let child_id = self.scan_block_outline(body.clone(), ContextType::Domain, depth, current_id, CodeScope::Public, Vec::new(), ident_string.clone())?;
+                    Self::add_definition(&mut current_context, ident_string.clone(), CodeDefinition::Context(child_id))?;
+                    current_context.children.push(child_id);
+                },
+                (Node::Domain(..), ContextType::Struct) => {
+                    return CodegenError::err(node.clone(), ErrorRepr::DomainNestedInStruct);
+                },
                 (_, ContextType::Struct) => {
                     return CodegenError::err(node.clone(), ErrorRepr::UnstructuredStructCode);
                 }
@@ -308,7 +324,7 @@ impl CodeGen {
             ContextType::Function(return_type) => {
                 self.generate_function_code(context, body, fields, return_type)?;
             },
-            ContextType::Namespace => {
+            ContextType::Domain => {
 
             },
         }
@@ -504,6 +520,16 @@ impl CodeGen {
                         self.buffer.code_buffer.push_parameter(parameters[1].clone());
                         FieldType::Primitive(PrimitiveType::String)
                     },
+                    (FieldType::Primitive(PrimitiveType::Number), FieldType::Primitive(PrimitiveType::String)) => {
+                        self.buffer.code_buffer.push_instruction(instruction!(
+                            Var::RepeatString, [
+                                (Ident, ident)
+                            ]
+                        ));
+                        self.buffer.code_buffer.push_parameter(parameters[1].clone());
+                        self.buffer.code_buffer.push_parameter(parameters[0].clone());
+                        FieldType::Primitive(PrimitiveType::String)
+                    },
                     _ => {
                         return CodegenError::err(root_node.clone(), ErrorRepr::InvalidExpressionTypeConversion)
                     }
@@ -557,8 +583,19 @@ impl CodeGen {
             });
             field_id += 1;
         }
+        let mut body_stack: VecDeque<(usize, Rc<Vec<Rc<Node>>>, Vec<String>)> = VecDeque::new();
+        body_stack.push_back((0, body, Vec::new()));
         
-        for statement in body.as_ref() {
+        loop {
+            if body_stack[0].0 >= body_stack[0].1.len() {
+                body_stack.pop_front();
+            }
+            if body_stack.len() == 0 {
+                break;   
+            }
+            body_stack[0].0 += 1;
+            let body_get = &body_stack[0];
+            let statement = &body_get.1[body_get.0 - 1];
             match statement.as_ref() {
                 Node::Declaration(decl_type, decl_ident) => {
                     let decl_ident = Self::get_primary_as_ident(decl_ident, ErrorRepr::ExpectedVariableIdentifier)?;
@@ -585,6 +622,9 @@ impl CodeGen {
                         return CodegenError::err(statement.clone(), ErrorRepr::InvalidVariableType)
                     }
                 },
+                Node::If(if_condition, if_block) => {
+
+                },
                 _ => {}
             }
         }
@@ -592,7 +632,7 @@ impl CodeGen {
     }
 
     pub fn codegen_from_node(&mut self, node: Rc<Node>) -> Result<(), CodegenError> {
-        let _root_context = self.scan_block_outline(node, ContextType::Namespace, 0, 0, CodeScope::Public, Vec::new(), "main".to_owned())?;
+        let _root_context = self.scan_block_outline(node, ContextType::Domain, 0, 0, CodeScope::Public, Vec::new(), "main".to_owned())?;
         self.fill_all_field_types()?;
         self.root_context = 0;
         self.buffer.clear();
@@ -615,7 +655,7 @@ mod tests {
 
     #[test]
     pub fn decompile_from_file_test() {
-        let name = "basic";
+        let name = "more";
         let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\codegen\examples\";
         let path = r"K:\Programming\Projects\Esh\codegen\examples\";
 

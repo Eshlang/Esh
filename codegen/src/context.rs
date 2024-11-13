@@ -14,7 +14,7 @@ pub enum CodeDefinition {
 pub enum ContextType {
     Struct,
     Function(FieldType),
-    Namespace,
+    Domain,
 }
 
 #[derive(Debug, Clone)]

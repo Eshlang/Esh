@@ -1,0 +1,14 @@
+
+domain yo {
+    func hello(string hell, num add) -> string {
+        num wowvar;
+        wowvar = ((2 + 1) * 4) + (3 + 6);
+        wowvar = wowvar + add;
+    }
+}
+
+func crazy(string hell, string add) -> string {
+    string wowvar;
+    wowvar = (("b" + "g") * 4) + "_wow";
+    wowvar = wowvar + add;
+}
