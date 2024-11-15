@@ -111,4 +111,8 @@ pub enum ErrorRepr {
     DomainNestedInStruct,
     #[error("A register deallocation error has occured. This is most likely the result of a mutated ownership variable.")]
     RegisterDeallocationError,
+    #[error("Invalid assignment token.")]
+    InvalidAssignmentToken,
+    #[error("Unexpectedly declaring an existing variable.")]
+    DeclaringExistingVariable,
 }

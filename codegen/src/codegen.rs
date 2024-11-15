@@ -646,6 +646,26 @@ impl CodeGen {
         Ok(result_type)
     }
 
+    fn declare_runtime_variable(&mut self, context: usize, decl_type: &Rc<Node>, decl_ident: &Rc<Node>) -> Result<(&RuntimeVariable, String), CodegenError> {
+        let decl_ident_str = Self::get_primary_as_ident(decl_ident, ErrorRepr::ExpectedVariableIdentifier)?;
+        let decl_type_str = self.find_type_by_ident(decl_type, context)?;
+        let var_name = Self::make_var_name(decl_ident_str, "rvl");
+        let var_ident = self.buffer.use_variable(var_name.as_ref(), DP::Var::Scope::Line);
+        let runtime_str = decl_ident_str.to_owned();
+        if self.find_variable_by_name_full(context, &decl_ident_str, decl_ident).is_ok() {
+            return CodegenError::err(decl_ident.clone(), ErrorRepr::DeclaringExistingVariable);
+        }
+        self.runtime_vars[context].insert(
+            runtime_str.to_owned(), 
+            RuntimeVariable::new(
+                decl_type_str,
+                var_name,
+                var_ident
+            )
+        );
+        Ok((self.runtime_vars[context].get(&runtime_str).unwrap(), runtime_str))
+    }
+
     fn generate_function_code(&mut self, context: usize, body: Rc<Vec<Rc<Node>>>, fields: Vec<Field>, return_type: FieldType) -> Result<(), CodegenError> {
         // self.return_runtimes[context] = 
         let func_name = self.get_context_full_name(context).clone();
@@ -682,6 +702,9 @@ impl CodeGen {
                 if let Some(instruction_trail) = remove.3 {
                     self.buffer.code_buffer.push_instruction(instruction_trail);
                 }
+                for remove_variable in remove.2 {
+                    self.runtime_vars[context].remove(&remove_variable);
+                }
             }
             if body_stack.len() == 0 {
                 break;   
@@ -689,25 +712,26 @@ impl CodeGen {
             body_stack[0].0 += 1;
             let body_get = &body_stack[0];
             let statement = &body_get.1[body_get.0 - 1];
+            let mut block_runtime_vars_add = Vec::new();
             match statement.as_ref() {
                 Node::Declaration(decl_type, decl_ident) => {
-                    let decl_ident = Self::get_primary_as_ident(decl_ident, ErrorRepr::ExpectedVariableIdentifier)?;
-                    let decl_type = self.find_type_by_ident(decl_type, context)?;
-                    let var_name = Self::make_var_name(decl_ident, "rvl");
-                    let var_ident = self.buffer.use_variable(var_name.as_ref(), DP::Var::Scope::Line);
-                    let runtime_str = decl_ident.to_owned();
-                    self.runtime_vars[context].insert(
-                        runtime_str, 
-                        RuntimeVariable::new(
-                            decl_type,
-                            var_name,
-                            var_ident
-                        )
-                    );
+                    block_runtime_vars_add.push(self.declare_runtime_variable(context, decl_type, decl_ident)?.1);
                 },
                 Node::Assignment(assign_var, assign_value) => {
                     let (runtime_var_ident, runtime_var_field_type) = {
-                        let runtime_var = self.find_variable_by_name(context, assign_var)?;
+                        let runtime_var = match assign_var.as_ref() {
+                            Node::Declaration(decl_type, decl_ident) => {
+                                let declaration = self.declare_runtime_variable(context, decl_type, decl_ident)?;
+                                block_runtime_vars_add.push(declaration.1);
+                                declaration.0
+                            }
+                            Node::Primary(..) => {
+                                self.find_variable_by_name(context, assign_var)?
+                            }
+                            _ => {
+                                return CodegenError::err(statement.clone(), ErrorRepr::InvalidAssignmentToken);
+                            }
+                        };
                         (runtime_var.ident, runtime_var.field_type.clone())
                     };
                     let expr_id = self.generate_expression(context, assign_value, runtime_var_ident)?;
@@ -716,7 +740,6 @@ impl CodeGen {
                     }
                 },
                 Node::If(if_condition, if_block) => {
-                    dbg!(if_condition);
                     let allocated_bool = self.buffer.allocate_line_register();
                     let expr_id = self.generate_expression(context, if_condition, allocated_bool)?;
                     if !matches!(expr_id.1, FieldType::Primitive(PrimitiveType::Bool)) {
@@ -735,6 +758,7 @@ impl CodeGen {
                 },
                 _ => {}
             }
+            body_stack[0].2.extend(block_runtime_vars_add);
         }
         Ok(())
     }

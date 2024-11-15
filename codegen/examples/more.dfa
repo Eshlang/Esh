@@ -1,5 +1,6 @@
 seg func
     df _0 "__2#main.yo.hello"
+    df _20 "__3#main.randomfunc"
 seg param
     dp var _1 "_rvp_hell" #scope:line
     dp param _2 "_rvp_hell"
@@ -15,6 +16,12 @@ seg param
     dp num _12 1
     dp num _13 2
     dp num _14 123
+    dp var _15 "_rvl_testvar" #scope:line
+    dp num _16 5
+    dp num _17 999
+    dp num _18 17
+    dp num _19 888
+    dp str _21 "wow"
 seg code
     func _0 _2, _4
         var add _6, _8, _7
@@ -28,5 +35,12 @@ seg code
         endif
         varif eq _6, 1
             var set _3, _14
+            var set _15, _16
+            var add _15, _15, _17
         endif
+        var set _15, _18
+        var add _15, _15, _19
         var add _5, _5, _3
+    func _20 _2, _4
+        var set _5, _21
+        var string _5, _5, _1

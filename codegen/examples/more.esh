@@ -5,7 +5,17 @@ domain yo {
         wowvar = ((2 + 1) * 4) + (3 + 6);
         if (wowvar == 4) {
             add = 123;
+            num testvar = 5;
+            testvar = testvar + 999;
         }
+        num testvar = 17;
+        testvar = testvar + 888;
         wowvar = wowvar + add;
     }
+}
+
+
+func randomfunc(string hell, string add) -> string {
+    string wowvar = "wow";
+    wowvar = wowvar + hell;
 }
