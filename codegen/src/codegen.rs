@@ -1,8 +1,9 @@
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
-use dfbin::enums::{Parameter, ParameterValue};
+use dfbin::enums::{Instruction, Parameter, ParameterValue};
 use dfbin::instruction;
+use dfbin::Constants::{Actions, Parents};
 use dfbin::Constants::Tags::DP;
 use lexer::types::TokenType;
 use parser::parser::Node;
@@ -53,7 +54,7 @@ impl CodeGen {
             return CodegenError::err(node_block, ErrorRepr::ExpectedBlock);
         };
         let current_id = self.current_id;
-        println!("{:?}, {:?}", current_id, depth);
+        //##println!("{:?}, {:?}", current_id, depth);
         let current_context_cell = Rc::new(RefCell::new(Context::new_empty(context_type.clone(), parent_id, current_id, depth, Rc::new(Vec::new()), scope)));
         depth += 1;
         self.contexts.push(current_context_cell.clone());
@@ -153,7 +154,7 @@ impl CodeGen {
                 }
             };
         };
-        println!("WOWWWWW {:?}\n{:?}\n\n", current_id, field_names);
+        //##println!("WOWWWWW {:?}\n{:?}\n\n", current_id, field_names);
         self.field_names[current_id] = field_names;
         current_context.body = Rc::new(body);
         
@@ -314,7 +315,7 @@ impl CodeGen {
     fn generate_code(&mut self, context: usize) -> Result<(), CodegenError> {
         let (body, context_type, fields) = {
             let context_borrow = self.context_borrow(context)?;
-            println!("\nGenerating for {:?}\nContext Type: {:?}\n\n", context_borrow.id, context_borrow.context_type);
+            //##println!("\nGenerating for {:?}\nContext Type: {:?}\n\n", context_borrow.id, context_borrow.context_type);
             (context_borrow.body.clone(), context_borrow.context_type.clone(), context_borrow.fields.clone())
         };
         match context_type {
@@ -365,22 +366,25 @@ impl CodeGen {
     }
 
     fn generate_expression(&mut self, context: usize, root_node: &Rc<Node>, set_ident: u32) -> Result<(u32, FieldType), CodegenError> {
-        println!("{:#?}", root_node);
+        //##println!("{:#?}", root_node);
         let mut expression_stack= VecDeque::new();
         expression_stack.push_back(CodegenExpressionStack::Node(root_node));
         let mut ident_stack = Vec::new();
-        let mut ind_counter = 0;
-        let mut register_id = 0;
+        let mut register_counter = 0;
+        let mut allocated_registers = Vec::new();
+        let mut calculated = false;
         while expression_stack.len() > 0 {
             let get_expr = expression_stack.pop_front().expect("This should pop since len > 0");
-            println!("\n\n#{} (Ident Stack: {:?})\n----------------\n{:?}", ind_counter, ident_stack, get_expr);
+            //##println!("\n\n#{} (Ident Stack: {:?})\n----------------\n{:?}", ind_counter, ident_stack, get_expr);
             match get_expr {
                 CodegenExpressionStack::Node(node) => {
                     let matches = matches!(node.as_ref(), Node::Primary(..));
-                    let ident = if register_id == 0 || matches {
+                    let ident = if register_counter == 0 || matches {
                         set_ident
                     } else {
-                        self.buffer.use_line_register(register_id)
+                        let allocate = self.buffer.allocate_line_register();
+                        allocated_registers.push(allocate);
+                        allocate
                     };
                     match node.as_ref() {
                         Node::Primary(token) => {
@@ -400,7 +404,7 @@ impl CodeGen {
                         Node::Sum(nl, nr) => {
                             expression_stack.push_front(CodegenExpressionStack::Calculate(
                                 CodegenExpressionType::Add,
-                                (register_id, ident), //Register ID & Identifier
+                                ident, //Register ID & Identifier
                                 2 //How many elements we'll be expecting
                             ));
                             expression_stack.push_front(CodegenExpressionStack::Node(nl));
@@ -409,29 +413,54 @@ impl CodeGen {
                         Node::Difference(nl, nr) => {
                             expression_stack.push_front(CodegenExpressionStack::Calculate(
                                 CodegenExpressionType::Sub,
-                                (register_id, ident), //Register ID & Identifier
+                                ident, //Register ID & Identifier
                                 2 //How many elements we'll be expecting
                             ));
                             expression_stack.push_front(CodegenExpressionStack::Node(nl));
                             expression_stack.push_front(CodegenExpressionStack::Node(nr));
                         },
-                        
                         Node::Product(nl, nr) => {
                             expression_stack.push_front(CodegenExpressionStack::Calculate(
                                 CodegenExpressionType::Mul,
-                                (register_id, ident), //Register ID & Identifier
+                                ident, //Register ID & Identifier
                                 2 //How many elements we'll be expecting
                             ));
                             expression_stack.push_front(CodegenExpressionStack::Node(nl));
                             expression_stack.push_front(CodegenExpressionStack::Node(nr));
+                        },
+                        Node::Equal(nl, nr) => {
+                            expression_stack.push_front(CodegenExpressionStack::Calculate(
+                                CodegenExpressionType::Eq,
+                                ident, //Register ID & Identifier
+                                2 //How many elements we'll be expecting
+                            ));
+                            expression_stack.push_front(CodegenExpressionStack::Node(nl));
+                            expression_stack.push_front(CodegenExpressionStack::Node(nr));
+                        },
+                        Node::NotEqual(nl, nr) => {
+                            expression_stack.push_front(CodegenExpressionStack::Calculate(
+                                CodegenExpressionType::NotEq,
+                                ident, //Register ID & Identifier
+                                2 //How many elements we'll be expecting
+                            ));
+                            expression_stack.push_front(CodegenExpressionStack::Node(nl));
+                            expression_stack.push_front(CodegenExpressionStack::Node(nr));
+                        },
+                        Node::Not(n) => {
+                            expression_stack.push_front(CodegenExpressionStack::Calculate(
+                                CodegenExpressionType::Not,
+                                ident, //Register ID & Identifier
+                                1 //How many elements we'll be expecting
+                            ));
+                            expression_stack.push_front(CodegenExpressionStack::Node(n));
                         },
                         _ => {}
                     }
                     if !matches {
-                        register_id += 1;
+                        register_counter += 1;
                     }
                 }
-                CodegenExpressionStack::Calculate(expression_type, register_and_ident, elms) => {
+                CodegenExpressionStack::Calculate(expression_type, register_ident, elms) => {
                     let mut parameters = Vec::new();
                     let mut types = Vec::new();
                     for _i in 0..elms {
@@ -442,17 +471,29 @@ impl CodeGen {
                         });
                         types.push(ident_from_stack.1)
                     }
-                    let result_type = self.calculate_expression(expression_type, register_and_ident, parameters, types, root_node)?;
-                    ident_stack.push((self.buffer.use_line_register(register_and_ident.0), result_type));
+                    calculated = true;
+                    let result_type = self.calculate_expression(expression_type, register_ident, parameters, types, root_node)?;
+                    ident_stack.push((register_ident, result_type));
                 }
                 
             }
-            ind_counter += 1;
         }
-        Ok(ident_stack.pop().expect("Ident stack should pop final value."))
+        let final_value = ident_stack.pop().expect("Ident stack should have a final value.");
+        if !calculated { //The expression was a single primary value and included no calculation, so we need to set the intended value.
+            self.buffer.code_buffer.push_instruction(instruction!(
+                Var::Set, [
+                    (Ident, set_ident),
+                    (Ident, final_value.0)
+                ]
+            ));
+        }
+        for free_register in allocated_registers {
+            self.buffer.free_line_register(free_register)?;
+        }
+        Ok(final_value)
     }
 
-    fn calculate_expression(&mut self, expression_type: CodegenExpressionType, (_register, ident): (usize, u32), parameters: Vec<Parameter>, types: Vec<FieldType>, root_node: &Rc<Node>) -> Result<FieldType, CodegenError> {
+    fn calculate_expression(&mut self, expression_type: CodegenExpressionType, ident: u32, parameters: Vec<Parameter>, types: Vec<FieldType>, root_node: &Rc<Node>) -> Result<FieldType, CodegenError> {
         let result_type = match expression_type {
             CodegenExpressionType::Add => {
                 match (types.get(0).unwrap(), types.get(1).unwrap()) {
@@ -552,6 +593,55 @@ impl CodeGen {
                     }
                 }
             },
+            CodegenExpressionType::Eq | CodegenExpressionType::NotEq => {
+                match (types.get(0).unwrap(), types.get(1).unwrap()) {
+                    (FieldType::Primitive(_), FieldType::Primitive(_)) => {
+                        self.buffer.code_buffer.push_instruction(
+                            match expression_type {
+                                CodegenExpressionType::NotEq => instruction!(Varif::NotEq),
+                                _ => instruction!(Varif::Eq)
+                            }
+                        );
+                        self.buffer.code_buffer.push_parameter(parameters[0].clone());
+                        self.buffer.code_buffer.push_parameter(parameters[1].clone());
+                    },
+                    _ => {
+                        return CodegenError::err(root_node.clone(), ErrorRepr::InvalidExpressionTypeConversion)
+                    }
+                }
+                self.buffer.code_buffer.push_instruction(instruction!(
+                    Var::Set, [
+                        (Ident, ident),
+                        (Int, 1)
+                    ]
+                ));
+                self.buffer.code_buffer.push_instruction(instruction!(Else));
+                self.buffer.code_buffer.push_instruction(instruction!(
+                    Var::Set, [
+                        (Ident, ident),
+                        (Int, 0)
+                    ]
+                ));
+                self.buffer.code_buffer.push_instruction(instruction!(EndIf));
+                FieldType::Primitive(PrimitiveType::Bool)
+            },
+            CodegenExpressionType::Not => { //we're basically doing the operation ``newbool = 1 - oldbool``.
+                match types.get(0).unwrap() {
+                    FieldType::Primitive(PrimitiveType::Bool) => {
+                        self.buffer.code_buffer.push_instruction(instruction!(
+                            Var::Sub, [
+                                (Ident, ident),
+                                (Int, 1)
+                            ]
+                        ));
+                        self.buffer.code_buffer.push_parameter(parameters[0].clone());
+                        FieldType::Primitive(PrimitiveType::Bool)
+                    },
+                    _ => {
+                        return CodegenError::err(root_node.clone(), ErrorRepr::InvalidExpressionTypeConversion)
+                    }
+                }
+            },
         };
         Ok(result_type)
     }
@@ -583,12 +673,15 @@ impl CodeGen {
             });
             field_id += 1;
         }
-        let mut body_stack: VecDeque<(usize, Rc<Vec<Rc<Node>>>, Vec<String>)> = VecDeque::new();
-        body_stack.push_back((0, body, Vec::new()));
+        let mut body_stack: VecDeque<(usize, Rc<Vec<Rc<Node>>>, Vec<String>, Option<Instruction>)> = VecDeque::new();
+        body_stack.push_back((0, body, Vec::new(), None));
         
         loop {
             if body_stack[0].0 >= body_stack[0].1.len() {
-                body_stack.pop_front();
+                let remove = body_stack.pop_front().expect("Body stack should pop a front");
+                if let Some(instruction_trail) = remove.3 {
+                    self.buffer.code_buffer.push_instruction(instruction_trail);
+                }
             }
             if body_stack.len() == 0 {
                 break;   
@@ -623,7 +716,22 @@ impl CodeGen {
                     }
                 },
                 Node::If(if_condition, if_block) => {
-
+                    dbg!(if_condition);
+                    let allocated_bool = self.buffer.allocate_line_register();
+                    let expr_id = self.generate_expression(context, if_condition, allocated_bool)?;
+                    if !matches!(expr_id.1, FieldType::Primitive(PrimitiveType::Bool)) {
+                        return CodegenError::err(statement.clone(), ErrorRepr::InvalidVariableType)
+                    }
+                    self.buffer.code_buffer.push_instruction(instruction!(
+                        Varif::Eq, [
+                            (Ident, allocated_bool),
+                            (Int, 1)
+                        ]
+                    ));
+                    let Node::Block(if_block) = if_block.as_ref() else {
+                        return CodegenError::err(if_block.clone(), ErrorRepr::ExpectedBlock);
+                    };
+                    body_stack.push_front((0, Rc::new(if_block.clone()), Vec::new(), Some(instruction!(EndIf))));
                 },
                 _ => {}
             }
@@ -636,7 +744,7 @@ impl CodeGen {
         self.fill_all_field_types()?;
         self.root_context = 0;
         self.buffer.clear();
-        println!("\n\n\n\n{:#?}\n\n\n\n", self.context_names);
+        //##println!("\n\n\n\n{:#?}\n\n\n\n", self.context_names);
         self.generate_all_code()?;
         Ok(())
     }
@@ -662,20 +770,20 @@ mod tests {
         let file_bytes = fs::read(format!("{}{}.esh", path, name)).expect("File should read");
         let lexer = Lexer::new(str::from_utf8(&file_bytes).expect("Should encode to utf-8"));
         let lexer_tokens: Vec<Rc<Token>> = lexer.map(|v| Rc::new(v.expect("Lexer token should unwrap"))).collect();
-        println!("LEXER TOKENS\n----------------------\n{:#?}\n----------------------", lexer_tokens);
+        //##println!("LEXER TOKENS\n----------------------\n{:#?}\n----------------------", lexer_tokens);
         let mut parser = Parser::new(lexer_tokens.as_slice());
         let parser_tree = Rc::new(parser.parse().expect("Parser statement block should unwrap"));
-        println!("PARSER TREE\n----------------------\n{:#?}\n----------------------", parser_tree);
+        //##println!("PARSER TREE\n----------------------\n{:#?}\n----------------------", parser_tree);
 
         let mut codegen = CodeGen::new();
         codegen.codegen_from_node(parser_tree.clone()).expect("Codegen should generate");
-        println!("CODEGEN CONTEXTS\n----------------------\n{:#?}\n----------------------", codegen.contexts);
+        //##println!("CODEGEN CONTEXTS\n----------------------\n{:#?}\n----------------------", codegen.contexts);
         let code = codegen.buffer.flush();
         code.write_to_file(&format!("{}{}.dfbin", path, name)).expect("DFBin should write");
         let mut decompiler = decompiler::Decompiler::new(code).expect("Decompiler should create");
-        decompiler.set_capitalization(decompiler::decompiler::DecompilerCapitalization::camelCase);
+        decompiler.set_capitalization(decompiler::decompiler::DecompilerCapitalization::lowercase);
         let decompiled = decompiler.decompile().expect("Decompiler should decompile");
-        println!("DECOMPILED\n----------------------\n{}\n----------------------", decompiled);
+        //##println!("DECOMPILED\n----------------------\n{}\n----------------------", decompiled);
         fs::write(format!("{}{}.dfa", path, name), decompiled).expect("Decompiled DFA should write.");
     }
 
@@ -709,13 +817,13 @@ func test2(num number1) {
 }
 "##);
         let lexer_tokens: Vec<Rc<Token>> = lexer.map(|v| Rc::new(v.expect("Lexer token should unwrap"))).collect();
-        println!("LEXER TOKENS\n----------------------\n{:#?}\n----------------------", lexer_tokens);
+        //##println!("LEXER TOKENS\n----------------------\n{:#?}\n----------------------", lexer_tokens);
         let mut parser = Parser::new(lexer_tokens.as_slice());
         let parser_tree = Rc::new(parser.parse().expect("Parser statement block should unwrap"));
-        println!("PARSER TREE\n----------------------\n{:#?}\n----------------------", parser_tree);
+        //##println!("PARSER TREE\n----------------------\n{:#?}\n----------------------", parser_tree);
 
         let mut codegen = CodeGen::new();
         codegen.codegen_from_node(parser_tree.clone()).expect("Codegen should generate");
-        println!("CODEGEN CONTEXTS\n----------------------\n{:#?}\n----------------------", codegen.contexts);
+        //##println!("CODEGEN CONTEXTS\n----------------------\n{:#?}\n----------------------", codegen.contexts);
     }
 }

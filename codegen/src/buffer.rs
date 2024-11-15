@@ -1,6 +1,8 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use dfbin::{enums::{Parameter, ParameterValue}, instruction, Constants, DFBin};
 use Constants::Tags::DP;
+
+use crate::errors::{CodegenError, ErrorRepr};
 
 pub struct CodeGenBuffer {
     pub code_buffer: DFBin,
@@ -12,7 +14,11 @@ pub struct CodeGenBuffer {
     idents_variable_hash: HashMap<String, u32>,
     idents_param_hash: HashMap<String, u32>,
     idents_function_hash: HashMap<String, u32>,
+
     line_register_idents: HashMap<usize, u32>,
+    line_register_indices: HashMap<u32, usize>,
+    
+    allocated_line_registers: Vec<u64>
 }
 
 impl CodeGenBuffer {
@@ -27,14 +33,22 @@ impl CodeGenBuffer {
             idents_variable_hash: HashMap::new(),
             idents_param_hash: HashMap::new(),
             idents_function_hash: HashMap::new(),
+            
             line_register_idents: HashMap::new(),
+            line_register_indices: HashMap::new(),
+
+            allocated_line_registers: Vec::new(),
         }
     }
     fn clear_variables(&mut self) {
         self.ident_count = 0;
         self.idents_variable_hash.clear();
         self.idents_param_hash.clear();
+
         self.line_register_idents.clear();
+        self.line_register_indices.clear();
+        self.allocated_line_registers.clear();
+
     }
     pub fn clear(&mut self) {
         self.code_buffer.clear();
@@ -172,6 +186,45 @@ impl CodeGenBuffer {
         }
         let register_id = self.use_variable(&format!("_xl{}", index), DP::Var::Scope::Line);
         self.line_register_idents.insert(index, register_id);
+        self.line_register_indices.insert(register_id, index);
         register_id
+    }
+
+    fn bitset_allocate(vec: &mut Vec<u64>) -> usize {
+        let mut i = 0;
+        loop {
+            if i >= vec.len() {
+                break;
+            }
+            let trailing_ones = vec[i].trailing_ones();
+            if trailing_ones == 64 {
+                i += 1;
+                continue;
+            } else {
+                vec[i] |= 1u64 << trailing_ones;
+                return (i*64) + (trailing_ones as usize);
+            }
+        }
+        vec.push(1);
+        (vec.len()-1) << 6
+    } 
+
+    fn bitset_deallocate(vec: &mut Vec<u64>, ind: usize) {
+        let ind_u64 = ind as u64;
+        vec[ind >> 6] &= !(1u64 << (ind_u64 & 0b111111));
+    } 
+
+    pub fn allocate_line_register(&mut self) -> u32 {
+        let index = Self::bitset_allocate(&mut self.allocated_line_registers);
+        println!("Allocating Line Register: {}", index);
+        self.use_line_register(index)
+    }
+
+    pub fn free_line_register(&mut self, register_ident: u32) -> Result<(), CodegenError> {
+        let Some(ind) = self.line_register_indices.get(&register_ident) else {
+            return CodegenError::err_headless(ErrorRepr::RegisterDeallocationError);
+        };
+        Self::bitset_deallocate(&mut self.allocated_line_registers, *ind);
+        Ok(())
     }
 }

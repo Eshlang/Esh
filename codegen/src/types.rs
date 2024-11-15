@@ -45,7 +45,7 @@ pub enum FieldType {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PrimitiveType {
-    Number, String
+    Number, String, Bool
 }
 
 #[derive(Debug)]
@@ -58,7 +58,7 @@ pub enum FieldModifier {
 #[derive(Debug)]
 pub enum CodegenExpressionStack<'a> {
     Node(&'a Rc<Node>),
-    Calculate(CodegenExpressionType, (usize, u32), usize)
+    Calculate(CodegenExpressionType, u32, usize)
 }
 
 #[derive(Debug)]
@@ -67,4 +67,7 @@ pub enum CodegenExpressionType {
     Sub,
     Mul,
     Div,
+    Eq,
+    NotEq,
+    Not,
 }

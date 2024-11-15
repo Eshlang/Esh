@@ -109,4 +109,6 @@ pub enum ErrorRepr {
     ExpectedDomainIdentifier,
     #[error("Domains cannot nest inside structs.")]
     DomainNestedInStruct,
+    #[error("A register deallocation error has occured. This is most likely the result of a mutated ownership variable.")]
+    RegisterDeallocationError,
 }
