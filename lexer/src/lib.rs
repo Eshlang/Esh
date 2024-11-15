@@ -114,6 +114,7 @@ impl<'a> Lexer<'a> {
             "true" => Some(Keyword::True),
             "false" => Some(Keyword::False),
             "struct" => Some(Keyword::Struct),
+            "domain" => Some(Keyword::Domain),
             "for" => Some(Keyword::For),
             "while" => Some(Keyword::While),
 

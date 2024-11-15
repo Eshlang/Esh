@@ -17,7 +17,7 @@ impl Display for Position {
 ///
 /// - If [Self::end] is [None], then the range only spans [Self::start].
 /// - If [Self::end] is [Some], then the range spans from [Self::start] to [Self::end]
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Range {
     pub start: Position,
     pub end: Position,
@@ -91,9 +91,10 @@ pub enum Keyword {
     Struct, // struct definition
     For,    // for loop
     While,    // while loop
+    Domain, // domain definition
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Token {
     pub token_type: TokenType,
     pub range: Range,

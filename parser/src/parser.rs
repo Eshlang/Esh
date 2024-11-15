@@ -1,237 +1,623 @@
-use lexer::{types::Token, types::TokenType};
+use std::rc::Rc;
+use lexer::types::{Keyword, Token, TokenType};
 
-#[derive(Debug, PartialEq)]
-pub enum Precedence {
-    Primary = 0,
-    Unary = 1,
-    Factor = 2,
-    Term = 3,
-    Comparison = 4,
-    Equality = 5,
-    Expression = 6,
-}
-
+/// A syntactical node
 #[derive(Debug, PartialEq)]
 pub enum Node {
-    Primary(Precedence, TokenType),
-    Unary(Precedence, UnaryNode),
-    Binary(Precedence, BinaryNode),
+    None,                                               // ()
+    Primary(Rc<Token>),                                     // prim
+    FunctionCall(Rc<Node>, Rc<Node>),                 // ident(tuple/expr)
+    Access(Rc<Node>, Rc<Node>),                       // ident.ident
+    Construct(Rc<Node>, Rc<Node>),                    // ident {block} 
+    Not(Rc<Node>),                                     // !expr
+    Negative(Rc<Node>),                                // -expr
+    Product(Rc<Node>, Rc<Node>),                      // expr * expr
+    Quotient(Rc<Node>, Rc<Node>),                     // expr / expr
+    Modulo(Rc<Node>, Rc<Node>),                       // expr % expr
+    Sum(Rc<Node>, Rc<Node>),                          // expr + expr
+    Difference(Rc<Node>, Rc<Node>),                   // expr - expr
+    LessThan(Rc<Node>, Rc<Node>),                     // expr < expr
+    GreaterThan(Rc<Node>, Rc<Node>),                  // expr > expr
+    LessThanOrEqualTo(Rc<Node>, Rc<Node>),            // expr <= expr
+    GreaterThanOrEqualTo(Rc<Node>, Rc<Node>),         // expr >= expr
+    Tuple(Vec<Rc<Node>>),                                   // (decl/expr, decl/expr, decl/expr)
+    Equal(Rc<Node>, Rc<Node>),                        // expr == expr
+    NotEqual(Rc<Node>, Rc<Node>),                     // expr != expr
+    And(Rc<Node>, Rc<Node>),                          // expr && expr
+    Or(Rc<Node>, Rc<Node>),                           // expr || expr
+    Declaration(Rc<Node>, Rc<Node>),                  // ident ident
+    Return(Rc<Node>),                                  // return expr;
+    Assignment(Rc<Node>, Rc<Node>),                   // decl/ident = expr;
+    If(Rc<Node>, Rc<Node>),                           // if cond {block}
+    Else(Rc<Node>, Rc<Node>),                         // stmt else {block}
+    While(Rc<Node>, Rc<Node>),                        // while cond {block}
+    Func(Rc<Node>, Rc<Node>, Rc<Node>, Rc<Node>),   // func ident (tuple/decl) -> tuple/ident {block}
+    Struct(Rc<Node>, Rc<Node>),                       // struct ident {block}
+    Domain(Rc<Node>, Rc<Node>),                       // domain ident {block}
+    Block(Vec<Rc<Node>>),                                   // stmt; stmt; stmt;
 }
 
+/// A parser error
 #[derive(Debug, PartialEq)]
-pub struct UnaryNode {
-    operator: TokenType,
-    operand: Box<Node>,
+pub enum ParserError {
+    InvalidToken(Rc<Token>),        // token is not recognized
+    InvalidStatement(Rc<Token>),    // Statement is not recognized
+    MissingIdentifier(Rc<Token>),   // Expected an ident
+    MissingSemicolon(Rc<Token>),    // Expected a semicolon
+    MissingParenthesis(Rc<Token>),  // Expected opening/closing parenthesis
+    MissingBrace(Rc<Token>),        // Expected opening/closing brace
 }
 
-#[derive(Debug, PartialEq)]
-pub struct BinaryNode {
-    operator: TokenType,
-    left: Box<Node>,
-    right: Box<Node>,
+/// Returns a [ParserError] if [self.curr()](Parser::curr()) does not match the input.
+macro_rules! expect {
+    ($self:expr, $token:pat) => {
+        if $self.is_at_end() || match $self.curr().token_type {
+            $token => false,
+            _ => true
+        } {
+            return Err(if let $token = TokenType::Ident("".to_string()) {
+                ParserError::MissingIdentifier($self.curr().clone())
+            } else if let $token = TokenType::Semicolon {
+                ParserError::MissingSemicolon($self.curr().clone())
+            } else if let $token = TokenType::LParen {
+                ParserError::MissingParenthesis($self.curr().clone())
+            } else if let $token = TokenType::RParen {
+                ParserError::MissingParenthesis($self.curr().clone())
+            } else if let $token = TokenType::LBrace {
+                ParserError::MissingBrace($self.curr().clone())
+            } else if let $token = TokenType::RBrace {
+                ParserError::MissingBrace($self.curr().clone())
+            } else {
+                ParserError::InvalidToken($self.curr().clone())
+            })
+        }
+    }
 }
 
 pub struct Parser<'a> {
-    tokens: &'a [Token],
+    tokens: &'a [Rc<Token>],
     current: usize,
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(input: &'a [Token]) -> Self {
+    pub fn new(input: &'a [Rc<Token>]) -> Self {
         Self {
             tokens: input,
             current: 0,
         }
     }
 
-    fn curr(&mut self) -> TokenType {
-        self.tokens[self.current].token_type.clone()
+    pub fn parse(&mut self) -> Result<Node, ParserError> {
+        self.statement_block()
     }
 
-    fn prev(&mut self) -> TokenType {
-        self.tokens[self.current - 1].token_type.clone()
+    /// Gets the current token
+    pub(crate) fn curr(&self) -> &Rc<Token> {
+        &self.tokens[self.current]
     }
 
-    fn advance(&mut self) {
-        if !self.is_at_end() {
-            self.current += 1;
+    /// Gets the previous token
+    pub(crate) fn prev(&self) -> &Rc<Token> {
+        &self.tokens[self.current - 1]
+    }
+
+    /// Advances to the next token
+    pub(crate) fn advance(&mut self) {
+        self.current += 1;
+    }
+
+    /// If the current token is out of range
+    pub(crate) fn is_at_end(&mut self) -> bool {
+        self.current >= self.tokens.len()
+    }
+
+    /// Returns the current statement block
+    pub(crate) fn statement_block(&mut self) -> Result<Node, ParserError> {
+        let mut block = vec![];
+        while !self.is_at_end() {
+            if self.curr().token_type == TokenType::RBrace {
+                break;
+            }
+            block.push(Rc::new(self.statement()?));
+        }
+        return Ok(Node::Block(block));
+    }
+
+    /// Returns the current statement
+    pub(crate) fn statement(&mut self) -> Result<Node, ParserError> {
+        match self.curr().token_type {
+            TokenType::Ident(_) => {
+                let expr = self.assignment();
+                expect!(self, TokenType::Semicolon);
+                self.advance();
+                expr
+            },
+            TokenType::Keyword(Keyword::Struct) => {
+                self.struct_statement()
+            },
+            TokenType::Keyword(Keyword::Domain) => {
+                self.domain_statement()
+            },
+            TokenType::Keyword(Keyword::Func) => {
+                self.func()
+            },
+            TokenType::Keyword(Keyword::If) => {
+                self.if_else_block()
+            },
+            TokenType::Keyword(Keyword::While) => {
+                self.while_block()
+            },
+            TokenType::Keyword(Keyword::Return) => {
+                let expr = self.return_block();
+                expect!(self, TokenType::Semicolon);
+                self.advance();
+                expr
+            },
+            _ => Err(ParserError::InvalidStatement(self.curr().clone()))
         }
     }
 
-    fn is_at_end(&mut self) -> bool {
-        self.current == self.tokens.len()
+    /// Returns the current struct declaration statement
+    pub(crate) fn struct_statement(&mut self) -> Result<Node, ParserError> {
+        expect!(self, TokenType::Keyword(Keyword::Struct));
+        let expr = Node::Struct(
+            {  // Struct name
+                self.advance();
+                expect!(self, TokenType::Ident(_));
+                Rc::new(self.ident()?)
+            },
+            {  // Struct body
+                expect!(self, TokenType::LBrace);
+                self.advance();
+                Rc::new(self.statement_block()?)
+            },
+        );
+        expect!(self, TokenType::RBrace);
+        self.advance();
+        return Ok(expr);
     }
 
-    fn matches(&mut self, tokens: &[TokenType]) -> bool {
-        for token in tokens {
-            if !self.is_at_end() && &self.curr() == token {
-                self.current += 1;
-                return true;
+    /// Returns the current domain declaration statement
+    pub(crate) fn domain_statement(&mut self) -> Result<Node, ParserError> {
+        expect!(self, TokenType::Keyword(Keyword::Domain));
+        let expr = Node::Domain(
+            {  // Domain name
+                self.advance();
+                expect!(self, TokenType::Ident(_));
+                Rc::new(self.ident()?)
+            },
+            {  // Domain body
+                expect!(self, TokenType::LBrace);
+                self.advance();
+                Rc::new(self.statement_block()?)
+            },
+        );
+        expect!(self, TokenType::RBrace);
+        self.advance();
+        return Ok(expr);
+    }
+
+    /// Returns the current function declaration statement
+    pub(crate) fn func(&mut self) -> Result<Node, ParserError> {
+        expect!(self, TokenType::Keyword(Keyword::Func));
+        let expr = Node::Func(
+            {  // Function name
+                self.advance();
+                expect!(self, TokenType::Ident(_));
+                Rc::new(self.ident()?)
+            },
+            {  // Function parameters
+                expect!(self, TokenType::LParen);
+                Rc::new(self.tuple()?)
+            },
+            {  // Return type
+                match self.curr().token_type {
+                    TokenType::Arrow => {
+                        self.advance();
+                        match self.curr().token_type {
+                            TokenType::Ident(_) => Rc::new(self.ident()?),
+                            _ => Rc::new(self.primary()?)
+                        }
+                    },
+                    _ => Rc::new(Node::None)
+                }
+            },
+            {  // Function body
+                expect!(self, TokenType::LBrace);
+                self.advance();
+                Rc::new(self.statement_block()?)
+            },
+        );
+        expect!(self, TokenType::RBrace);
+        self.advance();
+        return Ok(expr);
+    }
+
+    pub(crate) fn if_else_block(&mut self) -> Result<Node, ParserError> {
+        expect!(self, TokenType::Keyword(Keyword::If));
+        let mut expr = self.if_block()?;
+        while !self.is_at_end() {
+            match self.curr().token_type {
+                TokenType::Keyword(Keyword::Else) => {
+                    self.advance();
+                    expr = Node::Else(
+                        Rc::new(expr),  
+                        match self.curr().token_type {
+                            TokenType::Keyword(Keyword::If) => Rc::new(self.if_else_block()?),
+                            TokenType::LBrace => {
+                                self.advance();
+                                Rc::new(self.statement_block()?)
+                            },
+                            _ => return Err(ParserError::MissingBrace(self.curr().clone()))
+                        },
+                    );
+                    expect!(self, TokenType::RBrace);
+                    self.advance();
+                },
+                _ => break
             }
         }
-        return false;
+        return Ok(expr);
     }
 
-    fn expression(&mut self) -> Node {
-        self.equality()
+    /// Returns the current if statement
+    pub(crate) fn if_block(&mut self) -> Result<Node, ParserError> {
+        expect!(self, TokenType::Keyword(Keyword::If));
+        let expr = Node::If(
+            {    // If statement expression
+                self.advance();
+                Rc::new(self.logic()?)
+            },
+            {   // If statement body
+                expect!(self, TokenType::LBrace);
+                self.advance();
+                Rc::new(self.statement_block()?)
+            },
+        );
+        expect!(self, TokenType::RBrace);
+        self.advance();
+        return Ok(expr);
     }
 
-    fn equality(&mut self) -> Node {
-        let mut expr = self.comparison();
-        while self.matches(&[TokenType::Equal, TokenType::NotEqual]) {
-            expr = Node::Binary(
-                Precedence::Equality,
-                BinaryNode {
-                    operator: self.prev(), 
-                    left: Box::new(expr), 
-                    right: Box::new(self.comparison()),
-                }
-            )
+    /// Returns the current while statement
+    pub(crate) fn while_block(&mut self) -> Result<Node, ParserError> {
+        expect!(self, TokenType::Keyword(Keyword::While));
+        let expr = Node::While(
+            {    // While statement expression
+                self.advance();
+                Rc::new(self.logic()?)
+            },
+            {   // While statement body
+                expect!(self, TokenType::LBrace);
+                self.advance();
+                Rc::new(self.statement_block()?)
+            },
+        );
+        expect!(self, TokenType::RBrace);
+        self.advance();
+        return Ok(expr);
+    }
+
+    /// Returns the current assignment statement
+    pub(crate) fn assignment(&mut self) -> Result<Node, ParserError> {
+        let mut expr = self.declaration()?;
+        if !self.is_at_end() && self.curr().token_type == TokenType::Assign {
+            self.advance();
+            expr = Node::Assignment(
+                Rc::new(expr),
+                Rc::new(self.expression()?),
+            );
         }
-        return expr;
+        return Ok(expr);
     }
 
-    fn comparison(&mut self) -> Node {
-        let mut expr = self.term();
-        while self.matches(&[TokenType::LAngle, TokenType::RAngle, TokenType::LTEqual, TokenType::GTEqual]) {
-            expr = Node::Binary(
-                Precedence::Comparison,
-                BinaryNode {
-                    operator: self.prev(), 
-                    left: Box::new(expr), 
-                    right: Box::new(self.term()),
-                }
-            )
+    /// Returns the current variable declaration
+    pub(crate) fn declaration(&mut self) -> Result<Node, ParserError> {
+        match self.curr().token_type {
+            TokenType::Ident(_) => (),
+            _ => return self.expression()
         }
-        return expr;
-    }
-
-    fn term(&mut self) -> Node {
-        let mut expr = self.factor();
-        while self.matches(&[TokenType::Plus, TokenType::Dash]) {
-            expr = Node::Binary(
-                Precedence::Term,
-                BinaryNode {
-                    operator: self.prev(), 
-                    left: Box::new(expr), 
-                    right: Box::new(self.factor()),
-                }
-            )
+        let expr = self.expression()?;
+        match self.curr().token_type {
+            TokenType::Ident(_) => return Ok(Node::Declaration(
+                Rc::new(expr),
+                Rc::new(self.ident()?),
+            )),
+            _ => ()
         }
-        return expr;
+        return Ok(expr);
     }
 
-    fn factor(&mut self) -> Node {
-        let mut expr = self.unary();
-        while self.matches(&[TokenType::Asterisk, TokenType::Slash]) {
-            expr = Node::Binary(
-                Precedence::Factor,
-                BinaryNode {
-                    operator: self.prev(), 
-                    left: Box::new(expr), 
-                    right: Box::new(self.unary()),
-                }
-            )
+    /// Returns the current return statement
+    pub(crate) fn return_block(&mut self) -> Result<Node, ParserError> {
+        self.advance();
+        return Ok(Node::Return(Rc::new(self.expression()?)))
+    }
+
+    /// Returns the current expression
+    pub(crate) fn expression(&mut self) -> Result<Node, ParserError> {
+        self.logic()
+    }
+
+    /// Returns the current logic operation
+    pub(crate) fn logic(&mut self) -> Result<Node, ParserError> {
+        let mut expr = self.equality()?;
+        while !self.is_at_end() {
+            match self.curr().token_type {
+                TokenType::And => {
+                    self.advance();
+                    expr = Node::And( 
+                        Rc::new(expr), 
+                        Rc::new(self.equality()?),
+                    )
+                },
+                TokenType::Or => {
+                    self.advance();
+                    expr = Node::Or(
+                        Rc::new(expr), 
+                        Rc::new(self.equality()?),
+                    )
+                },
+                _ => break
+            }
         }
-        return expr;
+        return Ok(expr);
     }
 
-    fn unary(&mut self) -> Node {
-        match self.curr() {
-            TokenType::Bang | TokenType::Dash => {
-                self.current += 1;
-                Node::Unary(
-                    Precedence::Unary, 
-                    UnaryNode {
-                        operator: self.prev(),
-                        operand: Box::new(self.unary()),
-                    }
-                )
+    /// Returns the current equality
+    pub(crate) fn equality(&mut self) -> Result<Node, ParserError> {
+        let mut expr = self.comparison()?;
+        while !self.is_at_end() {
+            match self.curr().token_type {
+                TokenType::Equal => {
+                    self.advance();
+                    expr = Node::Equal( 
+                        Rc::new(expr), 
+                        Rc::new(self.comparison()?),
+                    )
+                },
+                TokenType::NotEqual => {
+                    self.advance();
+                    expr = Node::NotEqual(
+                        Rc::new(expr), 
+                        Rc::new(self.comparison()?),
+                    )
+                },
+                _ => break
+            }
+        }
+        return Ok(expr);
+    }
+
+    /// Returns the current comparison
+    pub(crate) fn comparison(&mut self) -> Result<Node, ParserError> {
+        let mut expr = self.term()?;
+        while !self.is_at_end() {
+            match self.curr().token_type {
+                TokenType::LAngle => {
+                    self.advance();
+                    expr = Node::LessThan(
+                        Rc::new(expr), 
+                        Rc::new(self.term()?),
+                    )
+                },
+                TokenType::RAngle => {
+                    self.advance();
+                    expr = Node::GreaterThan(
+                        Rc::new(expr), 
+                        Rc::new(self.term()?),
+                    )
+                },
+                TokenType::LTEqual => {
+                    self.advance();
+                    expr = Node::LessThanOrEqualTo(
+                        Rc::new(expr), 
+                        Rc::new(self.term()?),
+                    )
+                },
+                TokenType::GTEqual => {
+                    self.advance();
+                    expr = Node::GreaterThanOrEqualTo( 
+                        Rc::new(expr), 
+                        Rc::new(self.term()?),
+                    )
+                },
+                _ => break
+            }
+        }
+        return Ok(expr);
+    }
+
+    /// Returns the current term operation
+    pub(crate) fn term(&mut self) -> Result<Node, ParserError> {
+        let mut expr = self.factor()?;
+        while !self.is_at_end() {
+            match self.curr().token_type {
+                TokenType::Plus => {
+                    self.advance();
+                    expr = Node::Sum(
+                        Rc::new(expr), 
+                        Rc::new(self.factor()?),
+                    )
+                },
+                TokenType::Dash => {
+                    self.advance();
+                    expr = Node::Difference(
+                        Rc::new(expr), 
+                        Rc::new(self.factor()?),
+                    )
+                },
+                _ => break
+            }
+        }
+        return Ok(expr);
+    }
+
+    /// Returns the current factor operation
+    pub(crate) fn factor(&mut self) -> Result<Node, ParserError> {
+        let mut expr = self.unary()?;
+        while !self.is_at_end() {
+            match self.curr().token_type {
+                TokenType::Asterisk => {
+                    self.advance();
+                    expr = Node::Product(
+                        Rc::new(expr), 
+                        Rc::new(self.unary()?),
+                    )
+                },
+                TokenType::Slash => {
+                    self.advance();
+                    expr = Node::Quotient(
+                        Rc::new(expr), 
+                        Rc::new(self.unary()?),
+                    )
+                },
+                TokenType::Perc => {
+                    self.advance();
+                    expr = Node::Modulo(
+                        Rc::new(expr), 
+                        Rc::new(self.unary()?),
+                    )
+                },
+                _ => break
+            }
+        }
+        return Ok(expr);
+    }
+
+    /// Returns the current unary operation
+    pub(crate) fn unary(&mut self) -> Result<Node, ParserError> {
+        match self.curr().token_type {
+            TokenType::Bang => {
+                self.advance();
+                Ok(Node::Not(Rc::new(self.unary()?)))
+            },
+            TokenType::Dash => {
+                self.advance();
+                Ok(Node::Negative(Rc::new(self.unary()?)))
             },
             _ => self.primary(),
         }
     }
 
-    fn primary(&mut self) -> Node {
-        match self.curr() {
+    /// Returns the current primary node
+    pub(crate) fn primary(&mut self) -> Result<Node, ParserError> {
+        match self.curr().token_type {
+            TokenType::Ident(_) => {
+                self.construct()
+            },
+            TokenType::Number(_) | TokenType::String(_) | TokenType::Keyword(Keyword::True) | TokenType::Keyword(Keyword::False) => {
+                self.advance();
+                Ok(Node::Primary(self.prev().clone()))
+            },
             TokenType::LParen => {
-                self.current += 1;
-                todo!("implement parenthesis")
+                let start = self.current;
+                self.advance();
+                let expr = match self.curr().token_type {
+                    TokenType::Ident(_) => self.declaration()?,
+                    TokenType::RParen => {
+                        self.advance();
+                        return Ok(Node::None)
+                    },
+                    _ => self.expression()?
+                };
+                match self.curr().token_type {
+                    TokenType::RParen => {
+                        self.advance();
+                        Ok(expr)
+                    },
+                    TokenType::Comma => {
+                        self.current = start;
+                        return self.tuple();
+                    },
+                    _ => Err(ParserError::MissingParenthesis(self.curr().clone()))
+                }
             },
             _ => {
-                self.current += 1;
-                Node::Primary(Precedence::Primary, self.prev())
+                Err(ParserError::InvalidToken(self.curr().clone()))
             }
         }
     }
-}
 
-#[cfg(test)]
-mod tests {
-
-    use lexer::types::Range;
-
-    use super::*;
-
-    #[test]
-    pub fn expression_test() {
-        // "5 + 8 / 2"
-        let input = [
-            Token {
-                token_type: TokenType::Number(5f64),
-                range: Range::new((0, 0), (0, 0)),
-            },
-            Token {
-                token_type: TokenType::Plus,
-                range: Range::new((0, 2), (0, 2)),
-            },
-            Token {
-                token_type: TokenType::Number(8f64),
-                range: Range::new((0, 4), (0, 4)),
-            },
-            Token {
-                token_type: TokenType::Slash,
-                range: Range::new((0, 6), (0, 6)),
-            },
-            Token {
-                token_type: TokenType::Number(2f64),
-                range: Range::new((0, 8), (0, 8)),
-            },
-        ];
-        let expected = Node::Binary(
-            Precedence::Term, 
-            BinaryNode {
-                operator: TokenType::Plus,
-                left: Box::new(
-                    Node::Primary(
-                        Precedence::Primary, 
-                        TokenType::Number(5f64),
-                    ),
-                ),
-                right: Box::new(
-                    Node::Binary(
-                        Precedence::Factor,
-                        BinaryNode {
-                            operator: TokenType::Slash,
-                            left: Box::new(
-                                Node::Primary(
-                                    Precedence::Primary,
-                                    TokenType::Number(8f64),
-                                ),
-                            ),
-                            right: Box::new(
-                                Node::Primary(
-                                    Precedence::Primary, 
-                                    TokenType::Number(2f64),
-                                ),
-                            ),
-                        }
-                    ),
-                ),
+    /// Returns the current construct expression
+    pub(crate) fn construct(&mut self) -> Result<Node, ParserError> {
+        let mut expr = self.function_call()?;
+        match self.curr().token_type {
+            TokenType::LBrace => {
+                expr = Node::Construct(
+                    Rc::new(expr),
+                    {  // Construct body
+                        self.advance();
+                        Rc::new(self.statement_block()?)
+                    },
+                );
+                expect!(self, TokenType::RBrace);
+                self.advance();
             }
-        );
-        let mut parser = Parser::new(&input);
-        let output = parser.expression();
-        assert_eq!(output, expected);
+            _ => ()
+        }
+        return Ok(expr);
+    }
+
+    /// Returns the current function call
+    pub(crate) fn function_call(&mut self) -> Result<Node, ParserError> {
+        let mut expr = self.access()?;
+        match self.curr().token_type {
+            TokenType::LParen => expr = Node::FunctionCall(
+                    Rc::new(expr),
+                    Rc::new(self.tuple()?),
+                ),
+            _ => ()
+        }
+        return Ok(expr);
+    }
+
+    /// Returns the current access chain
+    pub(crate) fn access(&mut self) -> Result<Node, ParserError> {
+        let mut expr = self.ident()?;
+        while !self.is_at_end() {
+            match self.curr().token_type {
+                TokenType::Dot => {
+                    self.advance();
+                    expr = Node::Access(
+                        Rc::new(expr), 
+                        Rc::new(self.ident()?),
+                    )
+                },
+                _ => break
+            }
+        }
+        return Ok(expr);
+    }
+
+    /// Returns the current tuple
+    pub(crate) fn tuple(&mut self) -> Result<Node, ParserError> {
+        expect!(self, TokenType::LParen);
+        self.advance();
+        let mut block = vec![];
+        if self.curr().token_type == TokenType::RParen {
+            self.advance();
+            return Ok(Node::Tuple(block));
+        }
+        while !self.is_at_end() {
+            block.push(Rc::new(self.declaration()?));
+            match self.curr().token_type {
+                TokenType::Comma => (),
+                TokenType::RParen => {
+                    self.advance();
+                    break;
+                },
+                _ => return Err(ParserError::MissingParenthesis(self.curr().clone()))
+            }
+            self.advance();
+        }
+        return Ok(Node::Tuple(block));
+    }
+
+    /// Returns the current identifier
+    pub(crate) fn ident(&mut self) -> Result<Node, ParserError> {
+        expect!(self, TokenType::Ident(_));
+        self.advance();
+        Ok(Node::Primary(self.prev().clone()))
     }
 }
