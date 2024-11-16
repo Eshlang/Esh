@@ -70,5 +70,10 @@ pub enum CodegenExpressionType {
     Eq,
     NotEq,
     Not,
-    // FuncCall,
+    Or,
+    And,
+    Greater,
+    Lesser,
+    GreaterEq,
+    LesserEq,
 }

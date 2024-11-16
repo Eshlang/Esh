@@ -496,6 +496,60 @@ impl CodeGen {
                             ));
                             expression_stack.push_front(CodegenExpressionStack::Node(n));
                         },
+                        Node::Or(nl, nr) => {
+                            expression_stack.push_front(CodegenExpressionStack::Calculate(
+                                CodegenExpressionType::Or,
+                                ident, //Register ID & Identifier
+                                2 //How many elements we'll be expecting
+                            ));
+                            expression_stack.push_front(CodegenExpressionStack::Node(nl));
+                            expression_stack.push_front(CodegenExpressionStack::Node(nr));
+                        },
+                        Node::And(nl, nr) => {
+                            expression_stack.push_front(CodegenExpressionStack::Calculate(
+                                CodegenExpressionType::And,
+                                ident, //Register ID & Identifier
+                                2 //How many elements we'll be expecting
+                            ));
+                            expression_stack.push_front(CodegenExpressionStack::Node(nl));
+                            expression_stack.push_front(CodegenExpressionStack::Node(nr));
+                        },
+                        Node::GreaterThan(nl, nr) => {
+                            expression_stack.push_front(CodegenExpressionStack::Calculate(
+                                CodegenExpressionType::Greater,
+                                ident, //Register ID & Identifier
+                                2 //How many elements we'll be expecting
+                            ));
+                            expression_stack.push_front(CodegenExpressionStack::Node(nl));
+                            expression_stack.push_front(CodegenExpressionStack::Node(nr));
+                        },
+                        Node::GreaterThanOrEqualTo(nl, nr) => {
+                            expression_stack.push_front(CodegenExpressionStack::Calculate(
+                                CodegenExpressionType::GreaterEq,
+                                ident, //Register ID & Identifier
+                                2 //How many elements we'll be expecting
+                            ));
+                            expression_stack.push_front(CodegenExpressionStack::Node(nl));
+                            expression_stack.push_front(CodegenExpressionStack::Node(nr));
+                        },
+                        Node::LessThan(nl, nr) => {
+                            expression_stack.push_front(CodegenExpressionStack::Calculate(
+                                CodegenExpressionType::Lesser,
+                                ident, //Register ID & Identifier
+                                2 //How many elements we'll be expecting
+                            ));
+                            expression_stack.push_front(CodegenExpressionStack::Node(nl));
+                            expression_stack.push_front(CodegenExpressionStack::Node(nr));
+                        },
+                        Node::LessThanOrEqualTo(nl, nr) => {
+                            expression_stack.push_front(CodegenExpressionStack::Calculate(
+                                CodegenExpressionType::LesserEq,
+                                ident, //Register ID & Identifier
+                                2 //How many elements we'll be expecting
+                            ));
+                            expression_stack.push_front(CodegenExpressionStack::Node(nl));
+                            expression_stack.push_front(CodegenExpressionStack::Node(nr));
+                        },
                         _ => {}
                     }
                     if !matches {
@@ -651,19 +705,15 @@ impl CodeGen {
                         return CodegenError::err(root_node.clone(), ErrorRepr::InvalidExpressionTypeConversion)
                     }
                 }
-                self.buffer.code_buffer.push_instruction(instruction!(
-                    Var::Set, [
-                        (Ident, ident),
-                        (Int, 1)
-                    ]
-                ));
+                self.buffer.code_buffer.push_instruction(instruction!(Var::Set, [
+                    (Ident, ident),
+                    (Int, 1)
+                ]));
                 self.buffer.code_buffer.push_instruction(instruction!(Else));
-                self.buffer.code_buffer.push_instruction(instruction!(
-                    Var::Set, [
-                        (Ident, ident),
-                        (Int, 0)
-                    ]
-                ));
+                self.buffer.code_buffer.push_instruction(instruction!(Var::Set, [
+                    (Ident, ident),
+                    (Int, 0)
+                ]));
                 self.buffer.code_buffer.push_instruction(instruction!(EndIf));
                 FieldType::Primitive(PrimitiveType::Bool)
             },
@@ -683,6 +733,75 @@ impl CodeGen {
                         return CodegenError::err(root_node.clone(), ErrorRepr::InvalidExpressionTypeConversion)
                     }
                 }
+            },
+            CodegenExpressionType::Or => {
+                match (types.get(0).unwrap(), types.get(1).unwrap()) {
+                    (FieldType::Primitive(PrimitiveType::Bool), FieldType::Primitive(PrimitiveType::Bool)) => {
+                        self.buffer.code_buffer.push_instruction(instruction!(
+                            Var::Bitwise, [
+                                (Ident, ident)
+                            ], {
+                                Operator: OR
+                            }
+                        ));
+                        self.buffer.code_buffer.push_parameter(parameters[0].clone());
+                        self.buffer.code_buffer.push_parameter(parameters[1].clone());
+                        FieldType::Primitive(PrimitiveType::Bool)
+                    },
+                    _ => {
+                        return CodegenError::err(root_node.clone(), ErrorRepr::InvalidExpressionTypeConversion)
+                    }
+                }
+            },
+            CodegenExpressionType::And => {
+                match (types.get(0).unwrap(), types.get(1).unwrap()) {
+                    (FieldType::Primitive(PrimitiveType::Bool), FieldType::Primitive(PrimitiveType::Bool)) => {
+                        self.buffer.code_buffer.push_instruction(instruction!(
+                            Var::Bitwise, [
+                                (Ident, ident)
+                            ], {
+                                Operator: AND
+                            }
+                        ));
+                        self.buffer.code_buffer.push_parameter(parameters[0].clone());
+                        self.buffer.code_buffer.push_parameter(parameters[1].clone());
+                        FieldType::Primitive(PrimitiveType::Bool)
+                    },
+                    _ => {
+                        return CodegenError::err(root_node.clone(), ErrorRepr::InvalidExpressionTypeConversion)
+                    }
+                }
+            },
+            CodegenExpressionType::Greater | CodegenExpressionType::GreaterEq | CodegenExpressionType::Lesser | CodegenExpressionType::LesserEq => {
+                match (types.get(0).unwrap(), types.get(1).unwrap()) {
+                    (FieldType::Primitive(PrimitiveType::Number), FieldType::Primitive(PrimitiveType::Number)) => {
+                        self.buffer.code_buffer.push_instruction(
+                            match expression_type {
+                                CodegenExpressionType::Greater => instruction!(Varif::Greater),
+                                CodegenExpressionType::GreaterEq => instruction!(Varif::GreaterEq),
+                                CodegenExpressionType::Lesser => instruction!(Varif::Lower),
+                                CodegenExpressionType::LesserEq => instruction!(Varif::LowerEq),
+                                _ => instruction!(Varif::Eq)
+                            }
+                        );
+                        self.buffer.code_buffer.push_parameter(parameters[0].clone());
+                        self.buffer.code_buffer.push_parameter(parameters[1].clone());
+                    },
+                    _ => {
+                        return CodegenError::err(root_node.clone(), ErrorRepr::InvalidExpressionTypeConversion)
+                    }
+                }
+                self.buffer.code_buffer.push_instruction(instruction!(Var::Set, [
+                    (Ident, ident),
+                    (Int, 1)
+                ]));
+                self.buffer.code_buffer.push_instruction(instruction!(Else));
+                self.buffer.code_buffer.push_instruction(instruction!(Var::Set, [
+                    (Ident, ident),
+                    (Int, 0)
+                ]));
+                self.buffer.code_buffer.push_instruction(instruction!(EndIf));
+                FieldType::Primitive(PrimitiveType::Bool)
             },
         };
         Ok(result_type)

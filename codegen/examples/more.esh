@@ -3,7 +3,7 @@ domain yo {
     func hello(string hell, num add) -> string {
         num wowvar;
         wowvar = ((2 + 1) * 4) + (3 + 6);
-        if (wowvar == 4) {
+        if (wowvar == 4 || (wowvar == 5 && add < 3)) {
             add = 123;
             num testvar = 5;
             testvar = testvar + 999;
@@ -12,8 +12,6 @@ domain yo {
         num testvar = 17;
         testvar = testvar + 888;
         wowvar = wowvar + add;
-        bool whatever = wowvar == 5;
-        whatever = !whatever;
         return "g" * wowvar;
     }
 
