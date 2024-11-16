@@ -3,11 +3,13 @@ use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 use dfbin::enums::{Instruction, Parameter, ParameterValue};
 use dfbin::instruction;
+use dfbin::Constants::Tags::DP::Var::Scope;
 use dfbin::Constants::{Actions, Parents};
 use dfbin::Constants::Tags::DP;
 use lexer::types::TokenType;
 use parser::parser::Node;
 use crate::buffer::CodeGenBuffer;
+use crate::constants::CodeGenConstants;
 use crate::errors::{CodegenError, ErrorRepr};
 use crate::context::{CodeDefinition, CodeScope, Context, ContextType};
 use crate::types::{CodegenExpressionStack, CodegenExpressionType, Field, FieldModifier, FieldType, PrimitiveType, RuntimeVariable};
@@ -207,6 +209,17 @@ impl CodeGen {
             _ => CodegenError::err(node.clone(), ErrorRepr::ExpectedFunctionParamDeclaration)
         }
     }
+
+    fn extract_parameter_vec(node: &Rc<Node>) -> Result<Vec<Rc<Node>>, CodegenError> {
+        match node.as_ref() {
+            Node::None => Ok(Vec::new()),
+            Node::Primary(..) => Ok(vec![node.clone()]),
+            Node::Tuple(node_children) => {
+                Ok(node_children.clone())
+            }
+            _ => CodegenError::err(node.clone(), ErrorRepr::ExpectedFunctionParamDeclaration)
+        }
+    }
     
     
     fn fill_all_field_types(&mut self) -> Result<(), CodegenError> {
@@ -257,25 +270,31 @@ impl CodeGen {
             Some(primitive) => Ok(FieldType::Primitive(primitive)),
             None => {
                 let definition = self.find_definition_by_ident(ident, context)?;
-                let definition = Self::extract_definition_struct(definition)?;
+                let definition = self.extract_definition_struct(definition)?;
                 Ok(FieldType::Struct(definition))
             }
         }
+    }
+
+    fn find_function_by_ident(&self, ident: &Rc<Node>, context: usize) -> Result<usize, CodegenError> {
+        let definition = self.find_definition_by_ident(ident, context)?;
+        Ok(self.extract_definition_function(definition)?)
     }
 
     fn is_definition_primitive(ident_string: &str) -> Option<PrimitiveType> {
         match ident_string {
             "num" => Some(PrimitiveType::Number),
             "string" => Some(PrimitiveType::String),
+            "bool" => Some(PrimitiveType::Bool),
             _ => None
         }
     }
 
-    fn extract_definition_struct(definition: CodeDefinition) -> Result<usize, CodegenError> {
+    fn extract_definition_context(&self, definition: CodeDefinition) -> Result<usize, CodegenError> {
         match definition {
             CodeDefinition::Context(context) => Ok(context),
             CodeDefinition::Multiple(definitions) => {
-                let mut result = CodegenError::err_headless(ErrorRepr::ExpectedStruct);
+                let mut result = CodegenError::err_headless(ErrorRepr::ExpectedContext);
                 for check_definition in definitions {
                     if let CodeDefinition::Context(context) = check_definition {
                         result = Ok(context);
@@ -284,8 +303,24 @@ impl CodeGen {
                 }
                 result
             },
-            _ => CodegenError::err_headless(ErrorRepr::ExpectedStruct)
+            _ => CodegenError::err_headless(ErrorRepr::ExpectedContext)
         }
+    }
+
+    fn extract_definition_struct(&self, definition: CodeDefinition) -> Result<usize, CodegenError> {
+        let context = self.extract_definition_context(definition)?;
+        if !matches!(self.context_borrow(context)?.context_type, ContextType::Struct) {
+            return CodegenError::err_headless(ErrorRepr::ExpectedStruct);
+        }
+        Ok(context)
+    }
+
+    fn extract_definition_function(&self, definition: CodeDefinition) -> Result<usize, CodegenError> {
+        let context = self.extract_definition_context(definition)?;
+        if !matches!(self.context_borrow(context)?.context_type, ContextType::Function(..)) {
+            return CodegenError::err_headless(ErrorRepr::ExpectedFunction);
+        }
+        Ok(context)
     }
 
     fn find_definition_by_ident(&self, ident: &Rc<Node>, mut context: usize) -> Result<CodeDefinition, CodegenError> {
@@ -402,6 +437,11 @@ impl CodeGen {
                                 }
                             };
                             ident_stack.push((ident, ident_type));
+                        },
+                        Node::FunctionCall(func_ident, func_params) => {
+                            let func_type = self.call_function(context, func_ident, func_params, ident)?;
+                            ident_stack.push((ident, func_type));
+                            calculated = true;
                         },
                         Node::Sum(nl, nr) => {
                             expression_stack.push_front(CodegenExpressionStack::Calculate(
@@ -668,6 +708,46 @@ impl CodeGen {
         Ok((self.runtime_vars[context].get(&runtime_str).unwrap(), runtime_str))
     }
 
+    fn call_function(&mut self, context: usize, function_ident: &Rc<Node>, function_params: &Rc<Node>, return_ident: u32) -> Result<FieldType, CodegenError> {
+        let func_context = self.find_function_by_ident(function_ident, context)?;
+        let func_name = self.get_context_full_name(func_context).clone();
+        let func_id = self.buffer.use_function(func_name.as_str());
+        let mut call_instruction = instruction!(Call, [
+            (Ident, func_id)
+        ]);
+        let ContextType::Function(ret_type_field) = self.context_borrow(func_context)?.context_type.clone() else {
+            return CodegenError::err_headless(ErrorRepr::Generic);
+        };
+        if !matches!(ret_type_field, FieldType::Primitive(PrimitiveType::None)) { // function has a return value
+            call_instruction.params.push(Parameter::from_ident(return_ident))
+        }
+        let params = Self::extract_parameter_vec(function_params)?;
+        let mut param_var_idents = Vec::new();
+        let func_fields = self.context_borrow(func_context)?.fields.clone();
+        if params.len() > func_fields.len() {
+            return CodegenError::err(function_params.clone(), ErrorRepr::UnexpectedFunctionParameter)
+        }
+        if params.len() < func_fields.len() {
+            return CodegenError::err(function_params.clone(), ErrorRepr::ExpectedFunctionParameter)
+        }
+        for (param, param_field) in params.into_iter().zip(func_fields) {
+            let param_var_ident = self.buffer.allocate_line_register();
+            param_var_idents.push(param_var_ident);
+            let param_expression = self.generate_expression(context, &param, param_var_ident)?;
+            if param_expression.1 != param_field.field_type {
+                return CodegenError::err(param.clone(), ErrorRepr::UnexpectedFunctionParameterType)
+            }
+            call_instruction.params.push(Parameter::from_ident(param_var_ident));
+        }
+
+        self.buffer.code_buffer.push_instruction(call_instruction);
+        for free_param_ident in param_var_idents {
+            self.buffer.free_line_register(free_param_ident)?;
+        }
+        Ok(ret_type_field)
+    }
+
+
     fn generate_function_code(&mut self, context: usize, body: Rc<Vec<Rc<Node>>>, fields: Vec<Field>, return_type: FieldType) -> Result<(), CodegenError> {
         // self.return_runtimes[context] = 
         let func_name = self.get_context_full_name(context).clone();
@@ -785,6 +865,10 @@ impl CodeGen {
                     if body_stack.len() == 1 { // This is the core branch.
                         returned_value = true;
                     }
+                }
+                Node::FunctionCall(function_ident, function_parameters) => {
+                    let void = self.buffer.constant_void();
+                    self.call_function(context, function_ident, function_parameters, void)?;
                 }
                 _ => {
                     //println!("Unrecognized Statement: {:#?}", statement.clone());

@@ -81,14 +81,20 @@ pub enum ErrorRepr {
     UnstructuredStructCode,
     #[error("Expected proper function parameter declarations.")]
     ExpectedFunctionParamDeclaration,
+    #[error("Expected proper function call parameters.")]
+    ExpectedFunctionCallParameters,
     #[error("Expected function parameter identifier.")]
     ExpectedFunctionParamIdent,
     #[error("Expected type identifier.")]
     ExpectedTypeIdent,
     #[error("Type identifier not recognized.")]
     TypeIdentNotRecognized,
+    #[error("Expected a context.")]
+    ExpectedContext,
     #[error("Expected a struct.")]
     ExpectedStruct,
+    #[error("Expected a function.")]
+    ExpectedFunction,
     #[error("Expected a variable identifier.")]
     ExpectedVariableIdentifier,
     #[error("Invalid variable name.")]
@@ -121,4 +127,10 @@ pub enum ErrorRepr {
     InvalidReturnValueType,
     #[error("Expected the function to return a value.")]
     ExpectedFunctionReturnValue,
+    #[error("Unexpected function parameter.")]
+    UnexpectedFunctionParameter,
+    #[error("Expected a function parameter.")]
+    ExpectedFunctionParameter,
+    #[error("Unexpected function parameter type.")]
+    UnexpectedFunctionParameterType,
 }

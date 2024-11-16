@@ -1,10 +1,11 @@
-use std::collections::{HashMap, HashSet};
-use dfbin::{enums::{Parameter, ParameterValue}, instruction, Constants, DFBin};
+use std::collections::HashMap;
+use dfbin::{enums::{Parameter, ParameterValue}, instruction, Constants::{self, Tags::DP::Var::Scope}, DFBin};
 use Constants::Tags::DP;
 
-use crate::errors::{CodegenError, ErrorRepr};
+use crate::{constants::CodeGenConstants, errors::{CodegenError, ErrorRepr}};
 
 pub struct CodeGenBuffer {
+    pub constants: CodeGenConstants,
     pub code_buffer: DFBin,
     pub func_buffer: DFBin,
     pub param_buffer: DFBin,
@@ -25,6 +26,7 @@ pub struct CodeGenBuffer {
 impl CodeGenBuffer {
     pub fn new() -> CodeGenBuffer {
         Self {
+            constants: CodeGenConstants::new(),
             code_buffer: DFBin::new(),
             func_buffer: DFBin::new(),
             param_buffer: DFBin::new(),
@@ -74,7 +76,7 @@ impl CodeGenBuffer {
         flushed
     }
 
-    fn get_key(params: Vec<ParameterValue>) -> String {
+    fn _get_key(params: Vec<ParameterValue>) -> String {
         let mut total = String::new();
         for param in params {
             total.push_str(&Self::get_param_key(param));
@@ -249,5 +251,17 @@ impl CodeGenBuffer {
         };
         Self::bitset_deallocate(&mut self.allocated_line_registers, *ind);
         Ok(())
+    }
+
+
+    pub fn constant_void(&mut self) -> u32 {
+        match self.constants.void_variable {
+            Some(value) => value,
+            None => {
+                let value = self.use_variable("_c_void", Scope::Global);
+                self.constants.void_variable = Some(value);
+                value
+            }
+        }
     }
 }
