@@ -87,8 +87,14 @@ pub enum ErrorRepr {
     ExpectedFunctionParamIdent,
     #[error("Expected type identifier.")]
     ExpectedTypeIdent,
+    #[error("Expected definition identifier.")]
+    ExpectedDefinitionIdent,
     #[error("Type identifier not recognized.")]
     TypeIdentNotRecognized,
+    #[error("Definition identifier not recognized.")]
+    DefinitionIdentNotRecognized,
+    #[error("Domain identifier not recognized.")]
+    DomainIdentNotRecognized,
     #[error("Expected a context.")]
     ExpectedContext,
     #[error("Expected a struct.")]

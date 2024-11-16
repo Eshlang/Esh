@@ -14,15 +14,18 @@ domain yo {
         wowvar = wowvar + add;
         return "g" * wowvar;
     }
-
-    func blablabla(string hell, string add) {
-        string wowvar = "wow";
-        wowvar = wowvar + hell;
-        wowvar = hello("hey" + hello("whaaat" + "hey", 15), 10) + "hello";
+    domain hey {
+        func blablabla(string hell, string add) {
+            string wowvar = "wow";
+            wowvar = wowvar + hell;
+            wowvar = hello("hey" + hello("whaaat" + "hey", 15), 10) + "hello";
+        }
     }
 }
 
 func randomfunc(string hell, string add) {
     string wowvar = "wow";
     wowvar = wowvar + hell;
+    yo.hey.blablabla("wowwww", "hey");
+    wowvar = yo.hello("hey", 5);
 }

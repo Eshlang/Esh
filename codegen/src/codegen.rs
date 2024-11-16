@@ -3,16 +3,13 @@ use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 use dfbin::enums::{Instruction, Parameter, ParameterValue};
 use dfbin::instruction;
-use dfbin::Constants::Tags::DP::Var::Scope;
-use dfbin::Constants::{Actions, Parents};
 use dfbin::Constants::Tags::DP;
 use lexer::types::TokenType;
 use parser::parser::Node;
 use crate::buffer::CodeGenBuffer;
-use crate::constants::CodeGenConstants;
 use crate::errors::{CodegenError, ErrorRepr};
 use crate::context::{CodeDefinition, CodeScope, Context, ContextType};
-use crate::types::{CodegenExpressionStack, CodegenExpressionType, Field, FieldModifier, FieldType, PrimitiveType, RuntimeVariable};
+use crate::types::{CodegenExpressionStack, CodegenExpressionType, Field, FieldType, PrimitiveType, RuntimeVariable};
 
 pub struct CodeGen {
     pub context_map: HashMap<String, usize>,
@@ -24,13 +21,13 @@ pub struct CodeGen {
     parents: Vec<usize>,
     runtime_vars: Vec<HashMap<String, RuntimeVariable>>,
     return_runtimes: Vec<Option<RuntimeVariable>>,
-    function_idents: Vec<u32>,
     field_names: Vec<Vec<String>>,
     context_names: Vec<String>,
     context_full_names: Vec<String>,
     run: usize,
 }
 
+#[allow(dead_code)]
 impl CodeGen {
     pub fn new() -> CodeGen {
         Self {
@@ -42,7 +39,6 @@ impl CodeGen {
             parents: Vec::new(),
             runtime_vars: Vec::new(),
             return_runtimes: Vec::new(),
-            function_idents: Vec::new(),
             field_names: Vec::new(),
             context_names: Vec::new(),
             context_full_names: Vec::new(),
@@ -73,7 +69,7 @@ impl CodeGen {
             str.push_str(&context_name);
             str
         } else {
-            let mut str_parent = self.context_full_names.get(parent_id).expect("Parent context full name should exist.");
+            let str_parent = self.context_full_names.get(parent_id).expect("Parent context full name should exist.");
             let mut str = String::from("__");
             str.push_str(&current_id.to_string());
             str.push('#');
@@ -290,13 +286,18 @@ impl CodeGen {
         }
     }
 
-    fn extract_definition_context(&self, definition: CodeDefinition) -> Result<usize, CodegenError> {
+    fn extract_definition_context(&self, definition: CodeDefinition, prefer: Option<ContextType>) -> Result<usize, CodegenError> {
         match definition {
             CodeDefinition::Context(context) => Ok(context),
             CodeDefinition::Multiple(definitions) => {
                 let mut result = CodegenError::err_headless(ErrorRepr::ExpectedContext);
                 for check_definition in definitions {
                     if let CodeDefinition::Context(context) = check_definition {
+                        if let Some(prefer_type) = &prefer {
+                            if self.context_borrow(context)?.context_type != *prefer_type {
+                                continue;
+                            }
+                        }
                         result = Ok(context);
                         break;
                     }
@@ -308,7 +309,7 @@ impl CodeGen {
     }
 
     fn extract_definition_struct(&self, definition: CodeDefinition) -> Result<usize, CodegenError> {
-        let context = self.extract_definition_context(definition)?;
+        let context = self.extract_definition_context(definition, Some(ContextType::Struct))?;
         if !matches!(self.context_borrow(context)?.context_type, ContextType::Struct) {
             return CodegenError::err_headless(ErrorRepr::ExpectedStruct);
         }
@@ -316,15 +317,28 @@ impl CodeGen {
     }
 
     fn extract_definition_function(&self, definition: CodeDefinition) -> Result<usize, CodegenError> {
-        let context = self.extract_definition_context(definition)?;
+        let context = self.extract_definition_context(definition, None)?;
         if !matches!(self.context_borrow(context)?.context_type, ContextType::Function(..)) {
             return CodegenError::err_headless(ErrorRepr::ExpectedFunction);
         }
         Ok(context)
     }
 
-    fn find_definition_by_ident(&self, ident: &Rc<Node>, mut context: usize) -> Result<CodeDefinition, CodegenError> {
-        let ident_string = Self::get_primary_as_ident(ident, ErrorRepr::ExpectedTypeIdent)?;
+    fn find_definition_by_ident(&self, mut ident: &Rc<Node>, mut context: usize) -> Result<CodeDefinition, CodegenError> {
+        // access stuff
+        if let Node::Access(access_parent, access_child) = ident.as_ref() {
+            context = self.find_domain_by_ident(access_parent, context, None)?;
+            ident = access_child;
+            loop {
+                let Node::Access(access_ident, access_child) = ident.as_ref() else {
+                    break;
+                };
+                ident = access_child;
+                context = self.find_domain_by_ident(access_ident, context, Some(1))?;
+            }
+        }
+        
+        let ident_string = Self::get_primary_as_ident(ident, ErrorRepr::ExpectedDefinitionIdent)?;
         loop {
             let context_borrow = self.context_borrow(context)?;
             match context_borrow.definition_lookup.get(ident_string) {
@@ -333,11 +347,34 @@ impl CodeGen {
                 }
                 None => {
                     if context_borrow.id == context_borrow.parent_id {
-                        return CodegenError::err(ident.clone(), ErrorRepr::TypeIdentNotRecognized)
+                        return CodegenError::err(ident.clone(), ErrorRepr::DefinitionIdentNotRecognized)
                     }
                     context = context_borrow.parent_id;
                 }
             };
+            drop(context_borrow);
+        }
+    }
+
+    fn find_domain_by_ident(&self, ident: &Rc<Node>, mut context: usize, max_depth: Option<usize>) -> Result<usize, CodegenError> {
+        let ident_string = Self::get_primary_as_ident(ident, ErrorRepr::ExpectedDefinitionIdent)?;
+        let mut depth = 0;
+        loop {
+            let context_borrow = self.context_borrow(context)?;
+            if let Some(CodeDefinition::Context(def_context)) = context_borrow.definition_lookup.get(ident_string) {
+                return Ok(*def_context);
+            } else {
+                if context_borrow.id == context_borrow.parent_id {
+                    return CodegenError::err(ident.clone(), ErrorRepr::DomainIdentNotRecognized);
+                }
+                context = context_borrow.parent_id;
+            }
+            depth += 1;
+            if let Some(max_depth_value) = max_depth {
+                if depth >= max_depth_value {
+                    return CodegenError::err(ident.clone(), ErrorRepr::DomainIdentNotRecognized);
+                }
+            }
             drop(context_borrow);
         }
     }
@@ -1026,7 +1063,7 @@ mod tests {
     #[test]
     pub fn decompile_from_file_test() {
         let name = "more";
-        let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\codegen\examples\";
+        //let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\codegen\examples\";
         let path = r"K:\Programming\Projects\Esh\codegen\examples\";
 
         let file_bytes = fs::read(format!("{}{}.esh", path, name)).expect("File should read");
@@ -1040,6 +1077,15 @@ mod tests {
         let mut codegen = CodeGen::new();
         codegen.codegen_from_node(parser_tree.clone()).expect("Codegen should generate");
         //##println!("CODEGEN CONTEXTS\n----------------------\n{:#?}\n----------------------", codegen.contexts);
+
+        //##println!("CODEGEN CONTEXT NAMES\n----------------------");
+        //##for context in 0..codegen.contexts.len() {
+        //##    let mut name = codegen.get_context_full_name(context).clone();
+        //##    let name = name.split_off(name.find("#").expect("Should have a # in it.") + 1);
+        //##    println!("ID: {}, Name: {}", context, name);
+        //##}
+        //##println!("----------------------");
+
         let code = codegen.buffer.flush();
         code.write_to_file(&format!("{}{}.dfbin", path, name)).expect("DFBin should write");
         let mut decompiler = decompiler::Decompiler::new(code).expect("Decompiler should create");

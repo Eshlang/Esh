@@ -1,5 +1,4 @@
 use std::rc::Rc;
-use dfbin::enums::Instruction;
 use parser::parser::Node;
 use crate::context::CodeScope;
 
@@ -46,12 +45,6 @@ pub enum FieldType {
 #[derive(Clone, Debug, PartialEq)]
 pub enum PrimitiveType {
     None, Number, String, Bool
-}
-
-#[derive(Debug)]
-pub enum FieldModifier {
-    None,
-    List
 }
 
 
