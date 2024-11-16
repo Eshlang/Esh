@@ -45,7 +45,7 @@ pub enum FieldType {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PrimitiveType {
-    Number, String, Bool
+    None, Number, String, Bool
 }
 
 #[derive(Debug)]

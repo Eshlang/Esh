@@ -115,4 +115,10 @@ pub enum ErrorRepr {
     InvalidAssignmentToken,
     #[error("Unexpectedly declaring an existing variable.")]
     DeclaringExistingVariable,
+    #[error("Unexpected return value; the function does not return a value.")]
+    UnexpectedReturnValue,
+    #[error("Invalid return value type.")]
+    InvalidReturnValueType,
+    #[error("Expected the function to return a value.")]
+    ExpectedFunctionReturnValue,
 }

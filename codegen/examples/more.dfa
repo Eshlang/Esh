@@ -1,46 +1,54 @@
 seg func
     df _0 "__2#main.yo.hello"
-    df _20 "__3#main.randomfunc"
+    df _24 "__3#main.randomfunc"
 seg param
-    dp var _1 "_rvp_hell" #scope:line
-    dp param _2 "_rvp_hell"
-    dp var _3 "_rvp_add" #scope:line
-    dp param _4 "_rvp_add"
-    dp var _5 "_rvl_wowvar" #scope:line
-    dp var _6 "_xl0" #scope:line
-    dp num _7 6
-    dp num _8 3
-    dp var _9 "_xl1" #scope:line
-    dp num _10 4
-    dp var _11 "_xl2" #scope:line
-    dp num _12 1
-    dp num _13 2
-    dp num _14 123
-    dp var _15 "_rvl_testvar" #scope:line
-    dp num _16 5
-    dp num _17 999
-    dp num _18 17
-    dp num _19 888
-    dp str _21 "wow"
+    dp var _1 "fr" #scope:line
+    dp param _2 "fr" #type:var
+    dp var _3 "_rvp_hell" #scope:line
+    dp param _4 "_rvp_hell"
+    dp var _5 "_rvp_add" #scope:line
+    dp param _6 "_rvp_add"
+    dp var _7 "_rvl_wowvar" #scope:line
+    dp var _8 "_xl0" #scope:line
+    dp num _9 6
+    dp num _10 3
+    dp var _11 "_xl1" #scope:line
+    dp num _12 4
+    dp var _13 "_xl2" #scope:line
+    dp num _14 1
+    dp num _15 2
+    dp num _16 123
+    dp var _17 "_rvl_testvar" #scope:line
+    dp num _18 5
+    dp num _19 999
+    dp str _20 "aa"
+    dp num _21 17
+    dp num _22 888
+    dp str _23 "g"
+    dp str _25 "wow"
 seg code
-    func _0 _2, _4
-        var add _6, _8, _7
-        var add _11, _13, _12
-        var mul _9, _11, _10
-        var add _5, _9, _6
-        varif eq _5, _10
-            var set _6, 1
+    func _0 _2, _4, _6
+        var add _8, _10, _9
+        var add _13, _15, _14
+        var mul _11, _13, _12
+        var add _7, _11, _8
+        varif eq _7, _12
+            var set _8, 1
         else
-            var set _6, 0
+            var set _8, 0
         endif
-        varif eq _6, 1
-            var set _3, _14
-            var set _15, _16
-            var add _15, _15, _17
+        varif eq _8, 1
+            var set _5, _16
+            var set _17, _18
+            var add _17, _17, _19
+            var repeatstring _1, _20, _17
+            ctrl return
         endif
-        var set _15, _18
-        var add _15, _15, _19
-        var add _5, _5, _3
-    func _20 _2, _4
-        var set _5, _21
-        var string _5, _5, _1
+        var set _17, _21
+        var add _17, _17, _22
+        var add _7, _7, _5
+        var repeatstring _1, _23, _7
+        ctrl return
+    func _24 _4, _6
+        var set _7, _25
+        var string _7, _7, _3

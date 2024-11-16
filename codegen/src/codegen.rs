@@ -218,12 +218,14 @@ impl CodeGen {
 
             if let ContextType::Function(func_return_type) = context_type {
                 if let FieldType::Ident(func_return_type_node) = func_return_type {
-                    if !matches!(func_return_type_node.as_ref(), Node::None) {
-                        let return_type_set = self.find_type_by_ident(&func_return_type_node, context_id)?;
-                        let mut context_get_mut = self.context_borrow_mut(context_id)?;
-                        context_get_mut.context_type = ContextType::Function(return_type_set);
-                        drop(context_get_mut);
-                    }
+                    let return_type_set = if !matches!(func_return_type_node.as_ref(), Node::None) {
+                        self.find_type_by_ident(&func_return_type_node, context_id)?
+                    } else { // No return type
+                        FieldType::Primitive(PrimitiveType::None)
+                    };
+                    let mut context_get_mut = self.context_borrow_mut(context_id)?;
+                    context_get_mut.context_type = ContextType::Function(return_type_set);
+                    drop(context_get_mut);
                 };
             }
             for field in 0..fields_len {
@@ -675,6 +677,18 @@ impl CodeGen {
                 (Ident, func_id)
             ]
         ));
+        //println!("Generating function {}, return type: {:#?}", context, return_type);
+        let return_type_ident = if !matches!(return_type, FieldType::Primitive(PrimitiveType::None)) {
+            let return_type_param_ident = self.buffer.use_return_param("fr");
+            self.buffer.code_buffer.push_parameter(Parameter {
+                value: ParameterValue::Ident(return_type_param_ident.0),
+                slot: None
+            });
+            Some(return_type_param_ident.1)
+        } else {
+            None
+        };
+        let mut returned_value = false;
         let mut field_id = 0;
         for field in fields {
             let var_name = Self::make_var_name(&self.field_names[context][field_id], "rvp");
@@ -755,10 +769,31 @@ impl CodeGen {
                         return CodegenError::err(if_block.clone(), ErrorRepr::ExpectedBlock);
                     };
                     body_stack.push_front((0, Rc::new(if_block.clone()), Vec::new(), Some(instruction!(EndIf))));
+                    self.buffer.free_line_register(allocated_bool)?;
                 },
-                _ => {}
+                Node::Return(return_value) => {
+                    if !matches!(return_value.as_ref(), Node::None) { //You're returning a value
+                        let Some(return_type_ident_some) = return_type_ident else {
+                            return CodegenError::err(return_value.clone(), ErrorRepr::UnexpectedReturnValue)
+                        };
+                        let expr_id = self.generate_expression(context, return_value, return_type_ident_some)?;
+                        if expr_id.1 != return_type {
+                            return CodegenError::err(statement.clone(), ErrorRepr::InvalidReturnValueType)
+                        }
+                    }
+                    self.buffer.code_buffer.push_instruction(instruction!(Ctrl::Return));
+                    if body_stack.len() == 1 { // This is the core branch.
+                        returned_value = true;
+                    }
+                }
+                _ => {
+                    //println!("Unrecognized Statement: {:#?}", statement.clone());
+                }
             }
             body_stack[0].2.extend(block_runtime_vars_add);
+        }
+        if !returned_value && return_type_ident.is_some() { // This means the function needs to a return a value, but hasn't in the core branch.
+            return CodegenError::err_headless(ErrorRepr::ExpectedFunctionReturnValue);
         }
         Ok(())
     }

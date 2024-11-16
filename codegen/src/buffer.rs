@@ -13,6 +13,7 @@ pub struct CodeGenBuffer {
     idents_string_hash: HashMap<String, u32>,
     idents_variable_hash: HashMap<String, u32>,
     idents_param_hash: HashMap<String, u32>,
+    idents_return_param_hash: HashMap<String, u32>,
     idents_function_hash: HashMap<String, u32>,
 
     line_register_idents: HashMap<usize, u32>,
@@ -32,6 +33,7 @@ impl CodeGenBuffer {
             idents_string_hash: HashMap::new(),
             idents_variable_hash: HashMap::new(),
             idents_param_hash: HashMap::new(),
+            idents_return_param_hash: HashMap::new(),
             idents_function_hash: HashMap::new(),
             
             line_register_idents: HashMap::new(),
@@ -44,6 +46,10 @@ impl CodeGenBuffer {
         self.ident_count = 0;
         self.idents_variable_hash.clear();
         self.idents_param_hash.clear();
+        self.idents_number_hash.clear();
+        self.idents_function_hash.clear();
+        self.idents_return_param_hash.clear();
+        self.idents_string_hash.clear();
 
         self.line_register_idents.clear();
         self.line_register_indices.clear();
@@ -163,6 +169,24 @@ impl CodeGenBuffer {
         self.idents_param_hash.insert(name.to_owned(), param_id);
         (param_id, var_id)
     }
+    
+    /// Returns a (u32, u32), the first u32 being the ID of the parameter, the second being of its line variable equivalent.
+    pub fn use_return_param(&mut self, name: &str) -> (u32, u32) {
+        let var_id = self.use_variable(name, DP::Var::Scope::Line);
+        if let Some(id) = self.idents_return_param_hash.get(name) {
+            return (*id, var_id);
+        }
+        let param_id = self.ident_count;
+        self.ident_count += 1;
+        self.param_buffer.push_instruction(instruction!(
+            DP::Param,
+            [(Ident, param_id), (String, name)], {
+                Type: Var
+            }
+        ));
+        self.idents_return_param_hash.insert(name.to_owned(), param_id);
+        (param_id, var_id)
+    }
 
 
     pub fn use_function(&mut self, name: &str) -> u32 {
@@ -216,7 +240,6 @@ impl CodeGenBuffer {
 
     pub fn allocate_line_register(&mut self) -> u32 {
         let index = Self::bitset_allocate(&mut self.allocated_line_registers);
-        println!("Allocating Line Register: {}", index);
         self.use_line_register(index)
     }
 
