@@ -431,6 +431,11 @@ impl CodeGen {
         self.find_variable_by_name_full(context, var_name, node)
     }
 
+    fn find_variable_by_node(&mut self, context: usize, node: &Rc<Node>) -> Result<&RuntimeVariable, CodegenError> {
+        let var_name = Self::get_primary_as_ident(node, ErrorRepr::ExpectedVariableIdentifier)?;
+        self.find_variable_by_name_full(context, var_name, node)
+    }
+
     fn get_context_name(&self, context: usize) -> &String {
         &self.context_names[context]
     }
@@ -598,10 +603,7 @@ impl CodeGen {
                     let mut types = Vec::new();
                     for _i in 0..elms {
                         let ident_from_stack = ident_stack.pop().expect("Ident stack should pop when calculating.");
-                        parameters.push(Parameter{
-                            value: ParameterValue::Ident(ident_from_stack.0),
-                            slot: None,
-                        });
+                        parameters.push(Parameter::from_ident(ident_from_stack.0));
                         types.push(ident_from_stack.1)
                     }
                     calculated = true;
@@ -916,10 +918,7 @@ impl CodeGen {
         //println!("Generating function {}, return type: {:#?}", context, return_type);
         let return_type_ident = if !matches!(return_type, FieldType::Primitive(PrimitiveType::None)) {
             let return_type_param_ident = self.buffer.use_return_param("fr");
-            self.buffer.code_buffer.push_parameter(Parameter {
-                value: ParameterValue::Ident(return_type_param_ident.0),
-                slot: None
-            });
+            self.buffer.code_buffer.push_parameter(Parameter::from_ident(return_type_param_ident.0));
             Some(return_type_param_ident.1)
         } else {
             None
@@ -937,10 +936,7 @@ impl CodeGen {
                     param_and_var_ident
                 )
             );
-            self.buffer.code_buffer.push_parameter(Parameter{
-                value: ParameterValue::Ident(param_and_var_ident.0),
-                slot: None
-            });
+            self.buffer.code_buffer.push_parameter(Parameter::from_ident(param_and_var_ident.0));
             field_id += 1;
         }
         let mut body_stack: VecDeque<(usize, Rc<Vec<Rc<Node>>>, Vec<String>, Option<Instruction>)> = VecDeque::new();
@@ -977,6 +973,9 @@ impl CodeGen {
                             }
                             Node::Primary(..) => {
                                 self.find_variable_by_name(context, assign_var)?
+                            }
+                            Node::Access(..) => {
+                                self.find_variable_by_node(context, assign_var)?
                             }
                             _ => {
                                 return CodegenError::err(statement.clone(), ErrorRepr::InvalidAssignmentToken);
@@ -1063,8 +1062,8 @@ mod tests {
     #[test]
     pub fn decompile_from_file_test() {
         let name = "more";
-        //let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\codegen\examples\";
-        let path = r"K:\Programming\Projects\Esh\codegen\examples\";
+        let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\codegen\examples\";
+        //let path = r"K:\Programming\Projects\Esh\codegen\examples\";
 
         let file_bytes = fs::read(format!("{}{}.esh", path, name)).expect("File should read");
         let lexer = Lexer::new(str::from_utf8(&file_bytes).expect("Should encode to utf-8"));

@@ -12,8 +12,14 @@ pub struct Field {
 pub struct RuntimeVariable {
     pub field_type: FieldType,
     pub name: String,
-    pub ident: u32,
+    pub ident: RuntimeVariableIdent,
     pub param_ident: Option<u32>
+}
+
+#[derive(Debug)]
+pub enum RuntimeVariableIdent {
+    Normal(u32),
+    Field(usize, usize),
 }
 
 impl RuntimeVariable {
@@ -21,7 +27,7 @@ impl RuntimeVariable {
         Self {
             field_type,
             name,
-            ident,
+            ident: RuntimeVariableIdent::Normal(ident),
             param_ident: None
         }
     }
@@ -29,7 +35,7 @@ impl RuntimeVariable {
         Self {
             field_type,
             name,
-            ident: param_and_var.1,
+            ident: RuntimeVariableIdent::Normal(param_and_var.1),
             param_ident: Some(param_and_var.0)
         }
     }

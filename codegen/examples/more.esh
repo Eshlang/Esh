@@ -21,6 +21,14 @@ domain yo {
             wowvar = hello("hey" + hello("whaaat" + "hey", 15), 10) + "hello";
         }
     }
+    func wtf(Player pl) -> Player {
+        pl.uuid = "WTFF";
+        return pl;
+    }
+    struct Player {
+        string uuid;
+        num hp;
+    }
 }
 
 func randomfunc(string hell, string add) {
