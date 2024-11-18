@@ -22,12 +22,22 @@ domain yo {
         }
     }
     func wtf(Player pl) -> Player {
-        pl.uuid = "WTFF";
-        return pl;
+        Player hey = Player {
+            uuid = "hello";
+            hp = 0;
+            inv = Inventory {
+                item_amount = 0;
+            };
+        };
+        return hey;
     }
     struct Player {
         string uuid;
         num hp;
+        Inventory inv;
+    }
+    struct Inventory {
+        num item_amount;
     }
 }
 

@@ -308,6 +308,23 @@ impl CodeGen {
         }
     }
 
+    fn extract_definition_field(&self, definition: &CodeDefinition) -> Result<usize, CodegenError> {
+        match definition {
+            CodeDefinition::Field(field) => Ok(*field),
+            CodeDefinition::Multiple(definitions) => {
+                let mut result = CodegenError::err_headless(ErrorRepr::ExpectedField);
+                for check_definition in definitions {
+                    if let CodeDefinition::Field(field) = check_definition {
+                        result = Ok(*field);
+                        break;
+                    }
+                }
+                result
+            },
+            _ => CodegenError::err_headless(ErrorRepr::ExpectedField)
+        }
+    }
+
     fn extract_definition_struct(&self, definition: CodeDefinition) -> Result<usize, CodegenError> {
         let context = self.extract_definition_context(definition, Some(ContextType::Struct))?;
         if !matches!(self.context_borrow(context)?.context_type, ContextType::Struct) {
@@ -431,6 +448,104 @@ impl CodeGen {
         self.find_variable_by_name_full(context, var_name, node)
     }
 
+    fn get_access_as_variable(&mut self, context: usize, node: &Rc<Node>) -> Result<&RuntimeVariable, CodegenError> {
+        match node.as_ref() {
+            Node::Primary(..) => {
+                let var_name = Self::get_primary_as_ident(node, ErrorRepr::ExpectedVariableIdentifier)?;
+                self.find_variable_by_name_full(context, var_name, node)
+            }
+            _ => {
+                CodegenError::err(node.clone(), ErrorRepr::ExpectedVariableIdentifier)
+            }
+        }
+    }
+    
+    fn create_struct_instance_from_node(&mut self, context: usize, construct_ident: &Rc<Node>, construct_body_node: &Rc<Node>, set_ident: u32) -> Result<FieldType, CodegenError> {
+        let construct_field_type = self.find_type_by_ident(construct_ident, context)?;
+        let FieldType::Struct(struct_type) = construct_field_type else {
+            return CodegenError::err(construct_ident.clone(), ErrorRepr::ExpectedStructIdentifier);
+        };
+        let Node::Block(construct_body) = construct_body_node.as_ref() else {
+            return CodegenError::err(construct_body_node.clone(), ErrorRepr::ExpectedBlock);
+        };
+        let mut param_map = HashMap::new();
+        let mut allocated_registers = Vec::new();
+        for construct_statement in construct_body {
+            let Node::Assignment(assigned_node, assigned_value) = construct_statement.as_ref() else {
+                return CodegenError::err(construct_body_node.clone(), ErrorRepr::ExpectedFieldAssignment);
+            };
+            let assigned_ident = Self::get_primary_as_ident(assigned_node, ErrorRepr::ExpectedFieldAssignment)?;
+            let struct_context = self.context_borrow(struct_type)?;
+            let Some(def) = struct_context.definition_lookup.get(assigned_ident) else {
+                return CodegenError::err(construct_body_node.clone(), ErrorRepr::ExpectedFieldAssignment);
+            };
+            let field = self.extract_definition_field(def)?;
+            let field_type = struct_context.fields.get(field).expect("Struct context should have this field.").field_type.clone();
+            drop(struct_context);
+            let field_var_ident = self.buffer.allocate_line_register();
+            allocated_registers.push(field_var_ident);
+            let field_expression = self.generate_expression(context, assigned_value, field_var_ident)?;
+            if field_expression.1 != field_type {
+                return CodegenError::err(assigned_value.clone(), ErrorRepr::UnexpectedStructFieldType)
+            }
+            param_map.insert(field, field_var_ident);
+        }
+        self.create_struct_instance(construct_body_node, struct_type, set_ident, param_map)?;
+        //println!("Struct: {:#?}", construct_body);
+        for free_register in allocated_registers {
+            self.buffer.free_line_register(free_register)?;
+        }
+        Ok(construct_field_type)
+    }
+
+    fn create_struct_instance(&mut self, node: &Rc<Node>, struct_type: usize, set_ident: u32, field_map: HashMap<usize, u32>) -> Result<(), CodegenError> {
+        let mut instruction_push = instruction!(Var::CreateList, [
+            (Ident, set_ident)
+        ]);
+        let fields_len = self.context_borrow(struct_type)?.fields.len();
+        // let mut allocated_registers = Vec::new();
+        for field_id in 0..fields_len {
+            if let Some(ident) = field_map.get(&field_id) {
+                instruction_push.params.push(Parameter::from_ident(*ident));
+            } else {
+                return CodegenError::err(node.clone(), ErrorRepr::ConstructFieldsMissing)
+            }
+            // let field = self.context_borrow(struct_type)?.fields.get(field_id).expect("field_id should be within confines").field_type.clone(); 
+            // let ident = self.buffer.allocate_line_register();
+            // self.get_default_type_value(&field, ident)?;
+            // instruction_push.params.push(Parameter::from_ident(ident));
+            // allocated_registers.push(ident);
+        }
+        
+        self.buffer.code_buffer.push_instruction(instruction_push);
+        Ok(())
+    }
+
+    fn get_default_type_value(&mut self, field_type: &FieldType, set_ident: u32) -> Result<(), CodegenError> {
+        match field_type {
+            FieldType::Ident(..) => {
+                return CodegenError::err_headless(ErrorRepr::UnexpectedFieldTypeIdent)
+            },
+            FieldType::Struct(..) => {
+                self.buffer.code_buffer.push_instruction(instruction!(Var::Set, [
+                    (Ident, set_ident), (Int, 0)
+                ]))
+                // self.create_struct_instance(*struct_ind, set_ident)?;
+            }
+            FieldType::Primitive(PrimitiveType::Bool | PrimitiveType::Number | PrimitiveType::None) => {
+                self.buffer.code_buffer.push_instruction(instruction!(Var::Set, [
+                    (Ident, set_ident), (Int, 0)
+                ]))
+            },
+            FieldType::Primitive(PrimitiveType::String) => {
+                self.buffer.code_buffer.push_instruction(instruction!(Var::Set, [
+                    (Ident, set_ident), (String, "")
+                ]))
+            },
+        }
+        Ok(())
+    }
+
     fn find_variable_by_node(&mut self, context: usize, node: &Rc<Node>) -> Result<&RuntimeVariable, CodegenError> {
         let var_name = Self::get_primary_as_ident(node, ErrorRepr::ExpectedVariableIdentifier)?;
         self.find_variable_by_name_full(context, var_name, node)
@@ -466,6 +581,10 @@ impl CodeGen {
                         allocate
                     };
                     match node.as_ref() {
+                        Node::Access(..) => {
+                            let v = self.get_access_as_variable(context, node)?;
+                            ident_stack.push((v.ident, v.field_type.clone()));
+                        }
                         Node::Primary(token) => {
                             let (ident, ident_type) = match &token.as_ref().token_type {
                                 TokenType::Ident(..) => {
@@ -483,6 +602,11 @@ impl CodeGen {
                         Node::FunctionCall(func_ident, func_params) => {
                             let func_type = self.call_function(context, func_ident, func_params, ident)?;
                             ident_stack.push((ident, func_type));
+                            calculated = true;
+                        },
+                        Node::Construct(construct_ident, construct_body) => {
+                            let created_struct = self.create_struct_instance_from_node(context, construct_ident, construct_body, ident)?;
+                            ident_stack.push((ident, created_struct));
                             calculated = true;
                         },
                         Node::Sum(nl, nr) => {
@@ -1062,8 +1186,8 @@ mod tests {
     #[test]
     pub fn decompile_from_file_test() {
         let name = "more";
-        let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\codegen\examples\";
-        //let path = r"K:\Programming\Projects\Esh\codegen\examples\";
+        // let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\codegen\examples\";
+        let path = r"K:\Programming\Projects\Esh\codegen\examples\";
 
         let file_bytes = fs::read(format!("{}{}.esh", path, name)).expect("File should read");
         let lexer = Lexer::new(str::from_utf8(&file_bytes).expect("Should encode to utf-8"));

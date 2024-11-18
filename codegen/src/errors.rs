@@ -97,6 +97,8 @@ pub enum ErrorRepr {
     DomainIdentNotRecognized,
     #[error("Expected a context.")]
     ExpectedContext,
+    #[error("Expected a field.")]
+    ExpectedField,
     #[error("Expected a struct.")]
     ExpectedStruct,
     #[error("Expected a function.")]
@@ -139,4 +141,14 @@ pub enum ErrorRepr {
     ExpectedFunctionParameter,
     #[error("Unexpected function parameter type.")]
     UnexpectedFunctionParameterType,
+    #[error("Field type is unexpectedly an unparsed identifier.")]
+    UnexpectedFieldTypeIdent,
+    #[error("Incomplete struct construct, field(s) are missing.")]
+    ConstructFieldsMissing,
+    #[error("Expected a field assignment.")]
+    ExpectedFieldAssignment,
+    #[error("Invalid struct field.")]
+    InvalidStructField,
+    #[error("Unexpected struct field type.")]
+    UnexpectedStructFieldType,
 }

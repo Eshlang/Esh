@@ -2,7 +2,7 @@ seg func
     df _0 "__2#main.yo.hello"
     df _26 "__4#main.yo.hey.blablabla"
     df _33 "__5#main.yo.wtf"
-    df _36 "__7#main.randomfunc"
+    df _38 "__8#main.randomfunc"
 seg param
     dp var _1 "fr" #scope:line
     dp param _2 "fr" #type:var
@@ -37,8 +37,10 @@ seg param
     dp num _32 10
     dp var _34 "_rvp_pl" #scope:line
     dp param _35 "_rvp_pl"
-    dp var _37 "_c_void" #scope:global
-    dp str _38 "wowwww"
+    dp var _36 "_rvl_hey" #scope:line
+    dp num _37 0
+    dp var _39 "_c_void" #scope:global
+    dp str _40 "wowwww"
 seg code
     func _0 _2, _4, _6
         var add _8, _10, _9
@@ -85,12 +87,17 @@ seg code
         call _0 _8, _11, _13
         var string _7, _8, _28
     func _33 _2, _35
-        var set _1, _34
+        var set _8, _28
+        var set _11, _37
+        var set _16, _37
+        var createlist _13, _16
+        var createlist _36, _8, _11, _13
+        var set _1, _36
         ctrl return
-    func _36 _4, _6
+    func _38 _4, _6
         var set _7, _27
         var string _7, _7, _3
-        var set _8, _38
+        var set _8, _40
         var set _11, _29
         call _26 _8, _11
         var set _8, _29

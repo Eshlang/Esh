@@ -12,7 +12,7 @@ pub struct Field {
 pub struct RuntimeVariable {
     pub field_type: FieldType,
     pub name: String,
-    pub ident: RuntimeVariableIdent,
+    pub ident: u32,
     pub param_ident: Option<u32>
 }
 
@@ -27,7 +27,7 @@ impl RuntimeVariable {
         Self {
             field_type,
             name,
-            ident: RuntimeVariableIdent::Normal(ident),
+            ident: ident,
             param_ident: None
         }
     }
@@ -35,7 +35,7 @@ impl RuntimeVariable {
         Self {
             field_type,
             name,
-            ident: RuntimeVariableIdent::Normal(param_and_var.1),
+            ident: param_and_var.1,
             param_ident: Some(param_and_var.0)
         }
     }
