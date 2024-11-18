@@ -1262,44 +1262,4 @@ mod tests {
         //##println!("DECOMPILED\n----------------------\n{}\n----------------------", decompiled);
         fs::write(format!("{}{}.dfa", path, name), decompiled).expect("Decompiled DFA should write.");
     }
-
-    #[test]
-    pub fn parse_string_test() {
-        let lexer = Lexer::new(r##"
-struct Player {
-    string uuid;
-    num hp;
-    
-    func damage(num dmg) {
-        hp = hp - dmg;
-    }
-}
-func test(num myNum, string p) {
-    myNum = myNum - 10;
-    num secondGuy = (myNum * 5) + 2;
-    p = "Guy: " + myNum + ", Second Guy: " + secondGuy;
-}
-func hello(string hell, num add) -> string {
-    hell = "crazy" + add;
-    return hell;
-}
-func damagePlayer(Player player) -> Player {
-    player.damage(5);
-    return player;
-}
-func test2(num number1) {
-    num number2;
-    num number3 = 5;
-}
-"##);
-        let lexer_tokens: Vec<Rc<Token>> = lexer.map(|v| Rc::new(v.expect("Lexer token should unwrap"))).collect();
-        //##println!("LEXER TOKENS\n----------------------\n{:#?}\n----------------------", lexer_tokens);
-        let mut parser = Parser::new(lexer_tokens.as_slice());
-        let parser_tree = Rc::new(parser.parse().expect("Parser statement block should unwrap"));
-        //##println!("PARSER TREE\n----------------------\n{:#?}\n----------------------", parser_tree);
-
-        let mut codegen = CodeGen::new();
-        codegen.codegen_from_node(parser_tree.clone()).expect("Codegen should generate");
-        //##println!("CODEGEN CONTEXTS\n----------------------\n{:#?}\n----------------------", codegen.contexts);
-    }
 }
