@@ -105,6 +105,8 @@ pub enum ErrorRepr {
     ExpectedFunction,
     #[error("Expected a variable identifier.")]
     ExpectedVariableIdentifier,
+    #[error("Expected a variable.")]
+    ExpectedVariable,
     #[error("Invalid variable name.")]
     InvalidVariableName,
     #[error("Unexpected expression token.")]
@@ -151,4 +153,8 @@ pub enum ErrorRepr {
     InvalidStructField,
     #[error("Unexpected struct field type.")]
     UnexpectedStructFieldType,
+    #[error("Expected an accessable type (such as a struct).")]
+    ExpectedAccessableType,
+    #[error("Expected an accessable node (such as a domain).")]
+    ExpectedAccessableNode,
 }

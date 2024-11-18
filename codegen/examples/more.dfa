@@ -93,6 +93,9 @@ seg code
         var createlist _13, _16
         var createlist _36, _8, _11, _13
         var set _1, _36
+        var getlistvalue _1, _1, 3
+        var getlistvalue _1, _1, 1
+        var set _1, _1
         ctrl return
     func _38 _4, _6
         var set _7, _27

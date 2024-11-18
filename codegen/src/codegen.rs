@@ -344,15 +344,17 @@ impl CodeGen {
     fn find_definition_by_ident(&self, mut ident: &Rc<Node>, mut context: usize) -> Result<CodeDefinition, CodegenError> {
         // access stuff
         if let Node::Access(access_parent, access_child) = ident.as_ref() {
-            context = self.find_domain_by_ident(access_parent, context, None)?;
+            // context = self.find_domain_by_ident(access_parent, context, None)?;
+            // ident = access_child;
+            // loop {
+            //     let Node::Access(access_ident, access_child) = ident.as_ref() else {
+            //         break;
+            //     };
+            //     ident = access_child;
+            //     context = self.find_domain_by_ident(access_ident, context, Some(1))?;
+            // }
+            context = self.find_full_context_by_ident(access_parent, context)?;
             ident = access_child;
-            loop {
-                let Node::Access(access_ident, access_child) = ident.as_ref() else {
-                    break;
-                };
-                ident = access_child;
-                context = self.find_domain_by_ident(access_ident, context, Some(1))?;
-            }
         }
         
         let ident_string = Self::get_primary_as_ident(ident, ErrorRepr::ExpectedDefinitionIdent)?;
@@ -370,6 +372,21 @@ impl CodeGen {
                 }
             };
             drop(context_borrow);
+        }
+    }
+
+    fn find_full_context_by_ident(&self, ident: &Rc<Node>, mut context: usize) -> Result<usize, CodegenError> {
+        match ident.as_ref() {
+            Node::Primary(_token) => {
+                Ok(self.find_domain_by_ident(ident, context, None)?)
+            }
+            Node::Access(access_parent, access_field) => {
+                context = self.find_full_context_by_ident(access_parent, context)?;
+                Ok(self.find_domain_by_ident(access_field, context, Some(1))?)
+            }
+            _ => {
+                CodegenError::err(ident.clone(), ErrorRepr::ExpectedAccessableNode)
+            }
         }
     }
 
@@ -448,14 +465,41 @@ impl CodeGen {
         self.find_variable_by_name_full(context, var_name, node)
     }
 
-    fn get_access_as_variable(&mut self, context: usize, node: &Rc<Node>) -> Result<&RuntimeVariable, CodegenError> {
+    fn set_variable_to_ident(&mut self, context: usize, node: &Rc<Node>, set_ident: u32) -> Result<FieldType, CodegenError> {
         match node.as_ref() {
             Node::Primary(..) => {
-                let var_name = Self::get_primary_as_ident(node, ErrorRepr::ExpectedVariableIdentifier)?;
-                self.find_variable_by_name_full(context, var_name, node)
+                let var_name = Self::get_primary_as_ident(node, ErrorRepr::ExpectedVariable)?;
+                let (runtime_var_ident, runtime_var_type) = {
+                    let g = self.find_variable_by_name_full(context, var_name, node)?;
+                    (g.ident, g.field_type.clone())
+                };
+                self.buffer.code_buffer.push_instruction(instruction!(Var::Set, [
+                    (Ident, set_ident), (Ident, runtime_var_ident)
+                ]));
+                Ok(runtime_var_type)
+            }
+            Node::Access(access_parent, access_field) => {
+                let accessed_field_type = self.set_variable_to_ident(context, access_parent, set_ident)?;
+                let FieldType::Struct(accessed_struct_id) = accessed_field_type else {
+                    return CodegenError::err(access_parent.clone(), ErrorRepr::ExpectedAccessableType);
+                };
+                let struct_context = self.context_borrow(accessed_struct_id)?;
+                let access_field_ident = Self::get_primary_as_ident(access_field, ErrorRepr::ExpectedVariable)?;
+                let field_id = self.extract_definition_field(
+                    struct_context
+                    .definition_lookup
+                    .get(access_field_ident)
+                    .ok_or(CodegenError::new(access_field.clone(), ErrorRepr::InvalidStructField))?
+                )?;
+                let field_type = struct_context.fields[field_id].field_type.clone();
+                drop(struct_context);
+                self.buffer.code_buffer.push_instruction(instruction!(Var::GetListValue, [
+                    (Ident, set_ident), (Ident, set_ident), (Int, field_id+1)
+                ]));
+                Ok(field_type)
             }
             _ => {
-                CodegenError::err(node.clone(), ErrorRepr::ExpectedVariableIdentifier)
+                CodegenError::err(node.clone(), ErrorRepr::ExpectedVariable)
             }
         }
     }
@@ -582,8 +626,9 @@ impl CodeGen {
                     };
                     match node.as_ref() {
                         Node::Access(..) => {
-                            let v = self.get_access_as_variable(context, node)?;
-                            ident_stack.push((v.ident, v.field_type.clone()));
+                            println!("Access:\n{:#?}", node);
+                            let field_type = self.set_variable_to_ident(context, node, ident)?;
+                            ident_stack.push((ident, field_type.clone()));
                         }
                         Node::Primary(token) => {
                             let (ident, ident_type) = match &token.as_ref().token_type {
