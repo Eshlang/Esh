@@ -575,14 +575,19 @@ impl<'a> Parser<'a> {
     /// Returns the current access chain
     pub(crate) fn access(&mut self) -> Result<Node, ParserError> {
         let mut expr = self.ident()?;
-        if !self.is_at_end() && self.curr().token_type == TokenType::Dot {
-            self.advance();
-            expr = Node::Access(
-                Rc::new(expr),
-                Rc::new(self.access()?),
-            );
+        while !self.is_at_end() {
+            match self.curr().token_type {
+                TokenType::Dot => {
+                    self.advance();
+                    expr = Node::Access(
+                        Rc::new(expr), 
+                        Rc::new(self.ident()?),
+                    )
+                },
+                _ => break
+            }
         }
-        Ok(expr)
+        return Ok(expr);
     }
 
     /// Returns the current tuple
