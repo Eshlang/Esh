@@ -21,7 +21,7 @@ domain yo {
             wowvar = hello("hey" + hello("whaaat" + "hey", 15), 10) + "hello";
         }
     }
-    func wtf(Player pl) -> num {
+    func wtf(Player pl) -> Inventory {
         Player hey = Player {
             uuid = "hello";
             hp = 0;
@@ -29,7 +29,8 @@ domain yo {
                 item_amount = 0;
             };
         };
-        return hey.inv.item_amount;
+        hey.inv.item_amount = pl.inv.item_amount + 10;
+        return hey.inv;
     }
     struct Player {
         string uuid;

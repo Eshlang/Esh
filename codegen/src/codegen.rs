@@ -503,6 +503,99 @@ impl CodeGen {
             }
         }
     }
+
+    fn set_ident_to_variable(&mut self, context: usize, node: &Rc<Node>, get_ident: u32) -> Result<FieldType, CodegenError> {
+        match node.as_ref() {
+            Node::Primary(..) => {
+                let var_name = Self::get_primary_as_ident(node, ErrorRepr::ExpectedVariable)?;
+                let (runtime_var_ident, runtime_var_type) = {
+                    let g = self.find_variable_by_name_full(context, var_name, node)?;
+                    (g.ident, g.field_type.clone())
+                };
+                self.buffer.code_buffer.push_instruction(instruction!(Var::Set, [
+                    (Ident, runtime_var_ident), (Ident, get_ident)
+                ]));
+                Ok(runtime_var_type)
+            }
+            Node::Access(..) => {
+                let mut allocated_registers = vec![0];
+                let mut node_stack = Vec::new();
+                let mut loop_access = node;
+                loop { // Parsing the recursive access into a linear vector, where the root is *last*
+                    match loop_access.as_ref() {
+                        Node::Access(loop_access_parent, loop_access_field) => {
+                            node_stack.push(loop_access_field);
+                            loop_access = loop_access_parent;
+                        }
+                        Node::Primary(..) => {
+                            node_stack.push(loop_access);
+                            break;
+                        }
+                        _ => {
+                            return CodegenError::err(node.clone(), ErrorRepr::ExpectedVariable);
+                        }
+                    }
+                }
+                let mut previous = (0u32, FieldType::Primitive(PrimitiveType::None));
+                let mut end_instruction_stack = Vec::new();
+                for _ in 0..node_stack.len()-1 {
+                    allocated_registers.push(self.buffer.allocate_line_register());
+                }
+                for (access_node_ind, access_node) in node_stack.into_iter().rev().enumerate() {
+                    if access_node_ind == 0 { // Root node
+                        let var_name = Self::get_primary_as_ident(access_node, ErrorRepr::ExpectedVariable)?;
+                        previous = {
+                            let g = self.find_variable_by_name_full(context, var_name, access_node)?;
+                            (g.ident, g.field_type.clone())
+                        };
+                        allocated_registers[0] = previous.0;
+                    } else {
+                        let register = allocated_registers[access_node_ind];
+                        let register_next = allocated_registers.get(access_node_ind+1).map(|x| *x);
+                        previous = match previous.1 {
+                            FieldType::Struct(parent_struct) => {
+                                let struct_context = self.context_borrow(parent_struct)?;
+                                let access_field_ident = Self::get_primary_as_ident(access_node, ErrorRepr::ExpectedVariable)?;
+                                let field_id = self.extract_definition_field(
+                                    struct_context
+                                    .definition_lookup
+                                    .get(access_field_ident)
+                                    .ok_or(CodegenError::new(access_node.clone(), ErrorRepr::InvalidStructField))?
+                                )?;
+                                let field_type = struct_context.fields[field_id].field_type.clone();
+                                drop(struct_context);
+                                if register_next.is_none() {
+                                    end_instruction_stack.push(instruction!(Var::SetListValue, [
+                                        (Ident, previous.0), (Int, field_id+1), (Ident, get_ident)
+                                        ]));
+                                } else {
+                                    self.buffer.code_buffer.push_instruction(instruction!(Var::GetListValue, [
+                                        (Ident, register), (Ident, previous.0), (Int, field_id+1)
+                                    ]));
+                                    end_instruction_stack.push(instruction!(Var::SetListValue, [
+                                        (Ident, previous.0), (Int, field_id+1), (Ident, register)
+                                    ]));
+                                }
+                                (register, field_type)
+                            }
+                            _ => {
+                                return CodegenError::err(access_node.clone(), ErrorRepr::ExpectedAccessableNode);
+                            }
+                        };
+                    }
+                }
+                for add_end_instruction in end_instruction_stack.into_iter().rev() {
+                    self.buffer.code_buffer.push_instruction(add_end_instruction);
+                }
+                allocated_registers.remove(0);
+                self.buffer.free_line_registers(allocated_registers)?;
+                Ok(previous.1)
+            }
+            _ => {
+                CodegenError::err(node.clone(), ErrorRepr::ExpectedVariable)
+            }
+        }
+    }
     
     fn create_struct_instance_from_node(&mut self, context: usize, construct_ident: &Rc<Node>, construct_body_node: &Rc<Node>, set_ident: u32) -> Result<FieldType, CodegenError> {
         let construct_field_type = self.find_type_by_ident(construct_ident, context)?;
@@ -536,9 +629,7 @@ impl CodeGen {
         }
         self.create_struct_instance(construct_body_node, struct_type, set_ident, param_map)?;
         //println!("Struct: {:#?}", construct_body);
-        for free_register in allocated_registers {
-            self.buffer.free_line_register(free_register)?;
-        }
+        self.buffer.free_line_registers(allocated_registers)?;
         Ok(construct_field_type)
     }
 
@@ -560,7 +651,6 @@ impl CodeGen {
             // instruction_push.params.push(Parameter::from_ident(ident));
             // allocated_registers.push(ident);
         }
-        
         self.buffer.code_buffer.push_instruction(instruction_push);
         Ok(())
     }
@@ -626,9 +716,9 @@ impl CodeGen {
                     };
                     match node.as_ref() {
                         Node::Access(..) => {
-                            println!("Access:\n{:#?}", node);
                             let field_type = self.set_variable_to_ident(context, node, ident)?;
                             ident_stack.push((ident, field_type.clone()));
+                            calculated = true;
                         }
                         Node::Primary(token) => {
                             let (ident, ident_type) = match &token.as_ref().token_type {
@@ -791,9 +881,7 @@ impl CodeGen {
                 ]
             ));
         }
-        for free_register in allocated_registers {
-            self.buffer.free_line_register(free_register)?;
-        }
+        self.buffer.free_line_registers(allocated_registers)?;
         Ok(final_value)
     }
 
@@ -1068,9 +1156,7 @@ impl CodeGen {
         }
 
         self.buffer.code_buffer.push_instruction(call_instruction);
-        for free_param_ident in param_var_idents {
-            self.buffer.free_line_register(free_param_ident)?;
-        }
+        self.buffer.free_line_registers(param_var_idents)?;
         Ok(ret_type_field)
     }
 
@@ -1133,29 +1219,34 @@ impl CodeGen {
                     block_runtime_vars_add.push(self.declare_runtime_variable(context, decl_type, decl_ident)?.1);
                 },
                 Node::Assignment(assign_var, assign_value) => {
-                    let (runtime_var_ident, runtime_var_field_type) = {
-                        let runtime_var = match assign_var.as_ref() {
-                            Node::Declaration(decl_type, decl_ident) => {
-                                let declaration = self.declare_runtime_variable(context, decl_type, decl_ident)?;
-                                block_runtime_vars_add.push(declaration.1);
-                                declaration.0
-                            }
-                            Node::Primary(..) => {
-                                self.find_variable_by_name(context, assign_var)?
-                            }
-                            Node::Access(..) => {
-                                self.find_variable_by_node(context, assign_var)?
-                            }
-                            _ => {
-                                return CodegenError::err(statement.clone(), ErrorRepr::InvalidAssignmentToken);
-                            }
-                        };
-                        (runtime_var.ident, runtime_var.field_type.clone())
+                    let mut allocated_registers = Vec::new();
+                    let (runtime_var_ident, mut runtime_var_field_type, already_set) = match assign_var.as_ref() {
+                        Node::Declaration(decl_type, decl_ident) => {
+                            let declaration = self.declare_runtime_variable(context, decl_type, decl_ident)?;
+                            block_runtime_vars_add.push(declaration.1);
+                            (declaration.0.ident, Some(declaration.0.field_type.clone()), true)
+                        }
+                        Node::Primary(..) => {
+                            let runtime_var = self.find_variable_by_name(context, assign_var)?;
+                            (runtime_var.ident, Some(runtime_var.field_type.clone()), true)
+                        }
+                        Node::Access(..) => {
+                            let allocate = self.buffer.allocate_line_register();
+                            allocated_registers.push(allocate);
+                            (allocate, None, false)
+                        }
+                        _ => {
+                            return CodegenError::err(statement.clone(), ErrorRepr::InvalidAssignmentToken);
+                        }
                     };
                     let expr_id = self.generate_expression(context, assign_value, runtime_var_ident)?;
-                    if expr_id.1 != runtime_var_field_type {
+                    if !already_set {
+                        runtime_var_field_type = Some(self.set_ident_to_variable(context, assign_var, runtime_var_ident)?);
+                    }
+                    if runtime_var_field_type.is_some_and(|field_type| field_type != expr_id.1) {
                         return CodegenError::err(statement.clone(), ErrorRepr::InvalidVariableType)
                     }
+                    self.buffer.free_line_registers(allocated_registers)?;
                 },
                 Node::If(if_condition, if_block) => {
                     let allocated_bool = self.buffer.allocate_line_register();
@@ -1232,7 +1323,7 @@ mod tests {
     pub fn decompile_from_file_test() {
         let name = "more";
         // let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\codegen\examples\";
-        let path = r"K:\Programming\Projects\Esh\codegen\examples\";
+        let path = r"K:\Programming\GitHub\Esh\codegen\examples\";
 
         let file_bytes = fs::read(format!("{}{}.esh", path, name)).expect("File should read");
         let lexer = Lexer::new(str::from_utf8(&file_bytes).expect("Should encode to utf-8"));

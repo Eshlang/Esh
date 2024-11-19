@@ -253,6 +253,13 @@ impl CodeGenBuffer {
         Ok(())
     }
 
+    pub fn free_line_registers(&mut self, register_idents: Vec<u32>) -> Result<(), CodegenError> {
+        for register_ident in register_idents {
+            self.free_line_register(register_ident)?;
+        }
+        Ok(())
+    }
+
 
     pub fn constant_void(&mut self) -> u32 {
         match self.constants.void_variable {
