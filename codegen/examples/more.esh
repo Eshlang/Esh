@@ -8,6 +8,8 @@ domain yo {
             num testvar = 5;
             testvar = testvar + 999;
             return "aa" * testvar;
+        } else {
+            wowvar = wowvar + (add * 152);
         }
         num testvar = 17;
         testvar = testvar + 888;
@@ -30,12 +32,19 @@ domain yo {
             };
         };
         hey.inv.item_amount = pl.inv.item_amount + 10;
+        while (hey.hp < 10) {
+            hey.hp = hey.hp + 1;
+        }
         return hey.inv;
     }
     struct Player {
         string uuid;
         num hp;
         Inventory inv;
+
+        func hello() -> string {
+            return "hey";
+        }
     }
     struct Inventory {
         num item_amount;

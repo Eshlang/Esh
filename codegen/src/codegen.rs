@@ -4,12 +4,12 @@ use std::rc::Rc;
 use dfbin::enums::{Instruction, Parameter, ParameterValue};
 use dfbin::instruction;
 use dfbin::Constants::Tags::DP;
-use lexer::types::TokenType;
+use lexer::types::{Keyword, TokenType};
 use parser::parser::Node;
 use crate::buffer::CodeGenBuffer;
 use crate::errors::{CodegenError, ErrorRepr};
 use crate::context::{CodeDefinition, CodeScope, Context, ContextType};
-use crate::types::{CodegenExpressionStack, CodegenExpressionType, Field, FieldType, PrimitiveType, RuntimeVariable};
+use crate::types::{CodegenBodyStackMode, CodegenExpressionStack, CodegenExpressionType, Field, FieldType, PrimitiveType, RuntimeVariable};
 
 pub struct CodeGen {
     pub context_map: HashMap<String, usize>,
@@ -343,19 +343,14 @@ impl CodeGen {
 
     fn find_definition_by_ident(&self, mut ident: &Rc<Node>, mut context: usize) -> Result<CodeDefinition, CodegenError> {
         // access stuff
-        if let Node::Access(access_parent, access_child) = ident.as_ref() {
-            // context = self.find_domain_by_ident(access_parent, context, None)?;
-            // ident = access_child;
-            // loop {
-            //     let Node::Access(access_ident, access_child) = ident.as_ref() else {
-            //         break;
-            //     };
-            //     ident = access_child;
-            //     context = self.find_domain_by_ident(access_ident, context, Some(1))?;
-            // }
+        let no_depth = if let Node::Access(access_parent, access_child) = ident.as_ref() {
             context = self.find_full_context_by_ident(access_parent, context)?;
             ident = access_child;
-        }
+            true
+        } else {
+            false
+        };
+        
         
         let ident_string = Self::get_primary_as_ident(ident, ErrorRepr::ExpectedDefinitionIdent)?;
         loop {
@@ -365,7 +360,7 @@ impl CodeGen {
                     return Ok(def.clone());
                 }
                 None => {
-                    if context_borrow.id == context_borrow.parent_id {
+                    if context_borrow.id == context_borrow.parent_id || no_depth {
                         return CodegenError::err(ident.clone(), ErrorRepr::DefinitionIdentNotRecognized)
                     }
                     context = context_borrow.parent_id;
@@ -396,13 +391,15 @@ impl CodeGen {
         loop {
             let context_borrow = self.context_borrow(context)?;
             if let Some(CodeDefinition::Context(def_context)) = context_borrow.definition_lookup.get(ident_string) {
-                return Ok(*def_context);
-            } else {
-                if context_borrow.id == context_borrow.parent_id {
-                    return CodegenError::err(ident.clone(), ErrorRepr::DomainIdentNotRecognized);
+                if matches!(self.context_borrow(*def_context)?.context_type, ContextType::Domain) {
+                    return Ok(*def_context);
                 }
-                context = context_borrow.parent_id;
             }
+            if context_borrow.id == context_borrow.parent_id {
+                return CodegenError::err(ident.clone(), ErrorRepr::DomainIdentNotRecognized);
+            }
+            context = context_borrow.parent_id;
+
             depth += 1;
             if let Some(max_depth_value) = max_depth {
                 if depth >= max_depth_value {
@@ -728,6 +725,8 @@ impl CodeGen {
                                 },
                                 TokenType::String(t) => (self.buffer.use_string(t.as_str()), FieldType::Primitive(PrimitiveType::String)),
                                 TokenType::Number(t) => (self.buffer.use_number(ParameterValue::Float(*t)), FieldType::Primitive(PrimitiveType::Number)),
+                                TokenType::Keyword(Keyword::True) => (self.buffer.use_number(ParameterValue::Int(1)), FieldType::Primitive(PrimitiveType::Bool)),
+                                TokenType::Keyword(Keyword::False) => (self.buffer.use_number(ParameterValue::Int(0)), FieldType::Primitive(PrimitiveType::Bool)),
                                 _ => {
                                     return CodegenError::err(root_node.clone(), ErrorRepr::UnexpectedExpressionToken)
                                 }
@@ -1163,6 +1162,9 @@ impl CodeGen {
 
     fn generate_function_code(&mut self, context: usize, body: Rc<Vec<Rc<Node>>>, fields: Vec<Field>, return_type: FieldType) -> Result<(), CodegenError> {
         // self.return_runtimes[context] = 
+        let parent = self.parents[context];
+        let parent_context = self.context_borrow(parent)?.context_type.clone();
+        
         let func_name = self.get_context_full_name(context).clone();
         let func_id = self.buffer.use_function(func_name.as_str());
         self.buffer.code_buffer.push_instruction(instruction!(
@@ -1171,6 +1173,13 @@ impl CodeGen {
             ]
         ));
         //println!("Generating function {}, return type: {:#?}", context, return_type);
+        let _self_struct_ident = if matches!(parent_context, ContextType::Struct) {
+            let self_struct_param_ident = self.buffer.use_return_param("self_struct");
+            self.buffer.code_buffer.push_parameter(Parameter::from_ident(self_struct_param_ident.0));
+            Some(self_struct_param_ident.1)
+        } else {
+            None
+        };
         let return_type_ident = if !matches!(return_type, FieldType::Primitive(PrimitiveType::None)) {
             let return_type_param_ident = self.buffer.use_return_param("fr");
             self.buffer.code_buffer.push_parameter(Parameter::from_ident(return_type_param_ident.0));
@@ -1194,25 +1203,33 @@ impl CodeGen {
             self.buffer.code_buffer.push_parameter(Parameter::from_ident(param_and_var_ident.0));
             field_id += 1;
         }
-        let mut body_stack: VecDeque<(usize, Rc<Vec<Rc<Node>>>, Vec<String>, Option<Instruction>)> = VecDeque::new();
-        body_stack.push_back((0, body, Vec::new(), None));
+        let mut body_stack: VecDeque<(usize, Rc<Vec<Rc<Node>>>, Vec<String>, Option<Instruction>, CodegenBodyStackMode)> = VecDeque::new();
+        body_stack.push_back((0, body, Vec::new(), None, CodegenBodyStackMode::None));
         
-        loop {
-            if body_stack[0].0 >= body_stack[0].1.len() {
-                let remove = body_stack.pop_front().expect("Body stack should pop a front");
-                if let Some(instruction_trail) = remove.3 {
-                    self.buffer.code_buffer.push_instruction(instruction_trail);
-                }
-                for remove_variable in remove.2 {
-                    self.runtime_vars[context].remove(&remove_variable);
+        'total: loop {
+            'verify: loop {
+                if body_stack[0].0 >= body_stack[0].1.len() {
+                    let remove = body_stack.pop_front().expect("Body stack should pop a front");
+                    if let Some(instruction_trail) = remove.3 {
+                        self.buffer.code_buffer.push_instruction(instruction_trail);
+                    }
+                    for remove_variable in remove.2 {
+                        self.runtime_vars[context].remove(&remove_variable);
+                    }
+                    if body_stack.len() == 0 {
+                        break 'total;   
+                    }
+                } else {
+                    break 'verify;
                 }
             }
             if body_stack.len() == 0 {
-                break;   
+                break 'total;   
             }
             body_stack[0].0 += 1;
             let body_get = &body_stack[0];
-            let statement = &body_get.1[body_get.0 - 1];
+            let body_stack_mode = body_get.4.clone();
+            let statement = (&body_get.1[body_get.0 - 1]).clone();
             let mut block_runtime_vars_add = Vec::new();
             match statement.as_ref() {
                 Node::Declaration(decl_type, decl_ident) => {
@@ -1248,6 +1265,14 @@ impl CodeGen {
                     }
                     self.buffer.free_line_registers(allocated_registers)?;
                 },
+                Node::Else(if_node, else_block) => {
+                    let Node::Block(else_block) = else_block.as_ref() else {
+                        return CodegenError::err(else_block.clone(), ErrorRepr::ExpectedBlock);
+                    };
+                    body_stack.push_front((0, Rc::new(else_block.clone()), Vec::new(), Some(instruction!(EndIf)), body_stack_mode));
+                    // Do the if stuff
+                    body_stack.push_front((0, Rc::new(vec![if_node.clone()]), Vec::new(), None, CodegenBodyStackMode::Else));
+                },
                 Node::If(if_condition, if_block) => {
                     let allocated_bool = self.buffer.allocate_line_register();
                     let expr_id = self.generate_expression(context, if_condition, allocated_bool)?;
@@ -1263,7 +1288,10 @@ impl CodeGen {
                     let Node::Block(if_block) = if_block.as_ref() else {
                         return CodegenError::err(if_block.clone(), ErrorRepr::ExpectedBlock);
                     };
-                    body_stack.push_front((0, Rc::new(if_block.clone()), Vec::new(), Some(instruction!(EndIf))));
+                    body_stack.push_front((0, Rc::new(if_block.clone()), Vec::new(), Some(match body_stack_mode {
+                        CodegenBodyStackMode::None => instruction!(EndIf),
+                        CodegenBodyStackMode::Else => instruction!(Else),
+                    }), body_stack_mode));
                     self.buffer.free_line_register(allocated_bool)?;
                 },
                 Node::Return(return_value) => {
@@ -1280,13 +1308,34 @@ impl CodeGen {
                     if body_stack.len() == 1 { // This is the core branch.
                         returned_value = true;
                     }
-                }
+                },
                 Node::FunctionCall(function_ident, function_parameters) => {
                     let void = self.buffer.constant_void();
                     self.call_function(context, function_ident, function_parameters, void)?;
-                }
+                },
+                Node::While(while_cond, while_block) => {
+                    self.buffer.code_buffer.push_instruction(instruction!(Rep::Forever));
+                    let allocated_bool = self.buffer.allocate_line_register();
+                    let expr_id = self.generate_expression(context, while_cond, allocated_bool)?;
+                    if !matches!(expr_id.1, FieldType::Primitive(PrimitiveType::Bool)) {
+                        return CodegenError::err(statement.clone(), ErrorRepr::InvalidVariableType)
+                    }
+                    self.buffer.code_buffer.push_instruction(instruction!(
+                        Varif::Eq, [
+                            (Ident, allocated_bool),
+                            (Int, 1)
+                        ]
+                    ));
+                    self.buffer.code_buffer.push_instruction(instruction!(Ctrl::StopRepeat));
+                    self.buffer.code_buffer.push_instruction(instruction!(EndIf));
+                    let Node::Block(if_block) = while_block.as_ref() else {
+                        return CodegenError::err(while_block.clone(), ErrorRepr::ExpectedBlock);
+                    };
+                    body_stack.push_front((0, Rc::new(if_block.clone()), Vec::new(), Some(instruction!(EndRep)), body_stack_mode));
+                    self.buffer.free_line_register(allocated_bool)?;
+                },
                 _ => {
-                    //println!("Unrecognized Statement: {:#?}", statement.clone());
+                    println!("Unrecognized Statement: {:#?}", statement.clone());
                 }
             }
             body_stack[0].2.extend(block_runtime_vars_add);

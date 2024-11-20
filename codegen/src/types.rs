@@ -76,3 +76,10 @@ pub enum CodegenExpressionType {
     GreaterEq,
     LesserEq,
 }
+
+#[derive(Debug, Clone)]
+pub enum CodegenBodyStackMode {
+    None,
+    Else,
+    // ElseIf
+}

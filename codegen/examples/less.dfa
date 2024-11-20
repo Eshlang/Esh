@@ -1,0 +1,46 @@
+seg func
+    df _0 "__1#main.wtf"
+seg param
+    dp var _1 "fr" #scope:line
+    dp param _2 "fr" #type:var
+    dp var _3 "_rvp_pl" #scope:line
+    dp param _4 "_rvp_pl"
+    dp var _5 "_rvl_hey" #scope:line
+    dp var _6 "_xl0" #scope:line
+    dp str _7 "hello"
+    dp var _8 "_xl1" #scope:line
+    dp num _9 0
+    dp num _10 1
+    dp num _11 10
+    dp var _12 "_xl2" #scope:line
+    dp num _13 1
+seg code
+    func _0 _2, _4
+        var set _6, _7
+        var set _8, _9
+        var createlist _5, _6, _8
+        rep forever
+            var set _12, _5
+            var getlistvalue _12, _12, 2
+            varif lower _12, _11
+                var set _8, 1
+            else
+                var set _8, 0
+            endif
+            var bitwise _6, _8, _10 #operator:and
+            varif eq _6, 1
+                ctrl stoprepeat
+            endif
+            var set _8, _5
+            var getlistvalue _8, _8, 2
+            var add _6, _8, _13
+            var setlistvalue _5, 2, _6
+        endrep
+        var set _6, _5
+        var getlistvalue _6, _6, 2
+        varif lower _6, _11
+            var set _1, 1
+        else
+            var set _1, 0
+        endif
+        ctrl return
