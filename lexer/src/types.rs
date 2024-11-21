@@ -86,6 +86,7 @@ pub enum Keyword {
     If,     // ifs
     Else,   // else
     Return, // return
+    Break,  // break
     True,   // true (boolean)
     False,  // false (boolean)
     Struct, // struct definition

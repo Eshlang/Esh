@@ -26,6 +26,7 @@ pub enum Node {
     And(Rc<Node>, Rc<Node>),                        // expr && expr
     Or(Rc<Node>, Rc<Node>),                         // expr || expr
     Declaration(Rc<Node>, Rc<Node>),                // ident ident
+    Break,                                          // break;
     Return(Rc<Node>),                               // return expr;
     Assignment(Rc<Node>, Rc<Node>),                 // decl/ident = expr;
     If(Rc<Node>, Rc<Node>),                         // if cond {block}
@@ -152,6 +153,12 @@ impl<'a> Parser<'a> {
                 expect!(self, TokenType::Semicolon);
                 self.advance();
                 expr
+            },
+            TokenType::Keyword(Keyword::Break) => {
+                self.advance();
+                expect!(self, TokenType::Semicolon);
+                self.advance();
+                Ok(Node::Break)
             },
             _ => Err(ParserError::InvalidStatement(self.curr().clone()))
         }
@@ -331,7 +338,10 @@ impl<'a> Parser<'a> {
     /// Returns the current return statement
     pub(crate) fn return_block(&mut self) -> Result<Node, ParserError> {
         self.advance();
-        return Ok(Node::Return(Rc::new(self.expression()?)))
+        match self.curr().token_type {
+            TokenType::Semicolon => Ok(Node::Return(Rc::new(Node::None))),
+            _ => Ok(Node::Return(Rc::new(self.expression()?)))
+        }
     }
 
     /// Returns the current expression

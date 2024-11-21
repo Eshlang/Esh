@@ -806,6 +806,7 @@ pub fn if_else_test() {
 pub fn no_return_function_test() {
     // func foo(num x) {
     //    bar(x);
+    //    return;
     // }
     let input = [
         Rc::new(Token {
@@ -857,8 +858,16 @@ pub fn no_return_function_test() {
             range: Range::new((1, 6), (1, 6)),
         }),
         Rc::new(Token {
+            token_type: TokenType::Keyword(Keyword::Return),
+            range: Range::new((2, 0), (2, 5)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Semicolon,
+            range: Range::new((2, 6), (2, 6)),
+        }),
+        Rc::new(Token {
             token_type: TokenType::RBrace,
-            range: Range::new((2, 0), (2, 0)),
+            range: Range::new((3, 0), (3, 0)),
         }),
     ];
     let expected = Node::Func(
@@ -892,6 +901,7 @@ pub fn no_return_function_test() {
                     }))),
                 ])),
             )),
+            Rc::new(Node::Return(Rc::new(Node::None))),
         ])),
     );
     let mut parser = Parser::new(&input);

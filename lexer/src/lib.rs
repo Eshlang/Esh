@@ -111,6 +111,7 @@ impl<'a> Lexer<'a> {
             "if" => Some(Keyword::If),
             "else" => Some(Keyword::Else),
             "return" => Some(Keyword::Return),
+            "break" => Some(Keyword::Break),
             "true" => Some(Keyword::True),
             "false" => Some(Keyword::False),
             "struct" => Some(Keyword::Struct),
