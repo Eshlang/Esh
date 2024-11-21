@@ -205,6 +205,92 @@ pub fn tuple_test() {
         }
     }
 }
+#[test]
+pub fn access_test() {
+    // foo.bar().bat().pgoo
+    let input = [
+        Rc::new(Token {
+            token_type: TokenType::Ident("foo".to_string()),
+            range: Range::new((0, 0), (0, 2)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Dot,
+            range: Range::new((0, 3), (0, 3)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Ident("bar".to_string()),
+            range: Range::new((0, 4), (0, 6)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::LParen,
+            range: Range::new((0, 7), (0, 7)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::RParen,
+            range: Range::new((0, 8), (0, 8)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Dot,
+            range: Range::new((0, 9), (0, 9)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Ident("bat".to_string()),
+            range: Range::new((0, 10), (0, 12)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::LParen,
+            range: Range::new((0, 13), (0, 13)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::RParen,
+            range: Range::new((0, 14), (0, 14)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Dot,
+            range: Range::new((0, 15), (0, 15)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Ident("pgoo".to_string()),
+            range: Range::new((0, 16), (0, 19)),
+        }),
+    ];
+    let expected = Node::Access(vec![
+        Rc::new(Node::FunctionCall(
+            Rc::new(Node::Access(vec![
+                Rc::new(Node::FunctionCall(
+                    Rc::new(Node::Access(vec![
+                        Rc::new(Node::Primary(Rc::new(Token {
+                            token_type: TokenType::Ident("foo".to_string()),
+                            range: Range::new((0, 0), (0, 2)),
+                        }))),
+                        Rc::new(Node::Primary(Rc::new(Token {
+                            token_type: TokenType::Ident("bar".to_string()),
+                            range: Range::new((0, 4), (0, 6)),
+                        }))),
+                    ])),
+                    Rc::new(Node::Tuple(vec![])),
+                )),
+                Rc::new(Node::Primary(Rc::new(Token {
+                    token_type: TokenType::Ident("bat".to_string()),
+                    range: Range::new((0, 10), (0, 12)),
+                }))),
+            ])),
+            Rc::new(Node::Tuple(vec![])),
+        )),
+        Rc::new(Node::Primary(Rc::new(Token {
+            token_type: TokenType::Ident("pgoo".to_string()),
+            range: Range::new((0, 16), (0, 19)),
+        }))),
+    ]);
+    let mut parser = Parser::new(&input);
+    match parser.access() {
+        Ok(output) => assert_eq!(expected, output),
+        Err(e) => {
+            dbg!(e);
+            panic!()
+        }
+    }
+}
 
 #[test]
 pub fn assignment_test() {
@@ -1321,7 +1407,7 @@ pub fn struct_test() {
                     }))),
                     Rc::new(Node::Tuple(vec![
                         Rc::new(Node::FunctionCall(
-                            Rc::new(Node::Access(
+                            Rc::new(Node::Access(vec![
                                 Rc::new(Node::Primary(Rc::new(Token {
                                     token_type: TokenType::Ident("z".to_string()),
                                     range: Range::new((12, 6), (12, 6)),
@@ -1330,7 +1416,7 @@ pub fn struct_test() {
                                     token_type: TokenType::Ident("bar".to_string()),
                                     range: Range::new((12, 8), (12, 10)),
                                 }))),
-                            )),
+                            ])),
                             Rc::new(Node::Tuple(vec![])),
                         )),
                     ])), 

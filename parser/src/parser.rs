@@ -4,37 +4,37 @@ use lexer::types::{Keyword, Token, TokenType};
 /// A syntactical node
 #[derive(Debug, PartialEq)]
 pub enum Node {
-    None,                                               // ()
-    Primary(Rc<Token>),                                     // prim
-    FunctionCall(Rc<Node>, Rc<Node>),                 // ident(tuple/expr)
-    Access(Rc<Node>, Rc<Node>),                       // ident.ident
-    Construct(Rc<Node>, Rc<Node>),                    // ident {block} 
-    Not(Rc<Node>),                                     // !expr
-    Negative(Rc<Node>),                                // -expr
-    Product(Rc<Node>, Rc<Node>),                      // expr * expr
-    Quotient(Rc<Node>, Rc<Node>),                     // expr / expr
-    Modulo(Rc<Node>, Rc<Node>),                       // expr % expr
-    Sum(Rc<Node>, Rc<Node>),                          // expr + expr
-    Difference(Rc<Node>, Rc<Node>),                   // expr - expr
-    LessThan(Rc<Node>, Rc<Node>),                     // expr < expr
-    GreaterThan(Rc<Node>, Rc<Node>),                  // expr > expr
-    LessThanOrEqualTo(Rc<Node>, Rc<Node>),            // expr <= expr
-    GreaterThanOrEqualTo(Rc<Node>, Rc<Node>),         // expr >= expr
-    Tuple(Vec<Rc<Node>>),                                   // (decl/expr, decl/expr, decl/expr)
-    Equal(Rc<Node>, Rc<Node>),                        // expr == expr
-    NotEqual(Rc<Node>, Rc<Node>),                     // expr != expr
-    And(Rc<Node>, Rc<Node>),                          // expr && expr
-    Or(Rc<Node>, Rc<Node>),                           // expr || expr
-    Declaration(Rc<Node>, Rc<Node>),                  // ident ident
-    Return(Rc<Node>),                                  // return expr;
-    Assignment(Rc<Node>, Rc<Node>),                   // decl/ident = expr;
-    If(Rc<Node>, Rc<Node>),                           // if cond {block}
-    Else(Rc<Node>, Rc<Node>),                         // stmt else {block}
-    While(Rc<Node>, Rc<Node>),                        // while cond {block}
+    None,                                           // ()
+    Primary(Rc<Token>),                             // prim
+    FunctionCall(Rc<Node>, Rc<Node>),               // ident(tuple/expr)
+    Access(Vec<Rc<Node>>),                          // ident.ident
+    Construct(Rc<Node>, Rc<Node>),                  // ident {block} 
+    Not(Rc<Node>),                                  // !expr
+    Negative(Rc<Node>),                             // -expr
+    Product(Rc<Node>, Rc<Node>),                    // expr * expr
+    Quotient(Rc<Node>, Rc<Node>),                   // expr / expr
+    Modulo(Rc<Node>, Rc<Node>),                     // expr % expr
+    Sum(Rc<Node>, Rc<Node>),                        // expr + expr
+    Difference(Rc<Node>, Rc<Node>),                 // expr - expr
+    LessThan(Rc<Node>, Rc<Node>),                   // expr < expr
+    GreaterThan(Rc<Node>, Rc<Node>),                // expr > expr
+    LessThanOrEqualTo(Rc<Node>, Rc<Node>),          // expr <= expr
+    GreaterThanOrEqualTo(Rc<Node>, Rc<Node>),       // expr >= expr
+    Tuple(Vec<Rc<Node>>),                           // (decl/expr, decl/expr, decl/expr)
+    Equal(Rc<Node>, Rc<Node>),                      // expr == expr
+    NotEqual(Rc<Node>, Rc<Node>),                   // expr != expr
+    And(Rc<Node>, Rc<Node>),                        // expr && expr
+    Or(Rc<Node>, Rc<Node>),                         // expr || expr
+    Declaration(Rc<Node>, Rc<Node>),                // ident ident
+    Return(Rc<Node>),                               // return expr;
+    Assignment(Rc<Node>, Rc<Node>),                 // decl/ident = expr;
+    If(Rc<Node>, Rc<Node>),                         // if cond {block}
+    Else(Rc<Node>, Rc<Node>),                       // stmt else {block}
+    While(Rc<Node>, Rc<Node>),                      // while cond {block}
     Func(Rc<Node>, Rc<Node>, Rc<Node>, Rc<Node>),   // func ident (tuple/decl) -> tuple/ident {block}
-    Struct(Rc<Node>, Rc<Node>),                       // struct ident {block}
-    Domain(Rc<Node>, Rc<Node>),                       // domain ident {block}
-    Block(Vec<Rc<Node>>),                                   // stmt; stmt; stmt;
+    Struct(Rc<Node>, Rc<Node>),                     // struct ident {block}
+    Domain(Rc<Node>, Rc<Node>),                     // domain ident {block}
+    Block(Vec<Rc<Node>>),                           // stmt; stmt; stmt;
 }
 
 /// A parser error
@@ -541,7 +541,7 @@ impl<'a> Parser<'a> {
 
     /// Returns the current construct expression
     pub(crate) fn construct(&mut self) -> Result<Node, ParserError> {
-        let mut expr = self.function_call()?;
+        let mut expr = self.access()?;
         match self.curr().token_type {
             TokenType::LBrace => {
                 expr = Node::Construct(
@@ -559,33 +559,55 @@ impl<'a> Parser<'a> {
         return Ok(expr);
     }
 
+    /// Returns the current access chain
+    pub(crate) fn access(&mut self) -> Result<Node, ParserError> {
+        let mut expr = self.function_call()?;
+        match self.curr().token_type {
+            TokenType::Dot => self.advance(),
+            _ => return Ok(expr),
+        }
+        let mut access = vec![Rc::new(expr)];
+        while !self.is_at_end() {
+            dbg!(self.curr());
+            access.push(Rc::new(self.ident()?));
+            if self.is_at_end() {
+                break;
+            }
+            match self.curr().token_type {
+                TokenType::Dot => {
+                    self.advance();
+                },
+                TokenType::LParen => {
+                    expr = Node::FunctionCall(
+                        Rc::new(Node::Access(access)),
+                        Rc::new(self.tuple()?),
+                    );
+                    if self.is_at_end() {
+                        return Ok(expr)
+                    }
+                    match self.curr().token_type {
+                        TokenType::Dot => {
+                            access = vec![Rc::new(expr)];
+                            self.advance();
+                        },
+                        _ => return Ok(expr)
+                    }
+                },
+                _ => break
+            }
+        }
+        return Ok(Node::Access(access));
+    }
+
     /// Returns the current function call
     pub(crate) fn function_call(&mut self) -> Result<Node, ParserError> {
-        let mut expr = self.access()?;
+        let mut expr = self.ident()?;
         match self.curr().token_type {
             TokenType::LParen => expr = Node::FunctionCall(
                     Rc::new(expr),
                     Rc::new(self.tuple()?),
                 ),
             _ => ()
-        }
-        return Ok(expr);
-    }
-
-    /// Returns the current access chain
-    pub(crate) fn access(&mut self) -> Result<Node, ParserError> {
-        let mut expr = self.ident()?;
-        while !self.is_at_end() {
-            match self.curr().token_type {
-                TokenType::Dot => {
-                    self.advance();
-                    expr = Node::Access(
-                        Rc::new(expr), 
-                        Rc::new(self.ident()?),
-                    )
-                },
-                _ => break
-            }
         }
         return Ok(expr);
     }
