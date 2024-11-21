@@ -71,6 +71,8 @@ pub enum ErrorRepr {
     ExpectedFunctionIdentifier,
     #[error("Expected a struct identifier string.")]
     ExpectedStructIdentifier,
+    #[error("Expected an accessable identifier string.")]
+    ExpectedAccessableIdentifier,
     #[error("Expected a struct field identifier string.")]
     ExpectedStructFieldIdentifier,
     #[error("Borrowing error. (Yeah you know the system in rust thats supposed to fix errors? it errored)")]
@@ -143,8 +145,10 @@ pub enum ErrorRepr {
     ExpectedFunctionParameter,
     #[error("Unexpected function parameter type.")]
     UnexpectedFunctionParameterType,
-    #[error("Field type is unexpectedly an unparsed identifier.")]
-    UnexpectedFieldTypeIdent,
+    #[error("Value type is unexpectedly an unparsed identifier.")]
+    UnexpectedValueTypeIdent,
+    #[error("Unexpected struct access identifier.")]
+    UnexpectedStructAccessIdent,
     #[error("Incomplete struct construct, field(s) are missing.")]
     ConstructFieldsMissing,
     #[error("Expected a field assignment.")]

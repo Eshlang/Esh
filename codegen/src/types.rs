@@ -82,9 +82,9 @@ pub enum CodegenBodyStackMode {
 }
 
 #[derive(Debug, Clone)]
-pub enum CodegenFunctionAccess {
+pub enum CodegenAccess {
     Domain(usize),
-    Variable(CodegenValue),
+    Value(CodegenValue),
 }
 
 #[derive(Clone, Debug, PartialEq)]

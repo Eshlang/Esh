@@ -9,7 +9,7 @@ use parser::parser::Node;
 use crate::buffer::CodeGenBuffer;
 use crate::errors::{CodegenError, ErrorRepr};
 use crate::context::{CodeDefinition, CodeScope, Context, ContextType};
-use crate::types::{CodegenBodyStackMode, CodegenExpressionStack, CodegenExpressionType, CodegenValue, Field, ValueType, PrimitiveType, RuntimeVariable};
+use crate::types::{CodegenBodyStackMode, CodegenExpressionStack, CodegenExpressionType, CodegenAccess, CodegenValue, Field, PrimitiveType, RuntimeVariable, ValueType};
 
 pub struct CodeGen {
     pub context_map: HashMap<String, usize>,
@@ -265,16 +265,21 @@ impl CodeGen {
         match Self::is_definition_primitive(ident_string) {
             Some(primitive) => Ok(ValueType::Primitive(primitive)),
             None => {
-                let definition = self.find_definition_by_ident(ident, context)?;
-                let definition = self.extract_definition_struct(definition)?;
+                let definition = self.find_definition_by_node(ident, context)?;
+                let definition = self.extract_definition_struct(&definition)?;
                 Ok(ValueType::Struct(definition))
             }
         }
     }
 
+    fn find_function_by_node(&self, node: &Rc<Node>, context: usize) -> Result<usize, CodegenError> {
+        let definition = self.find_definition_by_node(node, context)?;
+        Ok(self.extract_definition_function(&definition)?)
+    }
+
     fn find_function_by_ident(&self, ident: &Rc<Node>, context: usize) -> Result<usize, CodegenError> {
         let definition = self.find_definition_by_ident(ident, context)?;
-        Ok(self.extract_definition_function(definition)?)
+        Ok(self.extract_definition_function(&definition)?)
     }
 
     fn is_definition_primitive(ident_string: &str) -> Option<PrimitiveType> {
@@ -286,19 +291,19 @@ impl CodeGen {
         }
     }
 
-    fn extract_definition_context(&self, definition: CodeDefinition, prefer: Option<ContextType>) -> Result<usize, CodegenError> {
+    fn extract_definition_context(&self, definition: &CodeDefinition, prefer: Option<ContextType>) -> Result<usize, CodegenError> {
         match definition {
-            CodeDefinition::Context(context) => Ok(context),
+            CodeDefinition::Context(context) => Ok(*context),
             CodeDefinition::Multiple(definitions) => {
                 let mut result = CodegenError::err_headless(ErrorRepr::ExpectedContext);
                 for check_definition in definitions {
                     if let CodeDefinition::Context(context) = check_definition {
                         if let Some(prefer_type) = &prefer {
-                            if self.context_borrow(context)?.context_type != *prefer_type {
+                            if self.context_borrow(*context)?.context_type != *prefer_type {
                                 continue;
                             }
                         }
-                        result = Ok(context);
+                        result = Ok(*context);
                         break;
                     }
                 }
@@ -325,7 +330,7 @@ impl CodeGen {
         }
     }
 
-    fn extract_definition_struct(&self, definition: CodeDefinition) -> Result<usize, CodegenError> {
+    fn extract_definition_struct(&self, definition: &CodeDefinition) -> Result<usize, CodegenError> {
         let context = self.extract_definition_context(definition, Some(ContextType::Struct))?;
         if !matches!(self.context_borrow(context)?.context_type, ContextType::Struct) {
             return CodegenError::err_headless(ErrorRepr::ExpectedStruct);
@@ -333,7 +338,7 @@ impl CodeGen {
         Ok(context)
     }
 
-    fn extract_definition_function(&self, definition: CodeDefinition) -> Result<usize, CodegenError> {
+    fn extract_definition_function(&self, definition: &CodeDefinition) -> Result<usize, CodegenError> {
         let context = self.extract_definition_context(definition, None)?;
         if !matches!(self.context_borrow(context)?.context_type, ContextType::Function(..)) {
             return CodegenError::err_headless(ErrorRepr::ExpectedFunction);
@@ -341,18 +346,18 @@ impl CodeGen {
         Ok(context)
     }
 
-    fn find_definition_by_ident(&self, mut ident: &Rc<Node>, mut context: usize) -> Result<CodeDefinition, CodegenError> {
+    fn find_definition_by_node(&self, mut node: &Rc<Node>, mut context: usize) -> Result<CodeDefinition, CodegenError> {
         // access stuff
-        let no_depth = if let Node::Access(access_parent, access_child) = ident.as_ref() {
+        let no_depth = if let Node::Access(access_parent, access_child) = node.as_ref() {
             context = self.find_full_context_by_ident(access_parent, context)?;
-            ident = access_child;
+            node = access_child;
             true
         } else {
             false
         };
         
         
-        let ident_string = Self::get_primary_as_ident(ident, ErrorRepr::ExpectedDefinitionIdent)?;
+        let ident_string = Self::get_primary_as_ident(node, ErrorRepr::ExpectedDefinitionIdent)?;
         loop {
             let context_borrow = self.context_borrow(context)?;
             match context_borrow.definition_lookup.get(ident_string) {
@@ -361,13 +366,21 @@ impl CodeGen {
                 }
                 None => {
                     if context_borrow.id == context_borrow.parent_id || no_depth {
-                        return CodegenError::err(ident.clone(), ErrorRepr::DefinitionIdentNotRecognized)
+                        return CodegenError::err(node.clone(), ErrorRepr::DefinitionIdentNotRecognized)
                     }
                     context = context_borrow.parent_id;
                 }
             };
             drop(context_borrow);
         }
+    }
+
+    fn find_definition_by_ident(&self, ident: &Rc<Node>, context: usize) -> Result<CodeDefinition, CodegenError> {
+        let ident_string = Self::get_primary_as_ident(ident, ErrorRepr::ExpectedDefinitionIdent)?;
+        let context_borrow = self.context_borrow(context)?;
+        return Ok(context_borrow.definition_lookup
+            .get(ident_string)
+            .ok_or(CodegenError::new(ident.clone(), ErrorRepr::DefinitionIdentNotRecognized))?.clone());
     }
 
     fn find_full_context_by_ident(&self, ident: &Rc<Node>, mut context: usize) -> Result<usize, CodegenError> {
@@ -646,7 +659,7 @@ impl CodeGen {
     fn get_default_type_value(&mut self, field_type: &ValueType, set_ident: u32) -> Result<(), CodegenError> {
         match field_type {
             ValueType::Ident(..) => {
-                return CodegenError::err_headless(ErrorRepr::UnexpectedFieldTypeIdent)
+                return CodegenError::err_headless(ErrorRepr::UnexpectedValueTypeIdent)
             },
             ValueType::Struct(..) => {
                 self.buffer.code_buffer.push_instruction(instruction!(Var::Set, [
@@ -679,6 +692,55 @@ impl CodeGen {
 
     fn get_context_full_name(&self, context: usize) -> &String {
         &self.context_full_names[context]
+    }
+
+    fn generate_access(&mut self, context: usize, node: &Rc<Node>) -> Result<CodegenAccess, CodegenError> {
+        let mut new_context = context;
+        match node.as_ref() {
+            Node::Access(access_branch_node, access_ident_node) => {
+                let access_branch = self.generate_access(context, access_branch_node)?;
+                // let access_ident_string = Self::get_primary_as_ident(access_ident_node, ErrorRepr::ExpectedAccessableIdentifier)?;
+                match access_branch {
+                    CodegenAccess::Domain(domain) => {
+                        new_context = domain;
+                        Ok(CodegenAccess::Domain(self.find_domain_by_ident(access_ident_node, new_context, Some(1))?))
+                    }
+                    CodegenAccess::Value(val) => {
+                        match val.value_type {
+                            ValueType::Struct(struct_id) => {
+                                new_context = struct_id;
+                                let definition = self.find_definition_by_ident(access_ident_node, new_context)?;
+                                if let Ok(field) = self.extract_definition_field(&definition) {
+                                    let _field = self.context_borrow(new_context)?.fields[field].clone();
+                                    //self.
+                                    // Ok(CodegenAccess::Value(CodegenValue::new()))
+                                    // this needs to be an iterative process i'm stupid
+                                    todo!()
+                                } else if let Ok(_func) = self.extract_definition_function(&definition) {
+                                    todo!()
+                                } else {
+                                    CodegenError::err(node.clone(), ErrorRepr::UnexpectedStructAccessIdent)
+                                }
+                            }
+                            ValueType::Primitive(..) => {
+                                todo!("Unimplemented primitive type accessing");
+                            }
+                            _ => {
+                                CodegenError::err(node.clone(), ErrorRepr::UnexpectedValueTypeIdent)
+                            }
+                        }
+                    }
+
+                }
+
+            },
+            Node::Primary(..) => {
+                todo!()
+            }
+            _ => {
+                CodegenError::err(node.clone(), ErrorRepr::ExpectedAccessableNode)
+            }
+        }
     }
 
 
@@ -1114,7 +1176,7 @@ impl CodeGen {
     }
 
     fn call_function(&mut self, context: usize, function_ident: &Rc<Node>, function_params: &Rc<Node>, return_ident: u32) -> Result<ValueType, CodegenError> {
-        let func_context = self.find_function_by_ident(function_ident, context)?;
+        let func_context = self.find_function_by_node(function_ident, context)?;
         let func_name = self.get_context_full_name(func_context).clone();
         let func_id = self.buffer.use_function(func_name.as_str());
         let mut call_instruction = instruction!(Call, [
