@@ -9,7 +9,7 @@ use parser::parser::Node;
 use crate::buffer::CodeGenBuffer;
 use crate::errors::{CodegenError, ErrorRepr};
 use crate::context::{CodeDefinition, CodeScope, Context, ContextType};
-use crate::types::{CodegenBodyStackMode, CodegenExpressionStack, CodegenExpressionType, Field, FieldType, PrimitiveType, RuntimeVariable};
+use crate::types::{CodegenBodyStackMode, CodegenExpressionStack, CodegenExpressionType, CodegenValue, Field, ValueType, PrimitiveType, RuntimeVariable};
 
 pub struct CodeGen {
     pub context_map: HashMap<String, usize>,
@@ -92,7 +92,7 @@ impl CodeGen {
                     });
                 }
                 (Node::Func(ident, params, return_type, body), ContextType::Struct | ContextType::Domain) => {
-                    let return_type_field = FieldType::Ident(return_type.clone());
+                    let return_type_field = ValueType::Ident(return_type.clone());
                     let params = Self::extract_declaration_vec(params)?;
                     let func_fields_base = {
                         let mut res = Vec::new();
@@ -110,7 +110,7 @@ impl CodeGen {
                         let param_name_ident = Self::get_primary_as_ident(param_name, ErrorRepr::ExpectedFunctionParamIdent)?;
                         let field_id = child_modify.fields.len();
                         child_modify.fields.push(Field {
-                            field_type: FieldType::Ident(param_type.clone()),
+                            field_type: ValueType::Ident(param_type.clone()),
                             scope: CodeScope::Public,
                         });
                         Self::add_definition(&mut child_modify, param_name_ident.clone(), CodeDefinition::Field(field_id))?;
@@ -131,7 +131,7 @@ impl CodeGen {
                     field_names.push(field_name_ident.clone());
                     Self::add_definition(&mut current_context, field_name_ident.clone(), CodeDefinition::Field(field_id))?;
                     current_context.fields.push(Field{
-                        field_type: FieldType::Ident(field_type.clone()),
+                        field_type: ValueType::Ident(field_type.clone()),
                         scope: CodeScope::Public,
                     })
                 }
@@ -226,11 +226,11 @@ impl CodeGen {
             drop(context_get);
 
             if let ContextType::Function(func_return_type) = context_type {
-                if let FieldType::Ident(func_return_type_node) = func_return_type {
+                if let ValueType::Ident(func_return_type_node) = func_return_type {
                     let return_type_set = if !matches!(func_return_type_node.as_ref(), Node::None) {
                         self.find_type_by_ident(&func_return_type_node, context_id)?
                     } else { // No return type
-                        FieldType::Primitive(PrimitiveType::None)
+                        ValueType::Primitive(PrimitiveType::None)
                     };
                     let mut context_get_mut = self.context_borrow_mut(context_id)?;
                     context_get_mut.context_type = ContextType::Function(return_type_set);
@@ -239,7 +239,7 @@ impl CodeGen {
             }
             for field in 0..fields_len {
                 let context_get = self.context_borrow(context_id)?;
-                let FieldType::Ident(field_ident) = context_get.fields.get(field).unwrap().field_type.clone() else {
+                let ValueType::Ident(field_ident) = context_get.fields.get(field).unwrap().field_type.clone() else {
                     continue;
                 };
                 drop(context_get);
@@ -260,14 +260,14 @@ impl CodeGen {
         CodegenError::map_headless(self.contexts[context].try_borrow_mut(), ErrorRepr::BadMutBorrow)
     }
 
-    fn find_type_by_ident(&self, ident: &Rc<Node>, context: usize) -> Result<FieldType, CodegenError> {
+    fn find_type_by_ident(&self, ident: &Rc<Node>, context: usize) -> Result<ValueType, CodegenError> {
         let ident_string = Self::get_primary_as_ident(ident, ErrorRepr::ExpectedTypeIdent)?;
         match Self::is_definition_primitive(ident_string) {
-            Some(primitive) => Ok(FieldType::Primitive(primitive)),
+            Some(primitive) => Ok(ValueType::Primitive(primitive)),
             None => {
                 let definition = self.find_definition_by_ident(ident, context)?;
                 let definition = self.extract_definition_struct(definition)?;
-                Ok(FieldType::Struct(definition))
+                Ok(ValueType::Struct(definition))
             }
         }
     }
@@ -462,22 +462,19 @@ impl CodeGen {
         self.find_variable_by_name_full(context, var_name, node)
     }
 
-    fn set_variable_to_ident(&mut self, context: usize, node: &Rc<Node>, set_ident: u32) -> Result<FieldType, CodegenError> {
+    fn set_variable_to_ident(&mut self, context: usize, node: &Rc<Node>, set_ident: u32) -> Result<ValueType, CodegenError> {
         match node.as_ref() {
             Node::Primary(..) => {
                 let var_name = Self::get_primary_as_ident(node, ErrorRepr::ExpectedVariable)?;
-                let (runtime_var_ident, runtime_var_type) = {
-                    let g = self.find_variable_by_name_full(context, var_name, node)?;
-                    (g.ident, g.field_type.clone())
-                };
+                let runtime_var = self.find_variable_by_name_full(context, var_name, node)?.variable.clone();
                 self.buffer.code_buffer.push_instruction(instruction!(Var::Set, [
-                    (Ident, set_ident), (Ident, runtime_var_ident)
+                    (Ident, set_ident), (Ident, runtime_var.ident)
                 ]));
-                Ok(runtime_var_type)
+                Ok(runtime_var.value_type)
             }
             Node::Access(access_parent, access_field) => {
                 let accessed_field_type = self.set_variable_to_ident(context, access_parent, set_ident)?;
-                let FieldType::Struct(accessed_struct_id) = accessed_field_type else {
+                let ValueType::Struct(accessed_struct_id) = accessed_field_type else {
                     return CodegenError::err(access_parent.clone(), ErrorRepr::ExpectedAccessableType);
                 };
                 let struct_context = self.context_borrow(accessed_struct_id)?;
@@ -501,18 +498,15 @@ impl CodeGen {
         }
     }
 
-    fn set_ident_to_variable(&mut self, context: usize, node: &Rc<Node>, get_ident: u32) -> Result<FieldType, CodegenError> {
+    fn set_ident_to_variable(&mut self, context: usize, node: &Rc<Node>, get_ident: u32) -> Result<ValueType, CodegenError> {
         match node.as_ref() {
             Node::Primary(..) => {
                 let var_name = Self::get_primary_as_ident(node, ErrorRepr::ExpectedVariable)?;
-                let (runtime_var_ident, runtime_var_type) = {
-                    let g = self.find_variable_by_name_full(context, var_name, node)?;
-                    (g.ident, g.field_type.clone())
-                };
+                let runtime_var = self.find_variable_by_name_full(context, var_name, node)?.variable.clone();
                 self.buffer.code_buffer.push_instruction(instruction!(Var::Set, [
-                    (Ident, runtime_var_ident), (Ident, get_ident)
+                    (Ident, runtime_var.ident), (Ident, get_ident)
                 ]));
-                Ok(runtime_var_type)
+                Ok(runtime_var.value_type)
             }
             Node::Access(..) => {
                 let mut allocated_registers = vec![0];
@@ -533,7 +527,7 @@ impl CodeGen {
                         }
                     }
                 }
-                let mut previous = (0u32, FieldType::Primitive(PrimitiveType::None));
+                let mut previous = CodegenValue::default();
                 let mut end_instruction_stack = Vec::new();
                 for _ in 0..node_stack.len()-1 {
                     allocated_registers.push(self.buffer.allocate_line_register());
@@ -541,16 +535,13 @@ impl CodeGen {
                 for (access_node_ind, access_node) in node_stack.into_iter().rev().enumerate() {
                     if access_node_ind == 0 { // Root node
                         let var_name = Self::get_primary_as_ident(access_node, ErrorRepr::ExpectedVariable)?;
-                        previous = {
-                            let g = self.find_variable_by_name_full(context, var_name, access_node)?;
-                            (g.ident, g.field_type.clone())
-                        };
-                        allocated_registers[0] = previous.0;
+                        previous = self.find_variable_by_name_full(context, var_name, access_node)?.variable.clone();
+                        allocated_registers[0] = previous.ident;
                     } else {
                         let register = allocated_registers[access_node_ind];
                         let register_next = allocated_registers.get(access_node_ind+1).map(|x| *x);
-                        previous = match previous.1 {
-                            FieldType::Struct(parent_struct) => {
+                        previous = match previous.value_type {
+                            ValueType::Struct(parent_struct) => {
                                 let struct_context = self.context_borrow(parent_struct)?;
                                 let access_field_ident = Self::get_primary_as_ident(access_node, ErrorRepr::ExpectedVariable)?;
                                 let field_id = self.extract_definition_field(
@@ -563,17 +554,17 @@ impl CodeGen {
                                 drop(struct_context);
                                 if register_next.is_none() {
                                     end_instruction_stack.push(instruction!(Var::SetListValue, [
-                                        (Ident, previous.0), (Int, field_id+1), (Ident, get_ident)
+                                        (Ident, previous.ident), (Int, field_id+1), (Ident, get_ident)
                                         ]));
                                 } else {
                                     self.buffer.code_buffer.push_instruction(instruction!(Var::GetListValue, [
-                                        (Ident, register), (Ident, previous.0), (Int, field_id+1)
+                                        (Ident, register), (Ident, previous.ident), (Int, field_id+1)
                                     ]));
                                     end_instruction_stack.push(instruction!(Var::SetListValue, [
-                                        (Ident, previous.0), (Int, field_id+1), (Ident, register)
+                                        (Ident, previous.ident), (Int, field_id+1), (Ident, register)
                                     ]));
                                 }
-                                (register, field_type)
+                                CodegenValue::new(register, field_type)
                             }
                             _ => {
                                 return CodegenError::err(access_node.clone(), ErrorRepr::ExpectedAccessableNode);
@@ -586,7 +577,7 @@ impl CodeGen {
                 }
                 allocated_registers.remove(0);
                 self.buffer.free_line_registers(allocated_registers)?;
-                Ok(previous.1)
+                Ok(previous.value_type)
             }
             _ => {
                 CodegenError::err(node.clone(), ErrorRepr::ExpectedVariable)
@@ -594,9 +585,9 @@ impl CodeGen {
         }
     }
     
-    fn create_struct_instance_from_node(&mut self, context: usize, construct_ident: &Rc<Node>, construct_body_node: &Rc<Node>, set_ident: u32) -> Result<FieldType, CodegenError> {
+    fn create_struct_instance_from_node(&mut self, context: usize, construct_ident: &Rc<Node>, construct_body_node: &Rc<Node>, set_ident: u32) -> Result<ValueType, CodegenError> {
         let construct_field_type = self.find_type_by_ident(construct_ident, context)?;
-        let FieldType::Struct(struct_type) = construct_field_type else {
+        let ValueType::Struct(struct_type) = construct_field_type else {
             return CodegenError::err(construct_ident.clone(), ErrorRepr::ExpectedStructIdentifier);
         };
         let Node::Block(construct_body) = construct_body_node.as_ref() else {
@@ -619,7 +610,7 @@ impl CodeGen {
             let field_var_ident = self.buffer.allocate_line_register();
             allocated_registers.push(field_var_ident);
             let field_expression = self.generate_expression(context, assigned_value, field_var_ident)?;
-            if field_expression.1 != field_type {
+            if field_expression.value_type != field_type {
                 return CodegenError::err(assigned_value.clone(), ErrorRepr::UnexpectedStructFieldType)
             }
             param_map.insert(field, field_var_ident);
@@ -652,23 +643,23 @@ impl CodeGen {
         Ok(())
     }
 
-    fn get_default_type_value(&mut self, field_type: &FieldType, set_ident: u32) -> Result<(), CodegenError> {
+    fn get_default_type_value(&mut self, field_type: &ValueType, set_ident: u32) -> Result<(), CodegenError> {
         match field_type {
-            FieldType::Ident(..) => {
+            ValueType::Ident(..) => {
                 return CodegenError::err_headless(ErrorRepr::UnexpectedFieldTypeIdent)
             },
-            FieldType::Struct(..) => {
+            ValueType::Struct(..) => {
                 self.buffer.code_buffer.push_instruction(instruction!(Var::Set, [
                     (Ident, set_ident), (Int, 0)
                 ]))
                 // self.create_struct_instance(*struct_ind, set_ident)?;
             }
-            FieldType::Primitive(PrimitiveType::Bool | PrimitiveType::Number | PrimitiveType::None) => {
+            ValueType::Primitive(PrimitiveType::Bool | PrimitiveType::Number | PrimitiveType::None) => {
                 self.buffer.code_buffer.push_instruction(instruction!(Var::Set, [
                     (Ident, set_ident), (Int, 0)
                 ]))
             },
-            FieldType::Primitive(PrimitiveType::String) => {
+            ValueType::Primitive(PrimitiveType::String) => {
                 self.buffer.code_buffer.push_instruction(instruction!(Var::Set, [
                     (Ident, set_ident), (String, "")
                 ]))
@@ -690,11 +681,13 @@ impl CodeGen {
         &self.context_full_names[context]
     }
 
-    fn generate_expression(&mut self, context: usize, root_node: &Rc<Node>, set_ident: u32) -> Result<(u32, FieldType), CodegenError> {
+
+
+    fn generate_expression(&mut self, context: usize, root_node: &Rc<Node>, set_ident: u32) -> Result<CodegenValue, CodegenError> {
         //##println!("{:#?}", root_node);
         let mut expression_stack= VecDeque::new();
         expression_stack.push_back(CodegenExpressionStack::Node(root_node));
-        let mut ident_stack = Vec::new();
+        let mut ident_stack: Vec<CodegenValue> = Vec::new();
         let mut register_counter = 0;
         let mut allocated_registers = Vec::new();
         let mut calculated = false;
@@ -714,33 +707,32 @@ impl CodeGen {
                     match node.as_ref() {
                         Node::Access(..) => {
                             let field_type = self.set_variable_to_ident(context, node, ident)?;
-                            ident_stack.push((ident, field_type.clone()));
+                            ident_stack.push(CodegenValue::new(ident, field_type.clone()));
                             calculated = true;
                         }
                         Node::Primary(token) => {
-                            let (ident, ident_type) = match &token.as_ref().token_type {
+                            let variable = match &token.as_ref().token_type {
                                 TokenType::Ident(..) => {
-                                    let v = self.find_variable_by_name(context, node)?;
-                                    (v.ident, v.field_type.clone())
+                                    self.find_variable_by_name(context, node)?.variable.clone()
                                 },
-                                TokenType::String(t) => (self.buffer.use_string(t.as_str()), FieldType::Primitive(PrimitiveType::String)),
-                                TokenType::Number(t) => (self.buffer.use_number(ParameterValue::Float(*t)), FieldType::Primitive(PrimitiveType::Number)),
-                                TokenType::Keyword(Keyword::True) => (self.buffer.use_number(ParameterValue::Int(1)), FieldType::Primitive(PrimitiveType::Bool)),
-                                TokenType::Keyword(Keyword::False) => (self.buffer.use_number(ParameterValue::Int(0)), FieldType::Primitive(PrimitiveType::Bool)),
+                                TokenType::String(t) => CodegenValue::new(self.buffer.use_string(t.as_str()), ValueType::Primitive(PrimitiveType::String)),
+                                TokenType::Number(t) => CodegenValue::new(self.buffer.use_number(ParameterValue::Float(*t)), ValueType::Primitive(PrimitiveType::Number)),
+                                TokenType::Keyword(Keyword::True) => CodegenValue::new(self.buffer.use_number(ParameterValue::Int(1)), ValueType::Primitive(PrimitiveType::Bool)),
+                                TokenType::Keyword(Keyword::False) => CodegenValue::new(self.buffer.use_number(ParameterValue::Int(0)), ValueType::Primitive(PrimitiveType::Bool)),
                                 _ => {
                                     return CodegenError::err(root_node.clone(), ErrorRepr::UnexpectedExpressionToken)
                                 }
                             };
-                            ident_stack.push((ident, ident_type));
+                            ident_stack.push(variable);
                         },
                         Node::FunctionCall(func_ident, func_params) => {
                             let func_type = self.call_function(context, func_ident, func_params, ident)?;
-                            ident_stack.push((ident, func_type));
+                            ident_stack.push(CodegenValue::new(ident, func_type));
                             calculated = true;
                         },
                         Node::Construct(construct_ident, construct_body) => {
                             let created_struct = self.create_struct_instance_from_node(context, construct_ident, construct_body, ident)?;
-                            ident_stack.push((ident, created_struct));
+                            ident_stack.push(CodegenValue::new(ident, created_struct));
                             calculated = true;
                         },
                         Node::Sum(nl, nr) => {
@@ -861,12 +853,12 @@ impl CodeGen {
                     let mut types = Vec::new();
                     for _i in 0..elms {
                         let ident_from_stack = ident_stack.pop().expect("Ident stack should pop when calculating.");
-                        parameters.push(Parameter::from_ident(ident_from_stack.0));
-                        types.push(ident_from_stack.1)
+                        parameters.push(Parameter::from_ident(ident_from_stack.ident));
+                        types.push(ident_from_stack.value_type)
                     }
                     calculated = true;
                     let result_type = self.calculate_expression(expression_type, register_ident, parameters, types, root_node)?;
-                    ident_stack.push((register_ident, result_type));
+                    ident_stack.push(CodegenValue::new(register_ident, result_type));
                 }
                 
             }
@@ -876,7 +868,7 @@ impl CodeGen {
             self.buffer.code_buffer.push_instruction(instruction!(
                 Var::Set, [
                     (Ident, set_ident),
-                    (Ident, final_value.0)
+                    (Ident, final_value.ident)
                 ]
             ));
         }
@@ -884,11 +876,11 @@ impl CodeGen {
         Ok(final_value)
     }
 
-    fn calculate_expression(&mut self, expression_type: CodegenExpressionType, ident: u32, parameters: Vec<Parameter>, types: Vec<FieldType>, root_node: &Rc<Node>) -> Result<FieldType, CodegenError> {
+    fn calculate_expression(&mut self, expression_type: CodegenExpressionType, ident: u32, parameters: Vec<Parameter>, types: Vec<ValueType>, root_node: &Rc<Node>) -> Result<ValueType, CodegenError> {
         let result_type = match expression_type {
             CodegenExpressionType::Add => {
                 match (types.get(0).unwrap(), types.get(1).unwrap()) {
-                    (FieldType::Primitive(PrimitiveType::String), FieldType::Primitive(PrimitiveType::String)) => {
+                    (ValueType::Primitive(PrimitiveType::String), ValueType::Primitive(PrimitiveType::String)) => {
                         self.buffer.code_buffer.push_instruction(instruction!(
                             Var::String, [
                                 (Ident, ident)
@@ -896,9 +888,9 @@ impl CodeGen {
                         ));
                         self.buffer.code_buffer.push_parameter(parameters[0].clone());
                         self.buffer.code_buffer.push_parameter(parameters[1].clone());
-                        FieldType::Primitive(PrimitiveType::String)
+                        ValueType::Primitive(PrimitiveType::String)
                     },
-                    (FieldType::Primitive(PrimitiveType::Number), FieldType::Primitive(PrimitiveType::Number)) => {
+                    (ValueType::Primitive(PrimitiveType::Number), ValueType::Primitive(PrimitiveType::Number)) => {
                         self.buffer.code_buffer.push_instruction(instruction!(
                             Var::Add, [
                                 (Ident, ident)
@@ -906,7 +898,7 @@ impl CodeGen {
                         ));
                         self.buffer.code_buffer.push_parameter(parameters[0].clone());
                         self.buffer.code_buffer.push_parameter(parameters[1].clone());
-                        FieldType::Primitive(PrimitiveType::Number)
+                        ValueType::Primitive(PrimitiveType::Number)
                     },
                     _ => {
                         return CodegenError::err(root_node.clone(), ErrorRepr::InvalidExpressionTypeConversion)
@@ -915,7 +907,7 @@ impl CodeGen {
             },
             CodegenExpressionType::Sub => {
                 match (types.get(0).unwrap(), types.get(1).unwrap()) {
-                    (FieldType::Primitive(PrimitiveType::Number), FieldType::Primitive(PrimitiveType::Number)) => {
+                    (ValueType::Primitive(PrimitiveType::Number), ValueType::Primitive(PrimitiveType::Number)) => {
                         self.buffer.code_buffer.push_instruction(instruction!(
                             Var::Sub, [
                                 (Ident, ident)
@@ -923,7 +915,7 @@ impl CodeGen {
                         ));
                         self.buffer.code_buffer.push_parameter(parameters[0].clone());
                         self.buffer.code_buffer.push_parameter(parameters[1].clone());
-                        FieldType::Primitive(PrimitiveType::Number)
+                        ValueType::Primitive(PrimitiveType::Number)
                     },
                     _ => {
                         return CodegenError::err(root_node.clone(), ErrorRepr::InvalidExpressionTypeConversion)
@@ -932,7 +924,7 @@ impl CodeGen {
             },
             CodegenExpressionType::Mul => {
                 match (types.get(0).unwrap(), types.get(1).unwrap()) {
-                    (FieldType::Primitive(PrimitiveType::Number), FieldType::Primitive(PrimitiveType::Number)) => {
+                    (ValueType::Primitive(PrimitiveType::Number), ValueType::Primitive(PrimitiveType::Number)) => {
                         self.buffer.code_buffer.push_instruction(instruction!(
                             Var::Mul, [
                                 (Ident, ident)
@@ -940,9 +932,9 @@ impl CodeGen {
                         ));
                         self.buffer.code_buffer.push_parameter(parameters[0].clone());
                         self.buffer.code_buffer.push_parameter(parameters[1].clone());
-                        FieldType::Primitive(PrimitiveType::Number)
+                        ValueType::Primitive(PrimitiveType::Number)
                     },
-                    (FieldType::Primitive(PrimitiveType::String), FieldType::Primitive(PrimitiveType::Number)) => {
+                    (ValueType::Primitive(PrimitiveType::String), ValueType::Primitive(PrimitiveType::Number)) => {
                         self.buffer.code_buffer.push_instruction(instruction!(
                             Var::RepeatString, [
                                 (Ident, ident)
@@ -950,9 +942,9 @@ impl CodeGen {
                         ));
                         self.buffer.code_buffer.push_parameter(parameters[0].clone());
                         self.buffer.code_buffer.push_parameter(parameters[1].clone());
-                        FieldType::Primitive(PrimitiveType::String)
+                        ValueType::Primitive(PrimitiveType::String)
                     },
-                    (FieldType::Primitive(PrimitiveType::Number), FieldType::Primitive(PrimitiveType::String)) => {
+                    (ValueType::Primitive(PrimitiveType::Number), ValueType::Primitive(PrimitiveType::String)) => {
                         self.buffer.code_buffer.push_instruction(instruction!(
                             Var::RepeatString, [
                                 (Ident, ident)
@@ -960,7 +952,7 @@ impl CodeGen {
                         ));
                         self.buffer.code_buffer.push_parameter(parameters[1].clone());
                         self.buffer.code_buffer.push_parameter(parameters[0].clone());
-                        FieldType::Primitive(PrimitiveType::String)
+                        ValueType::Primitive(PrimitiveType::String)
                     },
                     _ => {
                         return CodegenError::err(root_node.clone(), ErrorRepr::InvalidExpressionTypeConversion)
@@ -969,7 +961,7 @@ impl CodeGen {
             },
             CodegenExpressionType::Div => {
                 match (types.get(0).unwrap(), types.get(1).unwrap()) {
-                    (FieldType::Primitive(PrimitiveType::Number), FieldType::Primitive(PrimitiveType::Number)) => {
+                    (ValueType::Primitive(PrimitiveType::Number), ValueType::Primitive(PrimitiveType::Number)) => {
                         self.buffer.code_buffer.push_instruction(instruction!(
                             Var::Div, [
                                 (Ident, ident)
@@ -977,7 +969,7 @@ impl CodeGen {
                         ));
                         self.buffer.code_buffer.push_parameter(parameters[0].clone());
                         self.buffer.code_buffer.push_parameter(parameters[1].clone());
-                        FieldType::Primitive(PrimitiveType::Number)
+                        ValueType::Primitive(PrimitiveType::Number)
                     },
                     _ => {
                         return CodegenError::err(root_node.clone(), ErrorRepr::InvalidExpressionTypeConversion)
@@ -986,7 +978,7 @@ impl CodeGen {
             },
             CodegenExpressionType::Eq | CodegenExpressionType::NotEq => {
                 match (types.get(0).unwrap(), types.get(1).unwrap()) {
-                    (FieldType::Primitive(_), FieldType::Primitive(_)) => {
+                    (ValueType::Primitive(_), ValueType::Primitive(_)) => {
                         self.buffer.code_buffer.push_instruction(
                             match expression_type {
                                 CodegenExpressionType::NotEq => instruction!(Varif::NotEq),
@@ -1010,11 +1002,11 @@ impl CodeGen {
                     (Int, 0)
                 ]));
                 self.buffer.code_buffer.push_instruction(instruction!(EndIf));
-                FieldType::Primitive(PrimitiveType::Bool)
+                ValueType::Primitive(PrimitiveType::Bool)
             },
             CodegenExpressionType::Not => { //we're basically doing the operation ``newbool = 1 - oldbool``.
                 match types.get(0).unwrap() {
-                    FieldType::Primitive(PrimitiveType::Bool) => {
+                    ValueType::Primitive(PrimitiveType::Bool) => {
                         self.buffer.code_buffer.push_instruction(instruction!(
                             Var::Sub, [
                                 (Ident, ident),
@@ -1022,7 +1014,7 @@ impl CodeGen {
                             ]
                         ));
                         self.buffer.code_buffer.push_parameter(parameters[0].clone());
-                        FieldType::Primitive(PrimitiveType::Bool)
+                        ValueType::Primitive(PrimitiveType::Bool)
                     },
                     _ => {
                         return CodegenError::err(root_node.clone(), ErrorRepr::InvalidExpressionTypeConversion)
@@ -1031,7 +1023,7 @@ impl CodeGen {
             },
             CodegenExpressionType::Or => {
                 match (types.get(0).unwrap(), types.get(1).unwrap()) {
-                    (FieldType::Primitive(PrimitiveType::Bool), FieldType::Primitive(PrimitiveType::Bool)) => {
+                    (ValueType::Primitive(PrimitiveType::Bool), ValueType::Primitive(PrimitiveType::Bool)) => {
                         self.buffer.code_buffer.push_instruction(instruction!(
                             Var::Bitwise, [
                                 (Ident, ident)
@@ -1041,7 +1033,7 @@ impl CodeGen {
                         ));
                         self.buffer.code_buffer.push_parameter(parameters[0].clone());
                         self.buffer.code_buffer.push_parameter(parameters[1].clone());
-                        FieldType::Primitive(PrimitiveType::Bool)
+                        ValueType::Primitive(PrimitiveType::Bool)
                     },
                     _ => {
                         return CodegenError::err(root_node.clone(), ErrorRepr::InvalidExpressionTypeConversion)
@@ -1050,7 +1042,7 @@ impl CodeGen {
             },
             CodegenExpressionType::And => {
                 match (types.get(0).unwrap(), types.get(1).unwrap()) {
-                    (FieldType::Primitive(PrimitiveType::Bool), FieldType::Primitive(PrimitiveType::Bool)) => {
+                    (ValueType::Primitive(PrimitiveType::Bool), ValueType::Primitive(PrimitiveType::Bool)) => {
                         self.buffer.code_buffer.push_instruction(instruction!(
                             Var::Bitwise, [
                                 (Ident, ident)
@@ -1060,7 +1052,7 @@ impl CodeGen {
                         ));
                         self.buffer.code_buffer.push_parameter(parameters[0].clone());
                         self.buffer.code_buffer.push_parameter(parameters[1].clone());
-                        FieldType::Primitive(PrimitiveType::Bool)
+                        ValueType::Primitive(PrimitiveType::Bool)
                     },
                     _ => {
                         return CodegenError::err(root_node.clone(), ErrorRepr::InvalidExpressionTypeConversion)
@@ -1069,7 +1061,7 @@ impl CodeGen {
             },
             CodegenExpressionType::Greater | CodegenExpressionType::GreaterEq | CodegenExpressionType::Lesser | CodegenExpressionType::LesserEq => {
                 match (types.get(0).unwrap(), types.get(1).unwrap()) {
-                    (FieldType::Primitive(PrimitiveType::Number), FieldType::Primitive(PrimitiveType::Number)) => {
+                    (ValueType::Primitive(PrimitiveType::Number), ValueType::Primitive(PrimitiveType::Number)) => {
                         self.buffer.code_buffer.push_instruction(
                             match expression_type {
                                 CodegenExpressionType::Greater => instruction!(Varif::Greater),
@@ -1096,7 +1088,7 @@ impl CodeGen {
                     (Int, 0)
                 ]));
                 self.buffer.code_buffer.push_instruction(instruction!(EndIf));
-                FieldType::Primitive(PrimitiveType::Bool)
+                ValueType::Primitive(PrimitiveType::Bool)
             },
         };
         Ok(result_type)
@@ -1114,15 +1106,14 @@ impl CodeGen {
         self.runtime_vars[context].insert(
             runtime_str.to_owned(), 
             RuntimeVariable::new(
-                decl_type_str,
-                var_name,
-                var_ident
+                CodegenValue::new(var_ident, decl_type_str),
+                var_name
             )
         );
         Ok((self.runtime_vars[context].get(&runtime_str).unwrap(), runtime_str))
     }
 
-    fn call_function(&mut self, context: usize, function_ident: &Rc<Node>, function_params: &Rc<Node>, return_ident: u32) -> Result<FieldType, CodegenError> {
+    fn call_function(&mut self, context: usize, function_ident: &Rc<Node>, function_params: &Rc<Node>, return_ident: u32) -> Result<ValueType, CodegenError> {
         let func_context = self.find_function_by_ident(function_ident, context)?;
         let func_name = self.get_context_full_name(func_context).clone();
         let func_id = self.buffer.use_function(func_name.as_str());
@@ -1132,7 +1123,7 @@ impl CodeGen {
         let ContextType::Function(ret_type_field) = self.context_borrow(func_context)?.context_type.clone() else {
             return CodegenError::err_headless(ErrorRepr::Generic);
         };
-        if !matches!(ret_type_field, FieldType::Primitive(PrimitiveType::None)) { // function has a return value
+        if !matches!(ret_type_field, ValueType::Primitive(PrimitiveType::None)) { // function has a return value
             call_instruction.params.push(Parameter::from_ident(return_ident))
         }
         let params = Self::extract_parameter_vec(function_params)?;
@@ -1148,7 +1139,7 @@ impl CodeGen {
             let param_var_ident = self.buffer.allocate_line_register();
             param_var_idents.push(param_var_ident);
             let param_expression = self.generate_expression(context, &param, param_var_ident)?;
-            if param_expression.1 != param_field.field_type {
+            if param_expression.value_type != param_field.field_type {
                 return CodegenError::err(param.clone(), ErrorRepr::UnexpectedFunctionParameterType)
             }
             call_instruction.params.push(Parameter::from_ident(param_var_ident));
@@ -1160,7 +1151,7 @@ impl CodeGen {
     }
 
 
-    fn generate_function_code(&mut self, context: usize, body: Rc<Vec<Rc<Node>>>, fields: Vec<Field>, return_type: FieldType) -> Result<(), CodegenError> {
+    fn generate_function_code(&mut self, context: usize, body: Rc<Vec<Rc<Node>>>, fields: Vec<Field>, return_type: ValueType) -> Result<(), CodegenError> {
         // self.return_runtimes[context] = 
         let parent = self.parents[context];
         let parent_context = self.context_borrow(parent)?.context_type.clone();
@@ -1180,7 +1171,7 @@ impl CodeGen {
         } else {
             None
         };
-        let return_type_ident = if !matches!(return_type, FieldType::Primitive(PrimitiveType::None)) {
+        let return_type_ident = if !matches!(return_type, ValueType::Primitive(PrimitiveType::None)) {
             let return_type_param_ident = self.buffer.use_return_param("fr");
             self.buffer.code_buffer.push_parameter(Parameter::from_ident(return_type_param_ident.0));
             Some(return_type_param_ident.1)
@@ -1241,11 +1232,11 @@ impl CodeGen {
                         Node::Declaration(decl_type, decl_ident) => {
                             let declaration = self.declare_runtime_variable(context, decl_type, decl_ident)?;
                             block_runtime_vars_add.push(declaration.1);
-                            (declaration.0.ident, Some(declaration.0.field_type.clone()), true)
+                            (declaration.0.variable.ident, Some(declaration.0.variable.value_type.clone()), true)
                         }
                         Node::Primary(..) => {
                             let runtime_var = self.find_variable_by_name(context, assign_var)?;
-                            (runtime_var.ident, Some(runtime_var.field_type.clone()), true)
+                            (runtime_var.variable.ident, Some(runtime_var.variable.value_type.clone()), true)
                         }
                         Node::Access(..) => {
                             let allocate = self.buffer.allocate_line_register();
@@ -1260,7 +1251,7 @@ impl CodeGen {
                     if !already_set {
                         runtime_var_field_type = Some(self.set_ident_to_variable(context, assign_var, runtime_var_ident)?);
                     }
-                    if runtime_var_field_type.is_some_and(|field_type| field_type != expr_id.1) {
+                    if runtime_var_field_type.is_some_and(|field_type| field_type != expr_id.value_type) {
                         return CodegenError::err(statement.clone(), ErrorRepr::InvalidVariableType)
                     }
                     self.buffer.free_line_registers(allocated_registers)?;
@@ -1276,7 +1267,7 @@ impl CodeGen {
                 Node::If(if_condition, if_block) => {
                     let allocated_bool = self.buffer.allocate_line_register();
                     let expr_id = self.generate_expression(context, if_condition, allocated_bool)?;
-                    if !matches!(expr_id.1, FieldType::Primitive(PrimitiveType::Bool)) {
+                    if !matches!(expr_id.value_type, ValueType::Primitive(PrimitiveType::Bool)) {
                         return CodegenError::err(statement.clone(), ErrorRepr::InvalidVariableType)
                     }
                     self.buffer.code_buffer.push_instruction(instruction!(
@@ -1300,7 +1291,7 @@ impl CodeGen {
                             return CodegenError::err(return_value.clone(), ErrorRepr::UnexpectedReturnValue)
                         };
                         let expr_id = self.generate_expression(context, return_value, return_type_ident_some)?;
-                        if expr_id.1 != return_type {
+                        if expr_id.value_type != return_type {
                             return CodegenError::err(statement.clone(), ErrorRepr::InvalidReturnValueType)
                         }
                     }
@@ -1317,7 +1308,7 @@ impl CodeGen {
                     self.buffer.code_buffer.push_instruction(instruction!(Rep::Forever));
                     let allocated_bool = self.buffer.allocate_line_register();
                     let expr_id = self.generate_expression(context, while_cond, allocated_bool)?;
-                    if !matches!(expr_id.1, FieldType::Primitive(PrimitiveType::Bool)) {
+                    if !matches!(expr_id.value_type, ValueType::Primitive(PrimitiveType::Bool)) {
                         return CodegenError::err(statement.clone(), ErrorRepr::InvalidVariableType)
                     }
                     self.buffer.code_buffer.push_instruction(instruction!(
@@ -1371,8 +1362,8 @@ mod tests {
     #[test]
     pub fn decompile_from_file_test() {
         let name = "more";
-        // let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\codegen\examples\";
-        let path = r"K:\Programming\GitHub\Esh\codegen\examples\";
+        let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\codegen\examples\";
+        // let path = r"K:\Programming\GitHub\Esh\codegen\examples\";
 
         let file_bytes = fs::read(format!("{}{}.esh", path, name)).expect("File should read");
         let lexer = Lexer::new(str::from_utf8(&file_bytes).expect("Should encode to utf-8"));

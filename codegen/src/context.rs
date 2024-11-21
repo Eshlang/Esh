@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::rc::Rc;
-use crate::types::{Field, FieldType};
+use crate::types::{Field, ValueType};
 use crate::Node;
 
 #[derive(Clone, Debug)]
@@ -13,7 +13,7 @@ pub enum CodeDefinition {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ContextType {
     Struct,
-    Function(FieldType),
+    Function(ValueType),
     Domain,
 }
 
