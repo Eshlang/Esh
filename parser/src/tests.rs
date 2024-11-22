@@ -293,6 +293,152 @@ pub fn access_test() {
 }
 
 #[test]
+pub fn list_test() {
+    // num[] nums = [1, 2, 3];
+    // foo(nums[0]);
+    let input = [
+        Rc::new(Token {
+            token_type: TokenType::Ident("num".to_string()),
+            range: Range::new((0, 0), (0, 2)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::LBracket,
+            range: Range::new((0, 3), (0, 3)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::RBracket,
+            range: Range::new((0, 4), (0, 4)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Ident("nums".to_string()),
+            range: Range::new((0, 6), (0, 9)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Assign,
+            range: Range::new((0, 11), (0, 11)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::LBracket,
+            range: Range::new((0, 13), (0, 13)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Number(1f64),
+            range: Range::new((0, 14), (0, 14)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Comma,
+            range: Range::new((0, 15), (0, 15)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Number(2f64),
+            range: Range::new((0, 17), (0, 17)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Comma,
+            range: Range::new((0, 18), (0, 18)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Number(3f64),
+            range: Range::new((0, 20), (0, 20)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::RBracket,
+            range: Range::new((0, 21), (0, 21)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Semicolon,
+            range: Range::new((0, 22), (0, 22)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Ident("foo".to_string()),
+            range: Range::new((1, 0), (1, 2)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::LParen,
+            range: Range::new((1, 3), (1, 3)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Ident("nums".to_string()),
+            range: Range::new((1, 4), (1, 7)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::LBracket,
+            range: Range::new((1, 8), (1, 8)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Number(0f64),
+            range: Range::new((1, 9), (1, 9)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::RBracket,
+            range: Range::new((1, 10), (1, 10)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::RParen,
+            range: Range::new((1, 11), (1, 11)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Semicolon,
+            range: Range::new((1, 12), (1, 12)),
+        }),
+    ];
+    let expected = Node::Block(vec![
+        Rc::new(Node::Assignment(
+            Rc::new(Node::Declaration(
+                Rc::new(Node::ListDefinition(Rc::new(Node::Primary(Rc::new(Token {
+                    token_type: TokenType::Ident("num".to_string()),
+                    range: Range::new((0, 0), (0, 2)),
+                }))))),
+                Rc::new(Node::Primary(Rc::new(Token {
+                    token_type: TokenType::Ident("nums".to_string()),
+                    range: Range::new((0, 6), (0, 9)),
+                }))),
+            )),
+            Rc::new(Node::List(vec![
+                Rc::new(Node::Primary(Rc::new(Token {
+                    token_type: TokenType::Number(1f64),
+                    range: Range::new((0, 14), (0, 14)),
+                }))),
+                Rc::new(Node::Primary(Rc::new(Token {
+                    token_type: TokenType::Number(2f64),
+                    range: Range::new((0, 17), (0, 17)),
+                }))),
+                Rc::new(Node::Primary(Rc::new(Token {
+                    token_type: TokenType::Number(3f64),
+                    range: Range::new((0, 20), (0, 20)),
+                }))),
+            ]))
+        )),
+        Rc::new(Node::FunctionCall(
+            Rc::new(Node::Primary(Rc::new(Token {
+                token_type: TokenType::Ident("foo".to_string()),
+                range: Range::new((1, 0), (1, 2)),
+            }))),
+            Rc::new(Node::Tuple(vec![
+                Rc::new(Node::Index(
+                    Rc::new(Node::Primary(Rc::new(Token {
+                        token_type: TokenType::Ident("nums".to_string()),
+                        range: Range::new((1, 4), (1, 7)),
+                    }))),
+                    Rc::new(Node::Primary(Rc::new(Token {
+                        token_type: TokenType::Number(0f64),
+                        range: Range::new((1, 9), (1, 9)),
+                    }))),
+                )),
+            ])),
+        )),
+    ]);
+    let mut parser = Parser::new(&input);
+    match parser.statement_block() {
+        Ok(output) => assert_eq!(expected, output),
+        Err(e) => {
+            dbg!(e);
+            panic!()
+        }
+    }
+}
+
+#[test]
 pub fn assignment_test() {
     // num x = 5;
     let input = [
@@ -661,7 +807,7 @@ pub fn if_statement_test() {
 pub fn if_else_test() {
     // if x == 5 {
     //    str y = "hello";
-    // } else {
+    // } else if x > 5 {
     //    str y = "evil hello";
     // }
     let input = [
@@ -714,8 +860,24 @@ pub fn if_else_test() {
             range: Range::new((2, 2), (2, 5)),
         }),
         Rc::new(Token {
+            token_type: TokenType::Keyword(Keyword::If),
+            range: Range::new((2, 7), (2, 8)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Ident("x".to_string()),
+            range: Range::new((2, 10), (2, 10)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::RAngle,
+            range: Range::new((2, 12), (2, 12)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Number(5f64),
+            range: Range::new((2, 14), (2, 14)),
+        }),
+        Rc::new(Token {
             token_type: TokenType::LBrace,
-            range: Range::new((2, 7), (2, 7)),
+            range: Range::new((2, 16), (2, 16)),
         }),
         Rc::new(Token {
             token_type: TokenType::Ident("str".to_string()),
@@ -773,24 +935,36 @@ pub fn if_else_test() {
                 )),
             ])),
         )),
-        Rc::new(Node::Block(vec![
-            Rc::new(Node::Assignment(
-                Rc::new(Node::Declaration(
-                    Rc::new(Node::Primary(Rc::new(Token {
-                        token_type: TokenType::Ident("str".to_string()),
-                        range: Range::new((3, 0), (3, 2)),
-                    }))), 
-                    Rc::new(Node::Primary(Rc::new(Token {
-                        token_type: TokenType::Ident("y".to_string()),
-                        range: Range::new((3, 4), (3, 4)),
-                    }))),
-                )), 
+        Rc::new(Node::If(
+            Rc::new(Node::GreaterThan(
                 Rc::new(Node::Primary(Rc::new(Token {
-                    token_type: TokenType::Ident("evil hello".to_string()),
-                    range: Range::new((3, 8), (3, 19)),
+                    token_type: TokenType::Ident("x".to_string()),
+                    range: Range::new((2, 10), (2, 10)),
                 }))),
-            ))
-        ])),
+                Rc::new(Node::Primary(Rc::new(Token {
+                    token_type: TokenType::Number(5f64),
+                    range: Range::new((2, 14), (2, 14)),
+                }))),
+            )),
+            Rc::new(Node::Block(vec![
+                Rc::new(Node::Assignment(
+                    Rc::new(Node::Declaration(
+                        Rc::new(Node::Primary(Rc::new(Token {
+                            token_type: TokenType::Ident("str".to_string()),
+                            range: Range::new((3, 0), (3, 2)),
+                        }))), 
+                        Rc::new(Node::Primary(Rc::new(Token {
+                            token_type: TokenType::Ident("y".to_string()),
+                            range: Range::new((3, 4), (3, 4)),
+                        }))),
+                    )), 
+                    Rc::new(Node::Primary(Rc::new(Token {
+                        token_type: TokenType::Ident("evil hello".to_string()),
+                        range: Range::new((3, 8), (3, 19)),
+                    }))),
+                ))
+            ])),
+        )),
     );
     let mut parser = Parser::new(&input);
     match parser.statement() {

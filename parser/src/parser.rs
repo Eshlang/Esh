@@ -6,6 +6,7 @@ use lexer::types::{Keyword, Token, TokenType};
 pub enum Node {
     None,                                           // ()
     Primary(Rc<Token>),                             // prim
+    ListDefinition(Rc<Node>),                       // ident[]
     FunctionCall(Rc<Node>, Rc<Node>),               // ident(tuple/expr)
     Access(Vec<Rc<Node>>),                          // ident.ident
     Construct(Rc<Node>, Rc<Node>),                  // ident {block} 
@@ -25,6 +26,8 @@ pub enum Node {
     NotEqual(Rc<Node>, Rc<Node>),                   // expr != expr
     And(Rc<Node>, Rc<Node>),                        // expr && expr
     Or(Rc<Node>, Rc<Node>),                         // expr || expr
+    List(Vec<Rc<Node>>),                            // [expr, expr, expr]
+    Index(Rc<Node>, Rc<Node>),                      // ident[expr]
     Declaration(Rc<Node>, Rc<Node>),                // ident ident
     Break,                                          // break;
     Return(Rc<Node>),                               // return expr;
@@ -41,11 +44,12 @@ pub enum Node {
 /// A parser error
 #[derive(Debug, PartialEq)]
 pub enum ParserError {
-    InvalidToken(Rc<Token>),        // token is not recognized
+    InvalidToken(Rc<Token>),        // Token is not recognized
     InvalidStatement(Rc<Token>),    // Statement is not recognized
     MissingIdentifier(Rc<Token>),   // Expected an ident
     MissingSemicolon(Rc<Token>),    // Expected a semicolon
     MissingParenthesis(Rc<Token>),  // Expected opening/closing parenthesis
+    MissingBracket(Rc<Token>),      // Expected opening/closing bracket
     MissingBrace(Rc<Token>),        // Expected opening/closing brace
 }
 
@@ -243,26 +247,32 @@ impl<'a> Parser<'a> {
     pub(crate) fn if_else_block(&mut self) -> Result<Node, ParserError> {
         expect!(self, TokenType::Keyword(Keyword::If));
         let mut expr = self.if_block()?;
-        while !self.is_at_end() {
+        if self.is_at_end() {
+            return Ok(expr);
+        }
+        if let TokenType::Keyword(Keyword::Else) = self.curr().token_type {
+            self.advance();
+            if self.is_at_end() {
+                return Err(ParserError::MissingBrace(self.tokens[self.current - 1].clone()));
+            }
             match self.curr().token_type {
-                TokenType::Keyword(Keyword::Else) => {
+                TokenType::Keyword(Keyword::If) => {
+                    return Ok(Node::Else(
+                        Rc::new(expr),
+                        Rc::new(self.if_else_block()?)
+                    ));
+                },
+                TokenType::LBrace => {
                     self.advance();
                     expr = Node::Else(
-                        Rc::new(expr),  
-                        match self.curr().token_type {
-                            TokenType::Keyword(Keyword::If) => Rc::new(self.if_else_block()?),
-                            TokenType::LBrace => {
-                                self.advance();
-                                Rc::new(self.statement_block()?)
-                            },
-                            _ => return Err(ParserError::MissingBrace(self.curr().clone()))
-                        },
+                        Rc::new(expr),
+                        Rc::new(self.statement_block()?)
                     );
-                    expect!(self, TokenType::RBrace);
-                    self.advance();
                 },
-                _ => break
+                _ => return Err(ParserError::MissingBrace(self.curr().clone()))
             }
+            expect!(self, TokenType::RBrace);
+            self.advance();
         }
         return Ok(expr);
     }
@@ -320,17 +330,53 @@ impl<'a> Parser<'a> {
 
     /// Returns the current variable declaration
     pub(crate) fn declaration(&mut self) -> Result<Node, ParserError> {
+        let start = self.current;
         match self.curr().token_type {
             TokenType::Ident(_) => (),
             _ => return self.expression()
         }
-        let expr = self.expression()?;
+        let expr = self.list_definition()?;
         match self.curr().token_type {
             TokenType::Ident(_) => return Ok(Node::Declaration(
                 Rc::new(expr),
                 Rc::new(self.ident()?),
             )),
-            _ => ()
+            _ => {
+                self.current = start;
+                return self.expression();
+            }
+        }
+    }
+
+    /// Returns the current list definition
+    pub(crate) fn list_definition(&mut self) -> Result<Node, ParserError> {
+        let start = self.current;
+        let mut expr = self.ident()?;
+        if self.is_at_end() {
+            return Ok(expr)
+        }
+        match self.curr().token_type {
+            TokenType::Ident(_) => return Ok(expr),
+            TokenType::LBracket => (),
+            _ => {
+                self.current = start;
+                return self.expression();
+            }
+        }
+        while !self.is_at_end() {
+            match self.curr().token_type {
+                TokenType::LBracket => {
+                    self.advance();
+                    if let TokenType::RBracket = self.curr().token_type {
+                        expr = Node::ListDefinition(Rc::new(expr));
+                        self.advance();
+                    } else {
+                        self.current = start;
+                        return self.expression();
+                    }
+                },
+                _ => break
+            }
         }
         return Ok(expr);
     }
@@ -543,6 +589,9 @@ impl<'a> Parser<'a> {
                     _ => Err(ParserError::MissingParenthesis(self.curr().clone()))
                 }
             },
+            TokenType::LBracket => {
+                self.list()
+            }
             _ => {
                 Err(ParserError::InvalidToken(self.curr().clone()))
             }
@@ -551,7 +600,7 @@ impl<'a> Parser<'a> {
 
     /// Returns the current construct expression
     pub(crate) fn construct(&mut self) -> Result<Node, ParserError> {
-        let mut expr = self.access()?;
+        let mut expr = self.index()?;
         match self.curr().token_type {
             TokenType::LBrace => {
                 expr = Node::Construct(
@@ -563,8 +612,28 @@ impl<'a> Parser<'a> {
                 );
                 expect!(self, TokenType::RBrace);
                 self.advance();
-            }
+            },
             _ => ()
+        }
+        return Ok(expr);
+    }
+
+    /// Returns the current indexing operation
+    pub(crate) fn index(&mut self) -> Result<Node, ParserError> {
+        let mut expr = self.access()?;
+        while !self.is_at_end() {
+            match self.curr().token_type {
+                TokenType::LBracket => {
+                    self.advance();
+                    expr = Node::Index(
+                        Rc::new(expr),
+                        Rc::new(self.expression()?),
+                    );
+                    expect!(self, TokenType::RBracket);
+                    self.advance();
+                },
+                _ => break
+            }
         }
         return Ok(expr);
     }
@@ -578,7 +647,6 @@ impl<'a> Parser<'a> {
         }
         let mut access = vec![Rc::new(expr)];
         while !self.is_at_end() {
-            dbg!(self.curr());
             access.push(Rc::new(self.ident()?));
             if self.is_at_end() {
                 break;
@@ -644,6 +712,30 @@ impl<'a> Parser<'a> {
             self.advance();
         }
         return Ok(Node::Tuple(block));
+    }
+
+    /// Returns the current list
+    pub(crate) fn list(&mut self) -> Result<Node, ParserError> {
+        expect!(self, TokenType::LBracket);
+        self.advance();
+        let mut block = vec![];
+        if self.curr().token_type == TokenType::RBracket {
+            self.advance();
+            return Ok(Node::List(block));
+        }
+        while !self.is_at_end() {
+            block.push(Rc::new(self.declaration()?));
+            match self.curr().token_type {
+                TokenType::Comma => (),
+                TokenType::RBracket => {
+                    self.advance();
+                    break;
+                },
+                _ => return Err(ParserError::MissingBracket(self.curr().clone()))
+            }
+            self.advance();
+        }
+        return Ok(Node::List(block));
     }
 
     /// Returns the current identifier
