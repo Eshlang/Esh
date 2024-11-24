@@ -99,6 +99,10 @@ pub enum ErrorRepr {
     DomainIdentNotRecognized,
     #[error("Expected a context.")]
     ExpectedContext,
+    #[error("Expected a specific context type.")]
+    UnexpectedContextType,
+    #[error("Expected an identifier after the domain access.")]
+    ExpectedIdentifierAfterDomain,
     #[error("Expected a field.")]
     ExpectedField,
     #[error("Expected a struct.")]
@@ -161,4 +165,6 @@ pub enum ErrorRepr {
     ExpectedAccessableType,
     #[error("Expected an accessable node (such as a domain).")]
     ExpectedAccessableNode,
+    #[error("Expected an accessing node (such as a .field access).")]
+    ExpectedAccessingNode,
 }

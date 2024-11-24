@@ -8,14 +8,14 @@ pub struct Field {
     pub scope: CodeScope,
 }
 
-#[derive(Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct RuntimeVariable {
     pub variable: CodegenValue,
     pub name: String,
     pub param_ident: Option<u32>
 }
 
-#[derive(Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum RuntimeVariableIdent {
     Normal(u32),
     Field(usize, usize),
@@ -81,12 +81,6 @@ pub enum CodegenBodyStackMode {
     // ElseIf
 }
 
-#[derive(Debug, Clone)]
-pub enum CodegenAccess {
-    Domain(usize),
-    Value(CodegenValue),
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct CodegenValue {
     pub ident: u32,
@@ -109,4 +103,10 @@ impl CodegenValue {
 #[derive(Clone, Debug, PartialEq)]
 pub struct CodegenRegisterGroup {
     pub name: String
+}
+
+pub enum CodegenAccessNode {
+    Field(Rc<Node>),
+    Function(Rc<Node>),
+    Index(Rc<Node>)
 }
