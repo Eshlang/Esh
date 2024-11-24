@@ -694,16 +694,17 @@ impl CodeGen {
         &self.context_full_names[context]
     }
 
-    fn generate_access(&mut self, context: usize, node: &Rc<Node>) -> Result<CodegenAccess, CodegenError> {
+    fn generate_access(&mut self, context: usize, node: &Rc<Node>) -> Result<(CodegenAccess, &str), CodegenError> {
+        let register_group = "access";
         let mut new_context = context;
         match node.as_ref() {
             Node::Access(access_branch_node, access_ident_node) => {
-                let access_branch = self.generate_access(context, access_branch_node)?;
+                let (access_branch, access_string) = self.generate_access(context, access_branch_node)?;
                 // let access_ident_string = Self::get_primary_as_ident(access_ident_node, ErrorRepr::ExpectedAccessableIdentifier)?;
                 match access_branch {
                     CodegenAccess::Domain(domain) => {
                         new_context = domain;
-                        Ok(CodegenAccess::Domain(self.find_domain_by_ident(access_ident_node, new_context, Some(1))?))
+                        Ok((CodegenAccess::Domain(self.find_domain_by_ident(access_ident_node, new_context, Some(1))?), register_group))
                     }
                     CodegenAccess::Value(val) => {
                         match val.value_type {
@@ -711,12 +712,13 @@ impl CodeGen {
                                 new_context = struct_id;
                                 let definition = self.find_definition_by_ident(access_ident_node, new_context)?;
                                 if let Ok(field) = self.extract_definition_field(&definition) {
-                                    let _field = self.context_borrow(new_context)?.fields[field].clone();
-                                    //self.
-                                    // Ok(CodegenAccess::Value(CodegenValue::new()))
-                                    // this needs to be an iterative process i'm stupid
-                                    todo!()
-                                } else if let Ok(_func) = self.extract_definition_function(&definition) {
+                                    let field_type = self.context_borrow(new_context)?.fields[field].field_type.clone();
+                                    let register = self.buffer.allocate_line_register_group(register_group);
+                                    self.buffer.code_buffer.push_instruction(instruction!(Var::GetListValue, [
+                                        (Ident, register), (Ident, val.ident), (Int, field+1)
+                                    ]));
+                                    Ok((CodegenAccess::Value(CodegenValue::new(register, field_type)), register_group))
+                                } else if let Ok(func) = self.extract_definition_function(&definition) {
                                     todo!()
                                 } else {
                                     CodegenError::err(node.clone(), ErrorRepr::UnexpectedStructAccessIdent)
@@ -735,7 +737,19 @@ impl CodeGen {
 
             },
             Node::Primary(..) => {
-                todo!()
+                let definition = self.find_definition_by_ident(access_ident_node, new_context)?;
+                if let Ok(field) = self.extract_definition_field(&definition) {
+                    let field_type = self.context_borrow(new_context)?.fields[field].field_type.clone();
+                    let register = self.buffer.allocate_line_register_group(register_group);
+                    self.buffer.code_buffer.push_instruction(instruction!(Var::GetListValue, [
+                        (Ident, register), (Ident, val.ident), (Int, field+1)
+                    ]));
+                    Ok((CodegenAccess::Value(CodegenValue::new(register, field_type)), register_group))
+                } else if let Ok(func) = self.extract_definition_function(&definition) {
+                    todo!()
+                } else {
+                    CodegenError::err(node.clone(), ErrorRepr::UnexpectedStructAccessIdent)
+                }
             }
             _ => {
                 CodegenError::err(node.clone(), ErrorRepr::ExpectedAccessableNode)

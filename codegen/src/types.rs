@@ -105,3 +105,8 @@ impl CodegenValue {
         Self::new(0, ValueType::Primitive(PrimitiveType::None))
     }
 }
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct CodegenRegisterGroup {
+    pub name: String
+}
