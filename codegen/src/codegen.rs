@@ -748,57 +748,7 @@ impl CodeGen {
     }
 
     fn get_value_access(&mut self, context: usize, node: &Rc<Node>, set_ident: u32) -> Result<CodegenValue, CodegenError> {
-        let original_node = node;
-        let mut flattened_nodes = self.flatten_access_nodes(original_node);
-        let (context, accessed_domain) = {
-            let prev_len = flattened_nodes.len();
-            let context_get = self.get_domain_access(context, &mut flattened_nodes)?;
-            (context_get, prev_len != flattened_nodes.len())
-        };
-        if flattened_nodes.len() == 0 {
-            return CodegenError::err(original_node.clone(), ErrorRepr::ExpectedIdentifierAfterDomain);
-        };
-        let mut prev_value = {
-            let first_node = flattened_nodes.pop_front().expect("Flattened nodes should have at least one element.");
-            if accessed_domain { // There were no domain accesses before, so generate expression
-                let CodegenAccessNode::Field(first_node) = first_node else {
-                    return CodegenError::err(original_node.clone(), ErrorRepr::ExpectedField);
-                }; // TODO
-                self.generate_expression(context, &first_node, set_ident)?
-            } else { // There were domain accesses, so just get a variable
-                let CodegenAccessNode::Field(first_node) = first_node else {
-                    return CodegenError::err(original_node.clone(), ErrorRepr::ExpectedField);
-                };
-                self.find_variable_by_name(context, &first_node)?.variable.clone()
-            }
-        };
-        for node in flattened_nodes {
-            match prev_value.value_type {
-                ValueType::Ident(..) => { return CodegenError::err(node, ErrorRepr::UnexpectedValueTypeIdent); }
-                ValueType::Primitive(..) => todo!("Primitive type accesses are unimplemented as of now"),
-                ValueType::Struct(struct_context) => {
-                    match node.as_ref() {
-                        Node::Primary(..) => { //struct.field
-                            let struct_context = self.context_borrow(struct_context)?;
-                            let access_field_ident = Self::get_primary_as_ident(access_field, ErrorRepr::ExpectedVariable)?;
-                            let field_id = self.extract_definition_field(
-                                struct_context
-                                .definition_lookup
-                                .get(access_field_ident)
-                                .ok_or(CodegenError::new(access_field.clone(), ErrorRepr::InvalidStructField))?
-                            )?;
-                            let field_type = struct_context.fields[field_id].field_type.clone();
-                            drop(struct_context);
-                            self.buffer.code_buffer.push_instruction(instruction!(Var::GetListValue, [
-                                (Ident, set_ident), (Ident, set_ident), (Int, field_id+1)
-                            ]));
-                        }
-                        _ => { return CodegenError::err(node, ErrorRepr::ExpectedAccessingNode); }
-                    }
-                },
-            }
-        }
-        Ok(prev_value)
+        todo!()
     }
 
 
