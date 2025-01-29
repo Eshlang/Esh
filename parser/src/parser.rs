@@ -36,9 +36,9 @@ pub enum Node {
     Else(Rc<Node>, Rc<Node>),                       // stmt else {block}
     While(Rc<Node>, Rc<Node>),                      // while cond {block}
     Func(Rc<Node>, Rc<Node>, Rc<Node>, Rc<Node>),   // func ident (tuple/decl) -> tuple/ident {block}
-    Struct(Rc<Node>, Rc<Node>),                     // struct ident {block}
-    Domain(Rc<Node>, Rc<Node>),                     // domain ident {block}
-    Block(Vec<Rc<Node>>),                           // stmt; stmt; stmt;
+    Struct(Rc<Node>, Rc<Node>),                       // struct ident {block}
+    Domain(Rc<Node>, Rc<Node>),                       // domain ident {block}
+    Block(Vec<Rc<Node>>),                                   // stmt; stmt; stmt;
 }
 
 /// A parser error
@@ -679,13 +679,31 @@ impl<'a> Parser<'a> {
 
     /// Returns the current function call
     pub(crate) fn function_call(&mut self) -> Result<Node, ParserError> {
-        let mut expr = self.ident()?;
+        let mut expr = self.access()?;
         match self.curr().token_type {
             TokenType::LParen => expr = Node::FunctionCall(
                     Rc::new(expr),
                     Rc::new(self.tuple()?),
                 ),
             _ => ()
+        }
+        return Ok(expr);
+    }
+
+    /// Returns the current access chain
+    pub(crate) fn access(&mut self) -> Result<Node, ParserError> {
+        let mut expr = self.ident()?;
+        while !self.is_at_end() {
+            match self.curr().token_type {
+                TokenType::Dot => {
+                    self.advance();
+                    expr = Node::Access(
+                        Rc::new(expr), 
+                        Rc::new(self.ident()?),
+                    )
+                },
+                _ => break
+            }
         }
         return Ok(expr);
     }
