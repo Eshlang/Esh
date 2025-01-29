@@ -8,7 +8,7 @@ pub enum Node {
     Primary(Rc<Token>),                             // prim
     ListDefinition(Rc<Node>),                       // ident[]
     FunctionCall(Rc<Node>, Rc<Node>),               // ident(tuple/expr)
-    Access(Vec<Rc<Node>>),                          // ident.ident
+    Access(Rc<Node>, Rc<Node>),                     // ident.ident
     Construct(Rc<Node>, Rc<Node>),                  // ident {block} 
     Not(Rc<Node>),                                  // !expr
     Negative(Rc<Node>),                             // -expr
@@ -600,7 +600,7 @@ impl<'a> Parser<'a> {
 
     /// Returns the current construct expression
     pub(crate) fn construct(&mut self) -> Result<Node, ParserError> {
-        let mut expr = self.index()?;
+        let mut expr = self.function_call()?;
         match self.curr().token_type {
             TokenType::LBrace => {
                 expr = Node::Construct(
@@ -616,65 +616,6 @@ impl<'a> Parser<'a> {
             _ => ()
         }
         return Ok(expr);
-    }
-
-    /// Returns the current indexing operation
-    pub(crate) fn index(&mut self) -> Result<Node, ParserError> {
-        let mut expr = self.access()?;
-        while !self.is_at_end() {
-            match self.curr().token_type {
-                TokenType::LBracket => {
-                    self.advance();
-                    expr = Node::Index(
-                        Rc::new(expr),
-                        Rc::new(self.expression()?),
-                    );
-                    expect!(self, TokenType::RBracket);
-                    self.advance();
-                },
-                _ => break
-            }
-        }
-        return Ok(expr);
-    }
-
-    /// Returns the current access chain
-    pub(crate) fn access(&mut self) -> Result<Node, ParserError> {
-        let mut expr = self.function_call()?;
-        match self.curr().token_type {
-            TokenType::Dot => self.advance(),
-            _ => return Ok(expr),
-        }
-        let mut access = vec![Rc::new(expr)];
-        while !self.is_at_end() {
-            access.push(Rc::new(self.ident()?));
-            if self.is_at_end() {
-                break;
-            }
-            match self.curr().token_type {
-                TokenType::Dot => {
-                    self.advance();
-                },
-                TokenType::LParen => {
-                    expr = Node::FunctionCall(
-                        Rc::new(Node::Access(access)),
-                        Rc::new(self.tuple()?),
-                    );
-                    if self.is_at_end() {
-                        return Ok(expr)
-                    }
-                    match self.curr().token_type {
-                        TokenType::Dot => {
-                            access = vec![Rc::new(expr)];
-                            self.advance();
-                        },
-                        _ => return Ok(expr)
-                    }
-                },
-                _ => break
-            }
-        }
-        return Ok(Node::Access(access));
     }
 
     /// Returns the current function call
