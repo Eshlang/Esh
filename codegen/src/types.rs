@@ -47,7 +47,7 @@ pub enum ValueType {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PrimitiveType {
-    None, Number, String, Bool
+    None, Number, String, Bool, Domain(usize)
 }
 
 
@@ -72,6 +72,7 @@ pub enum CodegenExpressionType {
     Lesser,
     GreaterEq,
     LesserEq,
+    Access
 }
 
 #[derive(Debug, Clone)]

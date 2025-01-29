@@ -682,6 +682,9 @@ impl CodeGen {
                     (Ident, set_ident), (String, "")
                 ]))
             },
+            ValueType::Primitive(PrimitiveType::Domain(..)) => {
+                panic!("The default value of a domain type shouldn't be scouted for, as the domain type doesn't compile to runtime.")
+            }
         }
         Ok(())
     }
@@ -774,10 +777,17 @@ impl CodeGen {
                         allocate
                     };
                     match node.as_ref() {
-                        Node::Access(..) => {
-                            let field_type = self.set_variable_to_ident(context, node, ident)?;
-                            ident_stack.push(CodegenValue::new(ident, field_type.clone()));
-                            calculated = true;
+                        Node::Access(nl, nr) => {
+                            // let field_type = self.set_variable_to_ident(context, node, ident)?;
+                            // ident_stack.push(CodegenValue::new(ident, field_type.clone()));
+                            // calculated = true;
+                            expression_stack.push_front(CodegenExpressionStack::Calculate(
+                                CodegenExpressionType::Access,
+                                ident, //Register ID & Identifier
+                                2 //How many elements we'll be expecting
+                            ));
+                            expression_stack.push_front(CodegenExpressionStack::Node(nl));
+                            expression_stack.push_front(CodegenExpressionStack::Node(nr));
                         }
                         Node::Primary(token) => {
                             let variable = match &token.as_ref().token_type {
@@ -1159,6 +1169,33 @@ impl CodeGen {
                 self.buffer.code_buffer.push_instruction(instruction!(EndIf));
                 ValueType::Primitive(PrimitiveType::Bool)
             },
+            CodegenExpressionType::Add => {
+                match (types.get(0).unwrap(), types.get(1).unwrap()) {
+                    (ValueType::Primitive(PrimitiveType::String), ValueType::Primitive(PrimitiveType::String)) => {
+                        self.buffer.code_buffer.push_instruction(instruction!(
+                            Var::String, [
+                                (Ident, ident)
+                            ]
+                        ));
+                        self.buffer.code_buffer.push_parameter(parameters[0].clone());
+                        self.buffer.code_buffer.push_parameter(parameters[1].clone());
+                        ValueType::Primitive(PrimitiveType::String)
+                    },
+                    (ValueType::Primitive(PrimitiveType::Number), ValueType::Primitive(PrimitiveType::Number)) => {
+                        self.buffer.code_buffer.push_instruction(instruction!(
+                            Var::Add, [
+                                (Ident, ident)
+                            ]
+                        ));
+                        self.buffer.code_buffer.push_parameter(parameters[0].clone());
+                        self.buffer.code_buffer.push_parameter(parameters[1].clone());
+                        ValueType::Primitive(PrimitiveType::Number)
+                    },
+                    _ => {
+                        return CodegenError::err(root_node.clone(), ErrorRepr::InvalidExpressionTypeConversion)
+                    }
+                }
+            },
         };
         Ok(result_type)
     }
@@ -1440,7 +1477,7 @@ mod tests {
         //##println!("LEXER TOKENS\n----------------------\n{:#?}\n----------------------", lexer_tokens);
         let mut parser = Parser::new(lexer_tokens.as_slice());
         let parser_tree = Rc::new(parser.parse().expect("Parser statement block should unwrap"));
-        //##println!("PARSER TREE\n----------------------\n{:#?}\n----------------------", parser_tree);
+        println!("PARSER TREE\n----------------------\n{:#?}\n----------------------", parser_tree);
 
         let mut codegen = CodeGen::new();
         codegen.codegen_from_node(parser_tree.clone()).expect("Codegen should generate");
