@@ -89,6 +89,8 @@ pub enum ErrorRepr {
     ExpectedFunctionParamIdent,
     #[error("Expected type identifier.")]
     ExpectedTypeIdent,
+    #[error("Expected type.")]
+    ExpectedType,
     #[error("Expected definition identifier.")]
     ExpectedDefinitionIdent,
     #[error("Type identifier not recognized.")]

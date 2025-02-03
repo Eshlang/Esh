@@ -228,7 +228,7 @@ impl CodeGen {
             if let ContextType::Function(func_return_type) = context_type {
                 if let ValueType::Ident(func_return_type_node) = func_return_type {
                     let return_type_set = if !matches!(func_return_type_node.as_ref(), Node::None) {
-                        self.find_type_by_ident(&func_return_type_node, context_id)?
+                        self.get_type(&func_return_type_node, context_id)?
                     } else { // No return type
                         ValueType::Primitive(PrimitiveType::None)
                     };
@@ -243,7 +243,7 @@ impl CodeGen {
                     continue;
                 };
                 drop(context_get);
-                let field_type_set =  self.find_type_by_ident(&field_ident, context_id)?;
+                let field_type_set =  self.get_type(&field_ident, context_id)?;
                 let mut context_get_mut = self.context_borrow_mut(context_id)?;
                 context_get_mut.fields[field].field_type = field_type_set;
                 drop(context_get_mut);
@@ -260,16 +260,12 @@ impl CodeGen {
         CodegenError::map_headless(self.contexts[context].try_borrow_mut(), ErrorRepr::BadMutBorrow)
     }
 
-    fn find_type_by_ident(&self, ident: &Rc<Node>, context: usize) -> Result<ValueType, CodegenError> {
-        let ident_string = Self::get_primary_as_ident(ident, ErrorRepr::ExpectedTypeIdent)?;
-        match Self::is_definition_primitive(ident_string) {
-            Some(primitive) => Ok(ValueType::Primitive(primitive)),
-            None => {
-                let definition = self.find_definition_by_node(ident, context)?;
-                let definition = self.extract_definition_struct(&definition)?;
-                Ok(ValueType::Struct(definition))
-            }
-        }
+    fn get_type(&mut self, node: &Rc<Node>, context: usize) -> Result<ValueType, CodegenError> {
+        let void_register = self.buffer.constant_void();
+        let ValueType::Comptime(ComptimeType::Type(construct_field_type_realtime)) = self.generate_expression(context, node, void_register)?.value.value_type else {
+            return CodegenError::err(node.clone(), ErrorRepr::ExpectedType);
+        };
+        return Ok(construct_field_type_realtime.normalize());
     }
 
     fn find_function_by_node(&self, node: &Rc<Node>, context: usize) -> Result<usize, CodegenError> {
@@ -613,7 +609,7 @@ impl CodeGen {
     }
     
     fn create_struct_instance_from_node(&mut self, context: usize, construct_ident: &Rc<Node>, construct_body_node: &Rc<Node>, set_ident: u32) -> Result<ValueType, CodegenError> {
-        let construct_field_type = self.find_type_by_ident(construct_ident, context)?;
+        let construct_field_type = self.get_type(construct_ident, context)?;
         let ValueType::Struct(struct_type) = construct_field_type else {
             return CodegenError::err(construct_ident.clone(), ErrorRepr::ExpectedStructIdentifier);
         };
@@ -889,13 +885,13 @@ impl CodeGen {
             }
             Node::Access(accessed, access_field) => {
                 let accessed_value = self.generate_expression_inside(context, accessed, register_group)?.value.clone();
-                let register = self.buffer.allocate_grouped_line_register(register_group);
-                value.ident = register;
                 let access_field_ident = Self::get_primary_as_ident(access_field, ErrorRepr::ExpectedAccessableIdentifier)?;
 
                 
                 match accessed_value.value_type {
                     ValueType::Struct(struct_id) => {
+                        let register = self.buffer.allocate_grouped_line_register(register_group);
+                        value.ident = register;
                         let struct_context = self.context_borrow(struct_id)?;
                         let field_id = self.extract_definition_field(
                             struct_context
@@ -958,7 +954,7 @@ impl CodeGen {
 
     fn declare_runtime_variable(&mut self, context: usize, decl_type: &Rc<Node>, decl_ident: &Rc<Node>) -> Result<(&RuntimeVariable, String), CodegenError> {
         let decl_ident_str = Self::get_primary_as_ident(decl_ident, ErrorRepr::ExpectedVariableIdentifier)?;
-        let decl_type_str = self.find_type_by_ident(decl_type, context)?;
+        let decl_type_str = self.get_type(decl_type, context)?;
         let var_name = Self::make_var_name(decl_ident_str, "rvl");
         let var_ident = self.buffer.use_variable(var_name.as_ref(), DP::Var::Scope::Line);
         let runtime_str = decl_ident_str.to_owned();

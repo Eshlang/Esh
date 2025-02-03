@@ -1,5 +1,5 @@
-func hello2() -> string {
-    Player hello = Player {
+func hello2() -> (string) {
+    Grass.Player hello = Grass.Player {
         hey = Grass.hey();
         wow = "wow";
     };
@@ -7,13 +7,13 @@ func hello2() -> string {
     return hello.wow;
 }
 
-struct Player {
-    num hey;
-    string wow;
-}
 
 domain Grass {
     func hey() -> num {
         return 5;
+    }
+    struct Player {
+        num hey;
+        string wow;
     }
 }
