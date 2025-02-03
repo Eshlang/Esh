@@ -41,13 +41,34 @@ impl RuntimeVariable {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ValueType {
     Primitive(PrimitiveType),
+    Comptime(ComptimeType),
     Struct(usize),
     Ident(Rc<Node>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub enum RealtimeValueType {
+    Primitive(PrimitiveType),
+    Struct(usize),
+}
+
+impl RealtimeValueType {
+    pub fn normalize(&self) -> ValueType {
+        match self.clone() {
+            RealtimeValueType::Primitive(primitive) => ValueType::Primitive(primitive),
+            RealtimeValueType::Struct(struct_id) => ValueType::Struct(struct_id),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum PrimitiveType {
-    None, Number, String, Bool, Domain(usize)
+    None, Number, String, Bool, // Realtime Types
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ComptimeType {
+    Domain(usize), Function(usize), Type(RealtimeValueType) // Comptime Types
 }
 
 
@@ -88,11 +109,35 @@ pub struct CodegenValue {
     pub value_type: ValueType
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct CodegenTrace {
+    pub root_ident: u32,
+    pub crumbs: Vec<CodegenTraceCrumb>
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum CodegenTraceCrumb {
+    Index(usize)
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct CodegenExpressionResult {
+    pub value: CodegenValue,
+    pub trace: Option<CodegenTrace>
+}
+
 impl CodegenValue {
     pub fn new(ident: u32, value_type: ValueType) -> Self {
         Self {
             ident,
             value_type
+        }
+    }
+
+    pub fn domain(void_ident: u32, domain: usize) -> Self {
+        Self {
+            ident: void_ident,
+            value_type: ValueType::Comptime(ComptimeType::Domain(domain))
         }
     }
 

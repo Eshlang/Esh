@@ -21,7 +21,8 @@ pub struct CodeGenBuffer {
     line_register_indices: HashMap<u32, usize>,
     
     allocated_line_registers: Vec<u64>,
-    allocated_line_register_groups: HashMap<String, Vec<u32>>
+    allocated_line_register_groups: HashMap<u64, Vec<u32>>,
+    line_register_groups: u64
 }
 
 impl CodeGenBuffer {
@@ -44,6 +45,7 @@ impl CodeGenBuffer {
 
             allocated_line_registers: Vec::new(),
             allocated_line_register_groups: HashMap::new(),
+            line_register_groups: 0
         }
     }
     fn clear_variables(&mut self) {
@@ -247,9 +249,14 @@ impl CodeGenBuffer {
         self.use_line_register(index)
     }
 
-    pub fn allocate_line_register_group(&mut self, group: &str) -> u32 {
+    pub fn allocate_line_register_group(&mut self) -> u64 {
+        self.line_register_groups += 1;
+        self.line_register_groups - 1
+    }
+
+    pub fn allocate_grouped_line_register(&mut self, group: u64) -> u32 {
         let register_ident = self.allocate_line_register();
-        if let Some(group) = self.allocated_line_register_groups.get_mut(group) {
+        if let Some(group) = self.allocated_line_register_groups.get_mut(&self.line_register_groups) {
             group.push(register_ident);
         } else {
             self.allocated_line_register_groups.insert(group.to_owned(), vec![register_ident]);
@@ -272,9 +279,10 @@ impl CodeGenBuffer {
         Ok(())
     }
 
-    pub fn free_line_register_group(&mut self, group: &str) {
-        if let Some(group_get) = self.allocated_line_register_groups.get(group) {
+    pub fn free_line_register_group(&mut self, group: u64) {
+        if let Some(group_get) = self.allocated_line_register_groups.get(&group) {
             self.free_line_registers(group_get.clone()).expect("Line register group should free.");
+            self.allocated_line_register_groups.remove(&group);
         }
     }
 

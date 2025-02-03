@@ -107,6 +107,8 @@ pub enum ErrorRepr {
     ExpectedField,
     #[error("Expected a struct.")]
     ExpectedStruct,
+    #[error("Expected a domain.")]
+    ExpectedDomain,
     #[error("Expected a function.")]
     ExpectedFunction,
     #[error("Expected a variable identifier.")]

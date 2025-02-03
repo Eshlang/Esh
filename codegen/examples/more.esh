@@ -57,3 +57,35 @@ func randomfunc(string hell, string add) {
     yo.hey.blablabla("wowwww", "hey");
     wowvar = yo.hello("hey", 5);
 }
+
+struct Player {
+    public string uuid;
+
+    public int hp -> {
+        get() -> int {
+            int result = 0;
+            dfasm(uuid, result) {
+                sel playername %uuid%
+                dp gval _playerhp #type:hp #target:selection
+                set %result%, _playerhp
+                sel reset
+            }
+            return result;
+        }
+        set(int value) {
+            dfasm(uuid, value) {
+                sel playername %uuid%
+                plac sethp %value%
+                sel reset
+            }
+        }
+    }
+
+    public func SendMessage(string message) {
+        dfasm(uuid, message) {
+            sel playername %uuid%
+            plac sendmessage %message%
+            sel reset
+        }
+    }
+}

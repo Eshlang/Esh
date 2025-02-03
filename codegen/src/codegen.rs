@@ -9,7 +9,7 @@ use parser::parser::Node;
 use crate::buffer::CodeGenBuffer;
 use crate::errors::{CodegenError, ErrorRepr};
 use crate::context::{CodeDefinition, CodeScope, Context, ContextType};
-use crate::types::{CodegenAccessNode, CodegenBodyStackMode, CodegenExpressionStack, CodegenExpressionType, CodegenValue, Field, PrimitiveType, RuntimeVariable, ValueType};
+use crate::types::{CodegenAccessNode, CodegenBodyStackMode, CodegenExpressionResult, CodegenExpressionStack, CodegenExpressionType, CodegenValue, ComptimeType, Field, PrimitiveType, RuntimeVariable, ValueType};
 
 pub struct CodeGen {
     pub context_map: HashMap<String, usize>,
@@ -343,6 +343,15 @@ impl CodeGen {
         Ok(context)
     }
 
+    fn extract_definition_domain(&self, definition: &CodeDefinition) -> Result<usize, CodegenError> {
+        let context = self.extract_definition_context(definition, |f| matches!(f, ContextType::Domain))?;
+        
+        if !matches!(self.context_borrow(context)?.context_type, ContextType::Domain) {
+            return CodegenError::err_headless(ErrorRepr::ExpectedDomain);
+        }
+        Ok(context)
+    }
+
     fn extract_definition_function(&self, definition: &CodeDefinition) -> Result<usize, CodegenError> {
         let context = self.extract_definition_context(definition, |f| matches!(f, ContextType::Function(..)))?;
         if !matches!(self.context_borrow(context)?.context_type, ContextType::Function(..)) {
@@ -628,7 +637,7 @@ impl CodeGen {
             let field_var_ident = self.buffer.allocate_line_register();
             allocated_registers.push(field_var_ident);
             let field_expression = self.generate_expression(context, assigned_value, field_var_ident)?;
-            if field_expression.value_type != field_type {
+            if field_expression.value.value_type != field_type {
                 return CodegenError::err(assigned_value.clone(), ErrorRepr::UnexpectedStructFieldType)
             }
             param_map.insert(field, field_var_ident);
@@ -682,8 +691,8 @@ impl CodeGen {
                     (Ident, set_ident), (String, "")
                 ]))
             },
-            ValueType::Primitive(PrimitiveType::Domain(..)) => {
-                panic!("The default value of a domain type shouldn't be scouted for, as the domain type doesn't compile to runtime.")
+            ValueType::Comptime(..) => {
+                panic!("The default value of a comptime type shouldn't be scouted for, as a compile-time type (such as Domains, Functions, and Types) doesn't compile to runtime.")
             }
         }
         Ok(())
@@ -750,454 +759,171 @@ impl CodeGen {
         Ok(context)
     }
 
-    fn get_value_access(&mut self, context: usize, node: &Rc<Node>, set_ident: u32) -> Result<CodegenValue, CodegenError> {
-        todo!()
+
+    /// Used in generate expression's primary identifier - looks first in the local scope (context), then the parent scope,
+    /// then the parent of that, until it looks on main.
+    /// 
+    /// The priority of which definition types it looks for is this:
+    /// - Runtime Variables
+    /// - Domains
+    /// - Fields (for domains that'd be global variables, for structs it'd be fields)
+    /// 
+    /// in a function it'd first look for the runtime variables in that function,
+    /// then go to the parent scope and look for domains first, then fields
+    /// then it'd go to that parent scope etc.
+    /// 
+    /// in a domain it'd first look for the domains inside it, then the fields inside it,
+    /// then it'd go to the parent scope and look for its domains first, then its fields, etc.
+    /// 
+    /// In a struct function it'd first look for the runtime variables, then the struct fields,
+    /// then the parent scope (of the struct, not function)'s domains, then its fields, etc.
+    fn get_definition_access_isolated(&mut self, context: usize, node: &Rc<Node>, register_group: u64) -> Result<CodegenValue, CodegenError> {
+        let mut current_context = context;
+        loop {
+            if let Ok(value) = self.get_definition_access(current_context, node, register_group) {
+                return Ok(value);
+            }
+            if current_context == 0 {
+                break;
+            }
+            current_context = self.parents[current_context];
+        }
+        CodegenError::err(node.clone(), ErrorRepr::DefinitionIdentNotRecognized)
     }
 
+    /// Single version of ``get_definition_access_isolated`` but only on one context, not including its parents.
+    fn get_definition_access(&mut self, context: usize, node: &Rc<Node>, register_group: u64) -> Result<CodegenValue, CodegenError> {
+        let var_name = Self::get_primary_as_ident(node, ErrorRepr::ExpectedVariableIdentifier)?;
+        // Runtime variables
+        if let Some(var) = self.runtime_vars[context].get(var_name) {
+            return Ok(var.variable.clone());
+        }
+        
+        if let Ok(definition) = &self.find_definition_by_ident(node, context) {
+            // Domain
+            if let Ok(domain_id) = self.extract_definition_domain(definition) {
+                return Ok(CodegenValue::domain(self.buffer.constant_void(), domain_id))
+            } 
+        }
+        //TODO: Add fields here
+        
+        CodegenError::err(node.clone(), ErrorRepr::DefinitionIdentNotRecognized)
+    }
 
-    fn generate_expression(&mut self, context: usize, root_node: &Rc<Node>, set_ident: u32) -> Result<CodegenValue, CodegenError> {
+    fn generate_expression(&mut self, context: usize, root_node: &Rc<Node>, set_ident: u32) -> Result<CodegenExpressionResult, CodegenError> {
+        //TODO: Refactor by removing ``set_ident`` as the workaround, and moving to register group based stuff
+        // means a lot of refactoring needs to be done for stuff that *uses* generate_expression, but i think it's worth it
+
+    
         //##println!("{:#?}", root_node);
         let mut expression_stack= VecDeque::new();
         expression_stack.push_back(CodegenExpressionStack::Node(root_node));
-        let mut ident_stack: Vec<CodegenValue> = Vec::new();
-        let mut register_counter = 0;
-        let mut allocated_registers = Vec::new();
-        let mut calculated = false;
-        while expression_stack.len() > 0 {
-            let get_expr = expression_stack.pop_front().expect("This should pop since len > 0");
-            //##println!("\n\n#{} (Ident Stack: {:?})\n----------------\n{:?}", ind_counter, ident_stack, get_expr);
-            match get_expr {
-                CodegenExpressionStack::Node(node) => {
-                    let matches = matches!(node.as_ref(), Node::Primary(..));
-                    let ident = if register_counter == 0 || matches {
-                        set_ident
-                    } else {
-                        let allocate = self.buffer.allocate_line_register();
-                        allocated_registers.push(allocate);
-                        allocate
-                    };
-                    match node.as_ref() {
-                        Node::Access(nl, nr) => {
-                            // let field_type = self.set_variable_to_ident(context, node, ident)?;
-                            // ident_stack.push(CodegenValue::new(ident, field_type.clone()));
-                            // calculated = true;
-                            expression_stack.push_front(CodegenExpressionStack::Calculate(
-                                CodegenExpressionType::Access,
-                                ident, //Register ID & Identifier
-                                2 //How many elements we'll be expecting
-                            ));
-                            expression_stack.push_front(CodegenExpressionStack::Node(nl));
-                            expression_stack.push_front(CodegenExpressionStack::Node(nr));
-                        }
-                        Node::Primary(token) => {
-                            let variable = match &token.as_ref().token_type {
-                                TokenType::Ident(..) => {
-                                    self.find_variable_by_name(context, node)?.variable.clone()
-                                },
-                                TokenType::String(t) => CodegenValue::new(self.buffer.use_string(t.as_str()), ValueType::Primitive(PrimitiveType::String)),
-                                TokenType::Number(t) => CodegenValue::new(self.buffer.use_number(ParameterValue::Float(*t)), ValueType::Primitive(PrimitiveType::Number)),
-                                TokenType::Keyword(Keyword::True) => CodegenValue::new(self.buffer.use_number(ParameterValue::Int(1)), ValueType::Primitive(PrimitiveType::Bool)),
-                                TokenType::Keyword(Keyword::False) => CodegenValue::new(self.buffer.use_number(ParameterValue::Int(0)), ValueType::Primitive(PrimitiveType::Bool)),
-                                _ => {
-                                    return CodegenError::err(root_node.clone(), ErrorRepr::UnexpectedExpressionToken)
-                                }
-                            };
-                            ident_stack.push(variable);
-                        },
-                        Node::FunctionCall(func_ident, func_params) => {
-                            let func_type = self.call_function(context, func_ident, func_params, ident)?;
-                            ident_stack.push(CodegenValue::new(ident, func_type));
-                            calculated = true;
-                        },
-                        Node::Construct(construct_ident, construct_body) => {
-                            let created_struct = self.create_struct_instance_from_node(context, construct_ident, construct_body, ident)?;
-                            ident_stack.push(CodegenValue::new(ident, created_struct));
-                            calculated = true;
-                        },
-                        Node::Sum(nl, nr) => {
-                            expression_stack.push_front(CodegenExpressionStack::Calculate(
-                                CodegenExpressionType::Add,
-                                ident, //Register ID & Identifier
-                                2 //How many elements we'll be expecting
-                            ));
-                            expression_stack.push_front(CodegenExpressionStack::Node(nl));
-                            expression_stack.push_front(CodegenExpressionStack::Node(nr));
-                        },
-                        Node::Difference(nl, nr) => {
-                            expression_stack.push_front(CodegenExpressionStack::Calculate(
-                                CodegenExpressionType::Sub,
-                                ident, //Register ID & Identifier
-                                2 //How many elements we'll be expecting
-                            ));
-                            expression_stack.push_front(CodegenExpressionStack::Node(nl));
-                            expression_stack.push_front(CodegenExpressionStack::Node(nr));
-                        },
-                        Node::Product(nl, nr) => {
-                            expression_stack.push_front(CodegenExpressionStack::Calculate(
-                                CodegenExpressionType::Mul,
-                                ident, //Register ID & Identifier
-                                2 //How many elements we'll be expecting
-                            ));
-                            expression_stack.push_front(CodegenExpressionStack::Node(nl));
-                            expression_stack.push_front(CodegenExpressionStack::Node(nr));
-                        },
-                        Node::Equal(nl, nr) => {
-                            expression_stack.push_front(CodegenExpressionStack::Calculate(
-                                CodegenExpressionType::Eq,
-                                ident, //Register ID & Identifier
-                                2 //How many elements we'll be expecting
-                            ));
-                            expression_stack.push_front(CodegenExpressionStack::Node(nl));
-                            expression_stack.push_front(CodegenExpressionStack::Node(nr));
-                        },
-                        Node::NotEqual(nl, nr) => {
-                            expression_stack.push_front(CodegenExpressionStack::Calculate(
-                                CodegenExpressionType::NotEq,
-                                ident, //Register ID & Identifier
-                                2 //How many elements we'll be expecting
-                            ));
-                            expression_stack.push_front(CodegenExpressionStack::Node(nl));
-                            expression_stack.push_front(CodegenExpressionStack::Node(nr));
-                        },
-                        Node::Not(n) => {
-                            expression_stack.push_front(CodegenExpressionStack::Calculate(
-                                CodegenExpressionType::Not,
-                                ident, //Register ID & Identifier
-                                1 //How many elements we'll be expecting
-                            ));
-                            expression_stack.push_front(CodegenExpressionStack::Node(n));
-                        },
-                        Node::Or(nl, nr) => {
-                            expression_stack.push_front(CodegenExpressionStack::Calculate(
-                                CodegenExpressionType::Or,
-                                ident, //Register ID & Identifier
-                                2 //How many elements we'll be expecting
-                            ));
-                            expression_stack.push_front(CodegenExpressionStack::Node(nl));
-                            expression_stack.push_front(CodegenExpressionStack::Node(nr));
-                        },
-                        Node::And(nl, nr) => {
-                            expression_stack.push_front(CodegenExpressionStack::Calculate(
-                                CodegenExpressionType::And,
-                                ident, //Register ID & Identifier
-                                2 //How many elements we'll be expecting
-                            ));
-                            expression_stack.push_front(CodegenExpressionStack::Node(nl));
-                            expression_stack.push_front(CodegenExpressionStack::Node(nr));
-                        },
-                        Node::GreaterThan(nl, nr) => {
-                            expression_stack.push_front(CodegenExpressionStack::Calculate(
-                                CodegenExpressionType::Greater,
-                                ident, //Register ID & Identifier
-                                2 //How many elements we'll be expecting
-                            ));
-                            expression_stack.push_front(CodegenExpressionStack::Node(nl));
-                            expression_stack.push_front(CodegenExpressionStack::Node(nr));
-                        },
-                        Node::GreaterThanOrEqualTo(nl, nr) => {
-                            expression_stack.push_front(CodegenExpressionStack::Calculate(
-                                CodegenExpressionType::GreaterEq,
-                                ident, //Register ID & Identifier
-                                2 //How many elements we'll be expecting
-                            ));
-                            expression_stack.push_front(CodegenExpressionStack::Node(nl));
-                            expression_stack.push_front(CodegenExpressionStack::Node(nr));
-                        },
-                        Node::LessThan(nl, nr) => {
-                            expression_stack.push_front(CodegenExpressionStack::Calculate(
-                                CodegenExpressionType::Lesser,
-                                ident, //Register ID & Identifier
-                                2 //How many elements we'll be expecting
-                            ));
-                            expression_stack.push_front(CodegenExpressionStack::Node(nl));
-                            expression_stack.push_front(CodegenExpressionStack::Node(nr));
-                        },
-                        Node::LessThanOrEqualTo(nl, nr) => {
-                            expression_stack.push_front(CodegenExpressionStack::Calculate(
-                                CodegenExpressionType::LesserEq,
-                                ident, //Register ID & Identifier
-                                2 //How many elements we'll be expecting
-                            ));
-                            expression_stack.push_front(CodegenExpressionStack::Node(nl));
-                            expression_stack.push_front(CodegenExpressionStack::Node(nr));
-                        },
-                        _ => {}
-                    }
-                    if !matches {
-                        register_counter += 1;
-                    }
-                }
-                CodegenExpressionStack::Calculate(expression_type, register_ident, elms) => {
-                    let mut parameters = Vec::new();
-                    let mut types = Vec::new();
-                    for _i in 0..elms {
-                        let ident_from_stack = ident_stack.pop().expect("Ident stack should pop when calculating.");
-                        parameters.push(Parameter::from_ident(ident_from_stack.ident));
-                        types.push(ident_from_stack.value_type)
-                    }
-                    calculated = true;
-                    let result_type = self.calculate_expression(expression_type, register_ident, parameters, types, root_node)?;
-                    ident_stack.push(CodegenValue::new(register_ident, result_type));
-                }
-                
-            }
-        }
-        let final_value = ident_stack.pop().expect("Ident stack should have a final value.");
-        if !calculated { //The expression was a single primary value and included no calculation, so we need to set the intended value.
+        let register_group = self.buffer.allocate_line_register_group();
+        let result = self.generate_expression_inside(context, root_node, register_group)?;
+        self.buffer.free_line_register_group(register_group);
+        if set_ident != result.value.ident {
             self.buffer.code_buffer.push_instruction(instruction!(
-                Var::Set, [
-                    (Ident, set_ident),
-                    (Ident, final_value.ident)
-                ]
+                Var::Set, [(Ident, set_ident), (Ident, result.value.ident)]
             ));
         }
-        self.buffer.free_line_registers(allocated_registers)?;
-        Ok(CodegenValue::new(set_ident, final_value.value_type))
+        Ok(result)
     }
 
-    fn calculate_expression(&mut self, expression_type: CodegenExpressionType, ident: u32, parameters: Vec<Parameter>, types: Vec<ValueType>, root_node: &Rc<Node>) -> Result<ValueType, CodegenError> {
-        let result_type = match expression_type {
-            CodegenExpressionType::Add => {
-                match (types.get(0).unwrap(), types.get(1).unwrap()) {
-                    (ValueType::Primitive(PrimitiveType::String), ValueType::Primitive(PrimitiveType::String)) => {
-                        self.buffer.code_buffer.push_instruction(instruction!(
-                            Var::String, [
-                                (Ident, ident)
-                            ]
-                        ));
-                        self.buffer.code_buffer.push_parameter(parameters[0].clone());
-                        self.buffer.code_buffer.push_parameter(parameters[1].clone());
+    fn generate_expression_inside(&mut self, context: usize, node: &Rc<Node>, register_group: u64) -> Result<CodegenExpressionResult, CodegenError> {
+        let mut value = CodegenValue::default();
+        let mut trace = None;
+        match node.as_ref() {
+            Node::Primary(token) => {
+                value = match &token.token_type {
+                    TokenType::Ident(ident) => {
+                        self.get_definition_access_isolated(context, node, register_group)?
+                    },
+                    TokenType::String(string) => CodegenValue::new(
+                        self.buffer.use_string(string.as_str()),
                         ValueType::Primitive(PrimitiveType::String)
-                    },
-                    (ValueType::Primitive(PrimitiveType::Number), ValueType::Primitive(PrimitiveType::Number)) => {
-                        self.buffer.code_buffer.push_instruction(instruction!(
-                            Var::Add, [
-                                (Ident, ident)
-                            ]
-                        ));
-                        self.buffer.code_buffer.push_parameter(parameters[0].clone());
-                        self.buffer.code_buffer.push_parameter(parameters[1].clone());
+                    ),
+                    TokenType::Number(number) => CodegenValue::new(
+                        self.buffer.use_number(ParameterValue::Float(*number)),
                         ValueType::Primitive(PrimitiveType::Number)
-                    },
-                    _ => {
-                        return CodegenError::err(root_node.clone(), ErrorRepr::InvalidExpressionTypeConversion)
-                    }
+                    ),
+                    _ => { return CodegenError::err(node.clone(), ErrorRepr::UnexpectedExpressionToken); }
                 }
-            },
-            CodegenExpressionType::Sub => {
-                match (types.get(0).unwrap(), types.get(1).unwrap()) {
+            }
+            Node::Construct(construct_ident, construct_body) => {
+                let register = self.buffer.allocate_grouped_line_register(register_group);
+                let created_struct = self.create_struct_instance_from_node(context, construct_ident, construct_body, register)?;
+                value = CodegenValue::new(register, created_struct);
+            }
+            Node::FunctionCall(func_ident, func_params) => {
+                let register = self.buffer.allocate_grouped_line_register(register_group);
+                let func_type = self.call_function(context, func_ident, func_params, register)?;
+                value = CodegenValue::new(register, func_type);
+            }
+            Node::Access(accessed, access_field) => {
+                let register = self.buffer.allocate_grouped_line_register(register_group);
+                value.ident = register;
+                let accessed_value = self.generate_expression_inside(context, accessed, register_group)?.value.clone();
+                let access_field_ident = Self::get_primary_as_ident(access_field, ErrorRepr::ExpectedAccessableIdentifier)?;
+
+                
+                match accessed_value.value_type {
+                    ValueType::Struct(struct_id) => {
+                        let struct_context = self.context_borrow(struct_id)?;
+                        let field_id = self.extract_definition_field(
+                            struct_context
+                            .definition_lookup
+                            .get(access_field_ident)
+                            .ok_or(CodegenError::new(access_field.clone(), ErrorRepr::InvalidStructField))?
+                        )?;
+                        let field_type = struct_context.fields[field_id].field_type.clone();
+                        drop(struct_context);
+                        self.buffer.code_buffer.push_instruction(instruction!(
+                            Var::GetListValue, [ (Ident, register), (Ident, accessed_value.ident), (Int, field_id) ]
+                        ));
+                        value.value_type = field_type;
+                    }
+                    ValueType::Comptime(ComptimeType::Domain(domain_id)) => {
+                        
+                    }
+                    _ => { return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion); }
+                }
+            }
+            Node::Sum(l, r) => {
+                let register = self.buffer.allocate_grouped_line_register(register_group);
+                value.ident = register;
+                let l = self.generate_expression_inside(context, l, register_group)?.value.clone();
+                let r = self.generate_expression_inside(context, r, register_group)?.value.clone();
+                match (l.value_type, r.value_type) {
                     (ValueType::Primitive(PrimitiveType::Number), ValueType::Primitive(PrimitiveType::Number)) => {
                         self.buffer.code_buffer.push_instruction(instruction!(
-                            Var::Sub, [
-                                (Ident, ident)
-                            ]
+                            Var::Add, [ (Ident, register), (Ident, l.ident), (Ident, r.ident) ]
                         ));
-                        self.buffer.code_buffer.push_parameter(parameters[0].clone());
-                        self.buffer.code_buffer.push_parameter(parameters[1].clone());
-                        ValueType::Primitive(PrimitiveType::Number)
-                    },
-                    _ => {
-                        return CodegenError::err(root_node.clone(), ErrorRepr::InvalidExpressionTypeConversion)
+                        value.value_type = ValueType::Primitive(PrimitiveType::Number);
                     }
+                    _ => { return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion); }
                 }
-            },
-            CodegenExpressionType::Mul => {
-                match (types.get(0).unwrap(), types.get(1).unwrap()) {
+            }
+            Node::Product(l, r) => {
+                let register = self.buffer.allocate_grouped_line_register(register_group);
+                value.ident = register;
+                let l = self.generate_expression_inside(context, l, register_group)?.value.clone();
+                let r = self.generate_expression_inside(context, r, register_group)?.value.clone();
+                match (l.value_type, r.value_type) {
                     (ValueType::Primitive(PrimitiveType::Number), ValueType::Primitive(PrimitiveType::Number)) => {
                         self.buffer.code_buffer.push_instruction(instruction!(
-                            Var::Mul, [
-                                (Ident, ident)
-                            ]
+                            Var::Mul, [ (Ident, register), (Ident, l.ident), (Ident, r.ident) ]
                         ));
-                        self.buffer.code_buffer.push_parameter(parameters[0].clone());
-                        self.buffer.code_buffer.push_parameter(parameters[1].clone());
-                        ValueType::Primitive(PrimitiveType::Number)
-                    },
-                    (ValueType::Primitive(PrimitiveType::String), ValueType::Primitive(PrimitiveType::Number)) => {
-                        self.buffer.code_buffer.push_instruction(instruction!(
-                            Var::RepeatString, [
-                                (Ident, ident)
-                            ]
-                        ));
-                        self.buffer.code_buffer.push_parameter(parameters[0].clone());
-                        self.buffer.code_buffer.push_parameter(parameters[1].clone());
-                        ValueType::Primitive(PrimitiveType::String)
-                    },
-                    (ValueType::Primitive(PrimitiveType::Number), ValueType::Primitive(PrimitiveType::String)) => {
-                        self.buffer.code_buffer.push_instruction(instruction!(
-                            Var::RepeatString, [
-                                (Ident, ident)
-                            ]
-                        ));
-                        self.buffer.code_buffer.push_parameter(parameters[1].clone());
-                        self.buffer.code_buffer.push_parameter(parameters[0].clone());
-                        ValueType::Primitive(PrimitiveType::String)
-                    },
-                    _ => {
-                        return CodegenError::err(root_node.clone(), ErrorRepr::InvalidExpressionTypeConversion)
+                        value.value_type = ValueType::Primitive(PrimitiveType::Number);
                     }
+                    _ => { return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion); }
                 }
-            },
-            CodegenExpressionType::Div => {
-                match (types.get(0).unwrap(), types.get(1).unwrap()) {
-                    (ValueType::Primitive(PrimitiveType::Number), ValueType::Primitive(PrimitiveType::Number)) => {
-                        self.buffer.code_buffer.push_instruction(instruction!(
-                            Var::Div, [
-                                (Ident, ident)
-                            ]
-                        ));
-                        self.buffer.code_buffer.push_parameter(parameters[0].clone());
-                        self.buffer.code_buffer.push_parameter(parameters[1].clone());
-                        ValueType::Primitive(PrimitiveType::Number)
-                    },
-                    _ => {
-                        return CodegenError::err(root_node.clone(), ErrorRepr::InvalidExpressionTypeConversion)
-                    }
-                }
-            },
-            CodegenExpressionType::Eq | CodegenExpressionType::NotEq => {
-                match (types.get(0).unwrap(), types.get(1).unwrap()) {
-                    (ValueType::Primitive(_), ValueType::Primitive(_)) => {
-                        self.buffer.code_buffer.push_instruction(
-                            match expression_type {
-                                CodegenExpressionType::NotEq => instruction!(Varif::NotEq),
-                                _ => instruction!(Varif::Eq)
-                            }
-                        );
-                        self.buffer.code_buffer.push_parameter(parameters[0].clone());
-                        self.buffer.code_buffer.push_parameter(parameters[1].clone());
-                    },
-                    _ => {
-                        return CodegenError::err(root_node.clone(), ErrorRepr::InvalidExpressionTypeConversion)
-                    }
-                }
-                self.buffer.code_buffer.push_instruction(instruction!(Var::Set, [
-                    (Ident, ident),
-                    (Int, 1)
-                ]));
-                self.buffer.code_buffer.push_instruction(instruction!(Else));
-                self.buffer.code_buffer.push_instruction(instruction!(Var::Set, [
-                    (Ident, ident),
-                    (Int, 0)
-                ]));
-                self.buffer.code_buffer.push_instruction(instruction!(EndIf));
-                ValueType::Primitive(PrimitiveType::Bool)
-            },
-            CodegenExpressionType::Not => { //we're basically doing the operation ``newbool = 1 - oldbool``.
-                match types.get(0).unwrap() {
-                    ValueType::Primitive(PrimitiveType::Bool) => {
-                        self.buffer.code_buffer.push_instruction(instruction!(
-                            Var::Sub, [
-                                (Ident, ident),
-                                (Int, 1)
-                            ]
-                        ));
-                        self.buffer.code_buffer.push_parameter(parameters[0].clone());
-                        ValueType::Primitive(PrimitiveType::Bool)
-                    },
-                    _ => {
-                        return CodegenError::err(root_node.clone(), ErrorRepr::InvalidExpressionTypeConversion)
-                    }
-                }
-            },
-            CodegenExpressionType::Or => {
-                match (types.get(0).unwrap(), types.get(1).unwrap()) {
-                    (ValueType::Primitive(PrimitiveType::Bool), ValueType::Primitive(PrimitiveType::Bool)) => {
-                        self.buffer.code_buffer.push_instruction(instruction!(
-                            Var::Bitwise, [
-                                (Ident, ident)
-                            ], {
-                                Operator: OR
-                            }
-                        ));
-                        self.buffer.code_buffer.push_parameter(parameters[0].clone());
-                        self.buffer.code_buffer.push_parameter(parameters[1].clone());
-                        ValueType::Primitive(PrimitiveType::Bool)
-                    },
-                    _ => {
-                        return CodegenError::err(root_node.clone(), ErrorRepr::InvalidExpressionTypeConversion)
-                    }
-                }
-            },
-            CodegenExpressionType::And => {
-                match (types.get(0).unwrap(), types.get(1).unwrap()) {
-                    (ValueType::Primitive(PrimitiveType::Bool), ValueType::Primitive(PrimitiveType::Bool)) => {
-                        self.buffer.code_buffer.push_instruction(instruction!(
-                            Var::Bitwise, [
-                                (Ident, ident)
-                            ], {
-                                Operator: AND
-                            }
-                        ));
-                        self.buffer.code_buffer.push_parameter(parameters[0].clone());
-                        self.buffer.code_buffer.push_parameter(parameters[1].clone());
-                        ValueType::Primitive(PrimitiveType::Bool)
-                    },
-                    _ => {
-                        return CodegenError::err(root_node.clone(), ErrorRepr::InvalidExpressionTypeConversion)
-                    }
-                }
-            },
-            CodegenExpressionType::Greater | CodegenExpressionType::GreaterEq | CodegenExpressionType::Lesser | CodegenExpressionType::LesserEq => {
-                match (types.get(0).unwrap(), types.get(1).unwrap()) {
-                    (ValueType::Primitive(PrimitiveType::Number), ValueType::Primitive(PrimitiveType::Number)) => {
-                        self.buffer.code_buffer.push_instruction(
-                            match expression_type {
-                                CodegenExpressionType::Greater => instruction!(Varif::Greater),
-                                CodegenExpressionType::GreaterEq => instruction!(Varif::GreaterEq),
-                                CodegenExpressionType::Lesser => instruction!(Varif::Lower),
-                                CodegenExpressionType::LesserEq => instruction!(Varif::LowerEq),
-                                _ => instruction!(Varif::Eq)
-                            }
-                        );
-                        self.buffer.code_buffer.push_parameter(parameters[0].clone());
-                        self.buffer.code_buffer.push_parameter(parameters[1].clone());
-                    },
-                    _ => {
-                        return CodegenError::err(root_node.clone(), ErrorRepr::InvalidExpressionTypeConversion)
-                    }
-                }
-                self.buffer.code_buffer.push_instruction(instruction!(Var::Set, [
-                    (Ident, ident),
-                    (Int, 1)
-                ]));
-                self.buffer.code_buffer.push_instruction(instruction!(Else));
-                self.buffer.code_buffer.push_instruction(instruction!(Var::Set, [
-                    (Ident, ident),
-                    (Int, 0)
-                ]));
-                self.buffer.code_buffer.push_instruction(instruction!(EndIf));
-                ValueType::Primitive(PrimitiveType::Bool)
-            },
-            CodegenExpressionType::Add => {
-                match (types.get(0).unwrap(), types.get(1).unwrap()) {
-                    (ValueType::Primitive(PrimitiveType::String), ValueType::Primitive(PrimitiveType::String)) => {
-                        self.buffer.code_buffer.push_instruction(instruction!(
-                            Var::String, [
-                                (Ident, ident)
-                            ]
-                        ));
-                        self.buffer.code_buffer.push_parameter(parameters[0].clone());
-                        self.buffer.code_buffer.push_parameter(parameters[1].clone());
-                        ValueType::Primitive(PrimitiveType::String)
-                    },
-                    (ValueType::Primitive(PrimitiveType::Number), ValueType::Primitive(PrimitiveType::Number)) => {
-                        self.buffer.code_buffer.push_instruction(instruction!(
-                            Var::Add, [
-                                (Ident, ident)
-                            ]
-                        ));
-                        self.buffer.code_buffer.push_parameter(parameters[0].clone());
-                        self.buffer.code_buffer.push_parameter(parameters[1].clone());
-                        ValueType::Primitive(PrimitiveType::Number)
-                    },
-                    _ => {
-                        return CodegenError::err(root_node.clone(), ErrorRepr::InvalidExpressionTypeConversion)
-                    }
-                }
-            },
-        };
-        Ok(result_type)
+            }
+            _ => { return CodegenError::err(node.clone(), ErrorRepr::UnexpectedExpressionToken); }
+        }
+        Ok(CodegenExpressionResult {
+            value,
+            trace
+        })
     }
 
     fn declare_runtime_variable(&mut self, context: usize, decl_type: &Rc<Node>, decl_ident: &Rc<Node>) -> Result<(&RuntimeVariable, String), CodegenError> {
@@ -1220,7 +946,12 @@ impl CodeGen {
     }
 
     fn call_function(&mut self, context: usize, function_ident: &Rc<Node>, function_params: &Rc<Node>, return_ident: u32) -> Result<ValueType, CodegenError> {
-        let func_context = self.find_function_by_node(function_ident, context)?;
+        // let func_context = self.find_function_by_node(function_ident, context)?;
+        let void = self.buffer.constant_void();
+        let function_ident_evaluation = self.generate_expression(context, function_ident, void)?;
+        let ValueType::Comptime(ComptimeType::Function(func_context)) = function_ident_evaluation.value.value_type else {
+            return CodegenError::err(function_ident.clone(), ErrorRepr::ExpectedFunctionIdentifier);
+        };
         let func_name = self.get_context_full_name(func_context).clone();
         let func_id = self.buffer.use_function(func_name.as_str());
         let mut call_instruction = instruction!(Call, [
@@ -1245,7 +976,7 @@ impl CodeGen {
             let param_var_ident = self.buffer.allocate_line_register();
             param_var_idents.push(param_var_ident);
             let param_expression = self.generate_expression(context, &param, param_var_ident)?;
-            if param_expression.value_type != param_field.field_type {
+            if param_expression.value.value_type != param_field.field_type {
                 return CodegenError::err(param.clone(), ErrorRepr::UnexpectedFunctionParameterType)
             }
             call_instruction.params.push(Parameter::from_ident(param_var_ident));
@@ -1357,7 +1088,12 @@ impl CodeGen {
                     if !already_set {
                         runtime_var_field_type = Some(self.set_ident_to_variable(context, assign_var, runtime_var_ident)?);
                     }
-                    if runtime_var_field_type.is_some_and(|field_type| field_type != expr_id.value_type) {
+                    {
+                        if let Some(fieldd_type) = &runtime_var_field_type {
+                            dbg!("Checking, ", expr_id.value.value_type.clone(), fieldd_type.clone());
+                        }
+                    }
+                    if runtime_var_field_type.is_some_and(|field_type| field_type != expr_id.value.value_type) {
                         return CodegenError::err(statement.clone(), ErrorRepr::InvalidVariableType)
                     }
                     self.buffer.free_line_registers(allocated_registers)?;
@@ -1373,7 +1109,7 @@ impl CodeGen {
                 Node::If(if_condition, if_block) => {
                     let allocated_bool = self.buffer.allocate_line_register();
                     let expr_id = self.generate_expression(context, if_condition, allocated_bool)?;
-                    if !matches!(expr_id.value_type, ValueType::Primitive(PrimitiveType::Bool)) {
+                    if !matches!(expr_id.value.value_type, ValueType::Primitive(PrimitiveType::Bool)) {
                         return CodegenError::err(statement.clone(), ErrorRepr::InvalidVariableType)
                     }
                     self.buffer.code_buffer.push_instruction(instruction!(
@@ -1397,7 +1133,7 @@ impl CodeGen {
                             return CodegenError::err(return_value.clone(), ErrorRepr::UnexpectedReturnValue)
                         };
                         let expr_id = self.generate_expression(context, return_value, return_type_ident_some)?;
-                        if expr_id.value_type != return_type {
+                        if expr_id.value.value_type != return_type {
                             return CodegenError::err(statement.clone(), ErrorRepr::InvalidReturnValueType)
                         }
                     }
@@ -1414,7 +1150,7 @@ impl CodeGen {
                     self.buffer.code_buffer.push_instruction(instruction!(Rep::Forever));
                     let allocated_bool = self.buffer.allocate_line_register();
                     let expr_id = self.generate_expression(context, while_cond, allocated_bool)?;
-                    if !matches!(expr_id.value_type, ValueType::Primitive(PrimitiveType::Bool)) {
+                    if !matches!(expr_id.value.value_type, ValueType::Primitive(PrimitiveType::Bool)) {
                         return CodegenError::err(statement.clone(), ErrorRepr::InvalidVariableType)
                     }
                     self.buffer.code_buffer.push_instruction(instruction!(
@@ -1467,9 +1203,9 @@ mod tests {
 
     #[test]
     pub fn decompile_from_file_test() {
-        let name = "more";
-        let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\codegen\examples\";
-        // let path = r"K:\Programming\GitHub\Esh\codegen\examples\";
+        let name = "refactor";
+        // let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\codegen\examples\";
+        let path = r"K:\Programming\GitHub\Esh\codegen\examples\";
 
         let file_bytes = fs::read(format!("{}{}.esh", path, name)).expect("File should read");
         let lexer = Lexer::new(str::from_utf8(&file_bytes).expect("Should encode to utf-8"));

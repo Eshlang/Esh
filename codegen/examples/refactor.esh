@@ -1,0 +1,19 @@
+func hello2() -> string {
+    Player hello = Player {
+        hey = Grass.hey();
+        wow = "wow";
+    };
+
+    return hello.wow;
+}
+
+struct Player {
+    num hey;
+    string wow;
+}
+
+domain Grass {
+    func hey() -> num {
+        return 5;
+    }
+}

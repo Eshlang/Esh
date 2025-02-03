@@ -1,0 +1,25 @@
+seg func
+    df _0 "__1#main.hello2"
+    df _7 "__4#main.Grass.hey"
+seg param
+    dp var _1 "fr" #scope:line
+    dp param _2 "fr" #type:var
+    dp var _3 "_rvl_hello" #scope:line
+    dp var _4 "_xl0" #scope:line
+    dp var _5 "_xl1" #scope:line
+    dp var _6 "_xl2" #scope:line
+    dp str _8 "wow"
+    dp num _9 5
+seg code
+    func _0 _2
+        call _7 _6
+        var set _5, _6
+        var set _6, _8
+        var createlist _4, _5, _6
+        var set _3, _4
+        var getlistvalue _4, _3, 1
+        var set _1, _4
+        ctrl return
+    func _7 _2
+        var set _1, _9
+        ctrl return
