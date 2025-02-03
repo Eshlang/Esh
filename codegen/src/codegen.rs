@@ -9,7 +9,7 @@ use parser::parser::Node;
 use crate::buffer::CodeGenBuffer;
 use crate::errors::{CodegenError, ErrorRepr};
 use crate::context::{CodeDefinition, CodeScope, Context, ContextType};
-use crate::types::{CodegenAccessNode, CodegenBodyStackMode, CodegenExpressionResult, CodegenExpressionStack, CodegenExpressionType, CodegenValue, ComptimeType, Field, PrimitiveType, RuntimeVariable, ValueType};
+use crate::types::{CodegenAccessNode, CodegenBodyStackMode, CodegenExpressionResult, CodegenExpressionStack, CodegenExpressionType, CodegenTrace, CodegenValue, ComptimeType, Field, PrimitiveType, RealtimeValueType, RuntimeVariable, ValueType};
 
 pub struct CodeGen {
     pub context_map: HashMap<String, usize>,
@@ -764,8 +764,11 @@ impl CodeGen {
     /// then the parent of that, until it looks on main.
     /// 
     /// The priority of which definition types it looks for is this:
+    /// - Primitive Types
     /// - Runtime Variables
     /// - Domains
+    /// - Functions
+    /// - Struct Types
     /// - Fields (for domains that'd be global variables, for structs it'd be fields)
     /// 
     /// in a function it'd first look for the runtime variables in that function,
@@ -777,8 +780,15 @@ impl CodeGen {
     /// 
     /// In a struct function it'd first look for the runtime variables, then the struct fields,
     /// then the parent scope (of the struct, not function)'s domains, then its fields, etc.
-    fn get_definition_access_isolated(&mut self, context: usize, node: &Rc<Node>, register_group: u64) -> Result<CodegenValue, CodegenError> {
+    fn get_definition_access_isolated(&mut self, context: usize, node: &Rc<Node>, register_group: u64) -> Result<CodegenExpressionResult, CodegenError> {
         let mut current_context = context;
+        
+        // Primitive Types
+        let var_name = Self::get_primary_as_ident(node, ErrorRepr::ExpectedVariableIdentifier)?;
+        if let Some(primitive) = Self::is_definition_primitive(var_name.as_str()) {
+            return Ok(CodegenExpressionResult::value(CodegenValue::comptime(self.buffer.constant_void(), ComptimeType::Type(RealtimeValueType::Primitive(primitive)))))
+        }
+
         loop {
             if let Ok(value) = self.get_definition_access(current_context, node, register_group) {
                 return Ok(value);
@@ -792,17 +802,33 @@ impl CodeGen {
     }
 
     /// Single version of ``get_definition_access_isolated`` but only on one context, not including its parents.
-    fn get_definition_access(&mut self, context: usize, node: &Rc<Node>, register_group: u64) -> Result<CodegenValue, CodegenError> {
+    fn get_definition_access(&mut self, context: usize, node: &Rc<Node>, register_group: u64) -> Result<CodegenExpressionResult, CodegenError> {
         let var_name = Self::get_primary_as_ident(node, ErrorRepr::ExpectedVariableIdentifier)?;
         // Runtime variables
         if let Some(var) = self.runtime_vars[context].get(var_name) {
-            return Ok(var.variable.clone());
+            return Ok(CodegenExpressionResult::trace(
+                var.variable.clone(),
+                CodegenTrace {
+                    root_ident: var.variable.ident,
+                    crumbs: Vec::new()
+                }
+            ));
         }
         
         if let Ok(definition) = &self.find_definition_by_ident(node, context) {
             // Domain
             if let Ok(domain_id) = self.extract_definition_domain(definition) {
-                return Ok(CodegenValue::domain(self.buffer.constant_void(), domain_id))
+                return Ok(CodegenExpressionResult::value(CodegenValue::comptime(self.buffer.constant_void(), ComptimeType::Domain(domain_id))))
+            } 
+            
+            // Function
+            if let Ok(func_id) = self.extract_definition_function(definition) {
+                return Ok(CodegenExpressionResult::value(CodegenValue::comptime(self.buffer.constant_void(), ComptimeType::Function(func_id))))
+            } 
+            
+            // Struct (Type)
+            if let Ok(struct_id) = self.extract_definition_struct(definition) {
+                return Ok(CodegenExpressionResult::value(CodegenValue::comptime(self.buffer.constant_void(), ComptimeType::Type(RealtimeValueType::Struct(struct_id)))))
             } 
         }
         //TODO: Add fields here
@@ -836,7 +862,9 @@ impl CodeGen {
             Node::Primary(token) => {
                 value = match &token.token_type {
                     TokenType::Ident(ident) => {
-                        self.get_definition_access_isolated(context, node, register_group)?
+                        let get_var = self.get_definition_access_isolated(context, node, register_group)?;
+                        trace = get_var.trace;
+                        get_var.value
                     },
                     TokenType::String(string) => CodegenValue::new(
                         self.buffer.use_string(string.as_str()),
@@ -860,9 +888,9 @@ impl CodeGen {
                 value = CodegenValue::new(register, func_type);
             }
             Node::Access(accessed, access_field) => {
+                let accessed_value = self.generate_expression_inside(context, accessed, register_group)?.value.clone();
                 let register = self.buffer.allocate_grouped_line_register(register_group);
                 value.ident = register;
-                let accessed_value = self.generate_expression_inside(context, accessed, register_group)?.value.clone();
                 let access_field_ident = Self::get_primary_as_ident(access_field, ErrorRepr::ExpectedAccessableIdentifier)?;
 
                 
@@ -882,17 +910,19 @@ impl CodeGen {
                         ));
                         value.value_type = field_type;
                     }
-                    ValueType::Comptime(ComptimeType::Domain(domain_id)) => {
-                        
+                    ValueType::Comptime(ComptimeType::Domain(domain_cid)) => {
+                        let get_access = self.get_definition_access(domain_cid, access_field, register_group)?;
+                        value = get_access.value;
+                        trace = get_access.trace;
                     }
                     _ => { return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion); }
                 }
             }
             Node::Sum(l, r) => {
                 let register = self.buffer.allocate_grouped_line_register(register_group);
-                value.ident = register;
                 let l = self.generate_expression_inside(context, l, register_group)?.value.clone();
                 let r = self.generate_expression_inside(context, r, register_group)?.value.clone();
+                value.ident = register;
                 match (l.value_type, r.value_type) {
                     (ValueType::Primitive(PrimitiveType::Number), ValueType::Primitive(PrimitiveType::Number)) => {
                         self.buffer.code_buffer.push_instruction(instruction!(
@@ -905,9 +935,9 @@ impl CodeGen {
             }
             Node::Product(l, r) => {
                 let register = self.buffer.allocate_grouped_line_register(register_group);
-                value.ident = register;
                 let l = self.generate_expression_inside(context, l, register_group)?.value.clone();
                 let r = self.generate_expression_inside(context, r, register_group)?.value.clone();
+                value.ident = register;
                 match (l.value_type, r.value_type) {
                     (ValueType::Primitive(PrimitiveType::Number), ValueType::Primitive(PrimitiveType::Number)) => {
                         self.buffer.code_buffer.push_instruction(instruction!(

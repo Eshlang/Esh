@@ -126,6 +126,21 @@ pub struct CodegenExpressionResult {
     pub trace: Option<CodegenTrace>
 }
 
+impl CodegenExpressionResult {
+    pub fn value(value: CodegenValue) -> Self {
+        Self {
+            value,
+            trace: None
+        }
+    }
+    pub fn trace(value: CodegenValue, trace: CodegenTrace) -> Self {
+        Self {
+            value,
+            trace: Some(trace)
+        }
+    }
+}
+
 impl CodegenValue {
     pub fn new(ident: u32, value_type: ValueType) -> Self {
         Self {
@@ -134,10 +149,10 @@ impl CodegenValue {
         }
     }
 
-    pub fn domain(void_ident: u32, domain: usize) -> Self {
+    pub fn comptime(void_ident: u32, value: ComptimeType) -> Self {
         Self {
             ident: void_ident,
-            value_type: ValueType::Comptime(ComptimeType::Domain(domain))
+            value_type: ValueType::Comptime(value)
         }
     }
 
