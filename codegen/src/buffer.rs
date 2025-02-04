@@ -60,6 +60,9 @@ impl CodeGenBuffer {
         self.line_register_idents.clear();
         self.line_register_indices.clear();
         self.allocated_line_registers.clear();
+        self.allocated_line_register_groups.clear();
+
+        self.line_register_groups = 0;
 
     }
     pub fn clear(&mut self) {
@@ -200,6 +203,7 @@ impl CodeGenBuffer {
             return *id;
         }
         let func_id = self.ident_count;
+        // dbg!(name, func_id, self.ident_count);
         self.ident_count += 1;
         self.func_buffer.push_instruction(instruction!(
             DF,
@@ -288,6 +292,9 @@ impl CodeGenBuffer {
 
 
     pub fn constant_void(&mut self) -> u32 {
+        // dbg!("Called constant void, current: ", self.constants.void_variable);
+        // dbg!(self.idents_variable_hash.get("_c_void"));
+        // dbg!(self.ident_count);
         match self.constants.void_variable {
             Some(value) => value,
             None => {

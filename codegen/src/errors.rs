@@ -171,4 +171,6 @@ pub enum ErrorRepr {
     ExpectedAccessableNode,
     #[error("Expected an accessing node (such as a .field access).")]
     ExpectedAccessingNode,
+    #[error("Expected an assignable expression (such as a variable, a .field access, etc.")]
+    ExpectedAssignableExpression,
 }

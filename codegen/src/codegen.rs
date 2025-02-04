@@ -9,7 +9,7 @@ use parser::parser::Node;
 use crate::buffer::CodeGenBuffer;
 use crate::errors::{CodegenError, ErrorRepr};
 use crate::context::{CodeDefinition, CodeScope, Context, ContextType};
-use crate::types::{CodegenAccessNode, CodegenBodyStackMode, CodegenExpressionResult, CodegenExpressionStack, CodegenExpressionType, CodegenTrace, CodegenValue, ComptimeType, Field, PrimitiveType, RealtimeValueType, RuntimeVariable, ValueType};
+use crate::types::{CodegenAccessNode, CodegenBodyStackMode, CodegenExpressionResult, CodegenExpressionStack, CodegenExpressionType, CodegenTrace, CodegenTraceCrumb, CodegenValue, ComptimeType, Field, PrimitiveType, RealtimeValueType, RuntimeVariable, ValueType};
 
 pub struct CodeGen {
     pub context_map: HashMap<String, usize>,
@@ -522,90 +522,14 @@ impl CodeGen {
     }
 
     fn set_ident_to_variable(&mut self, context: usize, node: &Rc<Node>, get_ident: u32) -> Result<ValueType, CodegenError> {
-        match node.as_ref() {
-            Node::Primary(..) => {
-                let var_name = Self::get_primary_as_ident(node, ErrorRepr::ExpectedVariable)?;
-                let runtime_var = self.find_variable_by_name_full(context, var_name, node)?.variable.clone();
-                self.buffer.code_buffer.push_instruction(instruction!(Var::Set, [
-                    (Ident, runtime_var.ident), (Ident, get_ident)
-                ]));
-                Ok(runtime_var.value_type)
-            }
-            Node::Access(..) => {
-                let mut allocated_registers = vec![0];
-                let mut node_stack = Vec::new();
-                let mut loop_access = node;
-                loop { // Parsing the recursive access into a linear vector, where the root is *last*
-                    match loop_access.as_ref() {
-                        Node::Access(loop_access_parent, loop_access_field) => {
-                            node_stack.push(loop_access_field);
-                            loop_access = loop_access_parent;
-                        }
-                        Node::Primary(..) => {
-                            node_stack.push(loop_access);
-                            break;
-                        }
-                        _ => {
-                            return CodegenError::err(node.clone(), ErrorRepr::ExpectedVariable);
-                        }
-                    }
-                }
-                let mut previous = CodegenValue::default();
-                let mut end_instruction_stack = Vec::new();
-                for _ in 0..node_stack.len()-1 {
-                    allocated_registers.push(self.buffer.allocate_line_register());
-                }
-                for (access_node_ind, access_node) in node_stack.into_iter().rev().enumerate() {
-                    if access_node_ind == 0 { // Root node
-                        let var_name = Self::get_primary_as_ident(access_node, ErrorRepr::ExpectedVariable)?;
-                        previous = self.find_variable_by_name_full(context, var_name, access_node)?.variable.clone();
-                        allocated_registers[0] = previous.ident;
-                    } else {
-                        let register = allocated_registers[access_node_ind];
-                        let register_next = allocated_registers.get(access_node_ind+1).map(|x| *x);
-                        previous = match previous.value_type {
-                            ValueType::Struct(parent_struct) => {
-                                let struct_context = self.context_borrow(parent_struct)?;
-                                let access_field_ident = Self::get_primary_as_ident(access_node, ErrorRepr::ExpectedVariable)?;
-                                let field_id = self.extract_definition_field(
-                                    struct_context
-                                    .definition_lookup
-                                    .get(access_field_ident)
-                                    .ok_or(CodegenError::new(access_node.clone(), ErrorRepr::InvalidStructField))?
-                                )?;
-                                let field_type = struct_context.fields[field_id].field_type.clone();
-                                drop(struct_context);
-                                if register_next.is_none() {
-                                    end_instruction_stack.push(instruction!(Var::SetListValue, [
-                                        (Ident, previous.ident), (Int, field_id+1), (Ident, get_ident)
-                                        ]));
-                                } else {
-                                    self.buffer.code_buffer.push_instruction(instruction!(Var::GetListValue, [
-                                        (Ident, register), (Ident, previous.ident), (Int, field_id+1)
-                                    ]));
-                                    end_instruction_stack.push(instruction!(Var::SetListValue, [
-                                        (Ident, previous.ident), (Int, field_id+1), (Ident, register)
-                                    ]));
-                                }
-                                CodegenValue::new(register, field_type)
-                            }
-                            _ => {
-                                return CodegenError::err(access_node.clone(), ErrorRepr::ExpectedAccessableNode);
-                            }
-                        };
-                    }
-                }
-                for add_end_instruction in end_instruction_stack.into_iter().rev() {
-                    self.buffer.code_buffer.push_instruction(add_end_instruction);
-                }
-                allocated_registers.remove(0);
-                self.buffer.free_line_registers(allocated_registers)?;
-                Ok(previous.value_type)
-            }
-            _ => {
-                CodegenError::err(node.clone(), ErrorRepr::ExpectedVariable)
-            }
-        }
+        let void_register = self.buffer.constant_void();
+        // dbg!(void_register);
+        let expression = self.generate_expression(context, node, void_register)?;
+        let Some(trace) = expression.trace else {
+            return CodegenError::err(node.clone(), ErrorRepr::ExpectedAssignableExpression);
+        };
+        self.set_trace_to_value(trace, CodegenValue::new(get_ident, expression.value.value_type.clone()))?;
+        Ok(expression.value.value_type)
     }
     
     fn create_struct_instance_from_node(&mut self, context: usize, construct_ident: &Rc<Node>, construct_body_node: &Rc<Node>, set_ident: u32) -> Result<ValueType, CodegenError> {
@@ -832,6 +756,49 @@ impl CodeGen {
         CodegenError::err(node.clone(), ErrorRepr::DefinitionIdentNotRecognized)
     }
 
+    fn set_trace_to_value(&mut self, trace: CodegenTrace, value: CodegenValue) -> Result<(), CodegenError> {
+        if trace.crumbs.len() == 0 {
+            self.buffer.code_buffer.push_instruction(instruction!(
+                Var::Set, [(Ident, trace.root_ident), (Ident, value.ident)]
+            ));
+            return Ok(());
+        }
+        let register_group = self.buffer.allocate_line_register_group();
+        let trace_ident = trace.root_ident;
+        self.set_trace_to_value_inside(Rc::new(trace), trace_ident, value.ident, 0, register_group);
+        self.buffer.free_line_register_group(register_group);
+        Ok(())
+    }
+
+    fn set_trace_to_value_inside(&mut self, trace: Rc<CodegenTrace>, set_value_ident: u32, final_value_ident: u32, depth: usize, register_group: u64) {
+        if depth < trace.crumbs.len() {
+            let register = self.buffer.allocate_grouped_line_register(register_group);
+            self.get_crumb(trace.crumbs[depth].clone(), register, set_value_ident);
+            self.set_trace_to_value_inside(trace.clone(), register, final_value_ident, depth+1, register_group);
+            self.set_crumb(trace.crumbs[depth].clone(), register, set_value_ident);
+        } else { //final one, just set
+            self.buffer.code_buffer.push_instruction(instruction!(
+                Var::Set, [(Ident, set_value_ident), (Ident, final_value_ident)]
+            ));
+        }
+    }
+
+    fn get_crumb(&mut self, crumb: CodegenTraceCrumb, get_value_ident: u32, set_value_ident: u32) {
+        self.buffer.code_buffer.push_instruction(match crumb {
+            CodegenTraceCrumb::Index(index) => instruction!(
+                Var::GetListValue, [(Ident, get_value_ident), (Ident, set_value_ident), (Int, index)]
+            )
+        });
+    }
+
+    fn set_crumb(&mut self, crumb: CodegenTraceCrumb, get_value_ident: u32, set_value_ident: u32) {
+        self.buffer.code_buffer.push_instruction(match crumb {
+            CodegenTraceCrumb::Index(index) => instruction!(
+                Var::SetListValue, [(Ident, set_value_ident), (Int, index), (Ident, get_value_ident)]
+            )
+        });
+    }
+
     fn generate_expression(&mut self, context: usize, root_node: &Rc<Node>, set_ident: u32) -> Result<CodegenExpressionResult, CodegenError> {
         //TODO: Refactor by removing ``set_ident`` as the workaround, and moving to register group based stuff
         // means a lot of refactoring needs to be done for stuff that *uses* generate_expression, but i think it's worth it
@@ -884,7 +851,8 @@ impl CodeGen {
                 value = CodegenValue::new(register, func_type);
             }
             Node::Access(accessed, access_field) => {
-                let accessed_value = self.generate_expression_inside(context, accessed, register_group)?.value.clone();
+                let accessed_expression = self.generate_expression_inside(context, accessed, register_group)?.clone();
+                let accessed_value = accessed_expression.value;
                 let access_field_ident = Self::get_primary_as_ident(access_field, ErrorRepr::ExpectedAccessableIdentifier)?;
 
                 
@@ -904,6 +872,11 @@ impl CodeGen {
                         self.buffer.code_buffer.push_instruction(instruction!(
                             Var::GetListValue, [ (Ident, register), (Ident, accessed_value.ident), (Int, field_id) ]
                         ));
+                        if let Some(mut trace_add) = accessed_expression.trace {
+                            trace_add.crumbs.push(CodegenTraceCrumb::Index(field_id));
+                            trace = Some(trace_add);
+                        }
+
                         value.value_type = field_type;
                     }
                     ValueType::Comptime(ComptimeType::Domain(domain_cid)) => {
@@ -1090,7 +1063,7 @@ impl CodeGen {
                     block_runtime_vars_add.push(self.declare_runtime_variable(context, decl_type, decl_ident)?.1);
                 },
                 Node::Assignment(assign_var, assign_value) => {
-                    let mut allocated_registers = Vec::new();
+                    let register_group = self.buffer.allocate_line_register_group();
                     let (runtime_var_ident, mut runtime_var_field_type, already_set) = match assign_var.as_ref() {
                         Node::Declaration(decl_type, decl_ident) => {
                             let declaration = self.declare_runtime_variable(context, decl_type, decl_ident)?;
@@ -1102,8 +1075,7 @@ impl CodeGen {
                             (runtime_var.variable.ident, Some(runtime_var.variable.value_type.clone()), true)
                         }
                         Node::Access(..) => {
-                            let allocate = self.buffer.allocate_line_register();
-                            allocated_registers.push(allocate);
+                            let allocate = self.buffer.allocate_grouped_line_register(register_group);
                             (allocate, None, false)
                         }
                         _ => {
@@ -1114,15 +1086,11 @@ impl CodeGen {
                     if !already_set {
                         runtime_var_field_type = Some(self.set_ident_to_variable(context, assign_var, runtime_var_ident)?);
                     }
-                    {
-                        if let Some(fieldd_type) = &runtime_var_field_type {
-                            dbg!("Checking, ", expr_id.value.value_type.clone(), fieldd_type.clone());
-                        }
-                    }
+
                     if runtime_var_field_type.is_some_and(|field_type| field_type != expr_id.value.value_type) {
                         return CodegenError::err(statement.clone(), ErrorRepr::InvalidVariableType)
                     }
-                    self.buffer.free_line_registers(allocated_registers)?;
+                    self.buffer.free_line_register_group(register_group);
                 },
                 Node::Else(if_node, else_block) => {
                     let Node::Block(else_block) = else_block.as_ref() else {
@@ -1206,10 +1174,10 @@ impl CodeGen {
     }
 
     pub fn codegen_from_node(&mut self, node: Rc<Node>) -> Result<(), CodegenError> {
+        self.buffer.clear();
         let _root_context = self.scan_block_outline(node, ContextType::Domain, 0, 0, CodeScope::Public, Vec::new(), "main".to_owned())?;
         self.fill_all_field_types()?;
         self.root_context = 0;
-        self.buffer.clear();
         //##println!("\n\n\n\n{:#?}\n\n\n\n", self.context_names);
         self.generate_all_code()?;
         Ok(())
