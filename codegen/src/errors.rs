@@ -173,4 +173,6 @@ pub enum ErrorRepr {
     ExpectedAccessingNode,
     #[error("Expected an assignable expression (such as a variable, a .field access, etc.")]
     ExpectedAssignableExpression,
+    #[error("Expected a traceable variable to assign.")]
+    NoTraceCantAssign,
 }

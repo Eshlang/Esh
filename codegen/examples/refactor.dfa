@@ -13,20 +13,18 @@ seg param
     dp var _10 "_rvl_test" #scope:line
     dp num _11 500
     dp num _12 800
-    dp var _13 "_xl2" #scope:line
-    dp num _14 5
+    dp num _13 5
 seg code
     func _1 _3
         call _6 _5
         var createlist _8, _9
         var createlist _4, _5, _7, _8
         var set _10, _11
-        var set _8, _12
-        var getlistvalue _13, _4, 2
-        var setlistvalue _13, 0, _8
-        var setlistvalue _4, 2, _13
-        var getlistvalue _2, _4, 1
+        var getlistvalue _8, _4, 3
+        var setlistvalue _8, 1, _12
+        var setlistvalue _4, 3, _8
+        var getlistvalue _2, _4, 2
         ctrl return
     func _6 _3
-        var set _2, _14
+        var set _2, _13
         ctrl return
