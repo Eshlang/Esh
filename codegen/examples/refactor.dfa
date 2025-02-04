@@ -1,46 +1,32 @@
 seg func
     df _1 "__1#main.hello2"
-    df _8 "__3#main.Grass.hey"
+    df _6 "__3#main.Grass.hey"
 seg param
     dp var _0 "_c_void" #scope:global
     dp var _2 "fr" #scope:line
     dp param _3 "fr" #type:var
     dp var _4 "_rvl_hello" #scope:line
     dp var _5 "_xl0" #scope:line
-    dp var _6 "_xl1" #scope:line
-    dp var _7 "_xl2" #scope:line
-    dp str _9 "wow"
-    dp var _10 "_xl3" #scope:line
-    dp var _11 "_xl4" #scope:line
-    dp var _12 "_xl5" #scope:line
-    dp num _13 127
-    dp var _14 "_rvl_test" #scope:line
-    dp num _15 500
-    dp num _16 800
-    dp num _17 5
+    dp str _7 "wow"
+    dp var _8 "_xl1" #scope:line
+    dp num _9 127
+    dp var _10 "_rvl_test" #scope:line
+    dp num _11 500
+    dp num _12 800
+    dp var _13 "_xl2" #scope:line
+    dp num _14 5
 seg code
     func _1 _3
-        call _8 _7
-        var set _6, _7
-        var set _7, _9
-        var set _12, _13
-        var createlist _11, _12
+        call _6 _5
+        var createlist _8, _9
+        var createlist _4, _5, _7, _8
         var set _10, _11
-        var createlist _5, _6, _7, _10
-        var set _4, _5
-        var set _14, _15
-        var set _5, _16
-        var getlistvalue _6, _4, 2
-        var getlistvalue _7, _6, 0
-        var set _0, _7
-        var getlistvalue _7, _4, 2
-        var getlistvalue _10, _7, 0
-        var set _10, _5
-        var setlistvalue _7, 0, _10
-        var setlistvalue _4, 2, _7
-        var getlistvalue _5, _4, 1
-        var set _2, _5
+        var set _8, _12
+        var getlistvalue _13, _4, 2
+        var setlistvalue _13, 0, _8
+        var setlistvalue _4, 2, _13
+        var getlistvalue _2, _4, 1
         ctrl return
-    func _8 _3
-        var set _2, _17
+    func _6 _3
+        var set _2, _14
         ctrl return
