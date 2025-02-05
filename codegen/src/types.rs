@@ -2,10 +2,16 @@ use std::rc::Rc;
 use parser::parser::Node;
 use crate::context::CodeScope;
 
-#[derive(Debug, Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Field {
     pub field_type: ValueType,
     pub scope: CodeScope,
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct FieldDefinition {
+    pub field: Field,
+    pub index: usize
 }
 
 #[derive(Clone, PartialEq, Debug)]

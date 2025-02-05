@@ -75,6 +75,8 @@ pub enum ErrorRepr {
     ExpectedAccessableIdentifier,
     #[error("Expected a struct field identifier string.")]
     ExpectedStructFieldIdentifier,
+    #[error("Expected an identifier string.")]
+    ExpectedIdentifier,
     #[error("Borrowing error. (Yeah you know the system in rust thats supposed to fix errors? it errored)")]
     BadBorrow,
     #[error("Mutable borrowing error. (Yeah you know the system in rust thats supposed to fix errors? it errored)")]
@@ -175,4 +177,6 @@ pub enum ErrorRepr {
     ExpectedAssignableExpression,
     #[error("Expected a traceable variable to assign.")]
     NoTraceCantAssign,
+    #[error("This field is already defined!")]
+    FieldAlreadyDefined,
 }

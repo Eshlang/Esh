@@ -17,7 +17,7 @@ pub enum ContextType {
     Domain,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum CodeScope {
     Public,
     Private

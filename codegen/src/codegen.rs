@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::rc::Rc;
 use dfbin::enums::{Instruction, Parameter, ParameterValue};
 use dfbin::instruction;
@@ -9,7 +9,7 @@ use parser::parser::Node;
 use crate::buffer::CodeGenBuffer;
 use crate::errors::{CodegenError, ErrorRepr};
 use crate::context::{CodeDefinition, CodeScope, Context, ContextType};
-use crate::types::{CodegenAccessNode, CodegenBodyStackMode, CodegenExpressionResult, CodegenExpressionStack, CodegenExpressionType, CodegenTrace, CodegenTraceCrumb, CodegenValue, ComptimeType, Field, GenerateExpressionSettings, PrimitiveType, RealtimeValueType, RuntimeVariable, ValueType};
+use crate::types::{CodegenAccessNode, CodegenBodyStackMode, CodegenExpressionResult, CodegenExpressionStack, CodegenExpressionType, CodegenTrace, CodegenTraceCrumb, CodegenValue, ComptimeType, Field, FieldDefinition, GenerateExpressionSettings, PrimitiveType, RealtimeValueType, RuntimeVariable, ValueType};
 
 pub struct CodeGen {
     pub context_map: HashMap<String, usize>,
@@ -20,6 +20,7 @@ pub struct CodeGen {
     buffer: CodeGenBuffer,
     parents: Vec<usize>,
     runtime_vars: Vec<HashMap<String, RuntimeVariable>>,
+    domain_vars: Vec<Vec<RuntimeVariable>>,
     return_runtimes: Vec<Option<RuntimeVariable>>,
     field_names: Vec<Vec<String>>,
     context_names: Vec<String>,
@@ -39,6 +40,7 @@ impl CodeGen {
             buffer: CodeGenBuffer::new(),
             parents: Vec::new(),
             runtime_vars: Vec::new(),
+            domain_vars: Vec::new(),
             return_runtimes: Vec::new(),
             field_names: Vec::new(),
             context_names: Vec::new(),
@@ -60,9 +62,12 @@ impl CodeGen {
         self.contexts.push(current_context_cell.clone());
         self.parents.push(parent_id);
         self.runtime_vars.push(HashMap::new());
+        let mut domain_vars = Vec::new();
+        self.domain_vars.push(Vec::new());
         self.return_runtimes.push(None);
         self.field_names.push(Vec::new());
         let mut field_names = fields_base;
+        let mut field_names_hash = HashSet::new();
         self.context_names.push(context_name.clone());
         self.context_full_names.push(if parent_id == current_id {
             let mut str = String::from("__");
@@ -106,7 +111,6 @@ impl CodeGen {
                     };
                     let ident_string = Self::get_primary_as_ident(ident, ErrorRepr::ExpectedFunctionIdentifier)?;
                     let child_id = self.scan_block_outline(body.clone(), ContextType::Function(return_type_field), depth, current_id, CodeScope::Public, func_fields_base, ident_string.clone())?;
-
                     let mut child_modify = self.context_borrow_mut(child_id)?;
                     for (param_type, param_name) in params {
                         let param_name_ident = Self::get_primary_as_ident(param_name, ErrorRepr::ExpectedFunctionParamIdent)?;
@@ -127,16 +131,36 @@ impl CodeGen {
                     Self::add_definition(&mut current_context, ident_string.clone(), CodeDefinition::Context(child_id))?;
                     current_context.children.push(child_id);
                 },
-                (Node::Declaration(field_type, field_name), ContextType::Struct) => {
+                (Node::Declaration(field_type, field_name), ContextType::Struct | ContextType::Domain) => {
                     let field_name_ident = Self::get_primary_as_ident(field_name, ErrorRepr::ExpectedStructFieldIdentifier)?;
                     let field_id = current_context.fields.len();
+                    if field_names_hash.contains(field_name_ident) {
+                        return CodegenError::err(field_name.clone(), ErrorRepr::FieldAlreadyDefined);
+                    }
                     field_names.push(field_name_ident.clone());
+                    field_names_hash.insert(field_name_ident.clone());
                     Self::add_definition(&mut current_context, field_name_ident.clone(), CodeDefinition::Field(field_id))?;
                     current_context.fields.push(Field{
                         field_type: ValueType::Ident(field_type.clone()),
                         scope: CodeScope::Public,
-                    })
-                }
+                    });
+
+                    if matches!(&context_type, ContextType::Domain) { //Fields in domains are domain variables
+                        let mut format = self.get_context_full_name(current_id).clone();
+                        format.remove(0);
+                        format.remove(0);
+                        format.push('.');
+                        format.push_str(&field_name_ident);
+                        let var_name = Self::make_var_name(&format, "dvg");
+                        let var_ident = self.buffer.use_variable(var_name.as_ref(), DP::Var::Scope::Global);
+                        domain_vars.push(
+                            RuntimeVariable::new(
+                                CodegenValue::new(var_ident, ValueType::Ident(field_type.clone())),
+                                var_name
+                            )
+                        );
+                    }
+                },
                 (Node::Domain(ident, body), ContextType::Domain) => {
                     let ident_string = Self::get_primary_as_ident(ident, ErrorRepr::ExpectedDomainIdentifier)?;
                     let child_id = self.scan_block_outline(body.clone(), ContextType::Domain, depth, current_id, CodeScope::Public, Vec::new(), ident_string.clone())?;
@@ -156,6 +180,7 @@ impl CodeGen {
         };
         //##println!("WOWWWWW {:?}\n{:?}\n\n", current_id, field_names);
         self.field_names[current_id] = field_names;
+        self.domain_vars[current_id] = domain_vars;
         current_context.body = Rc::new(body);
         
         drop(current_context);
@@ -239,16 +264,23 @@ impl CodeGen {
                     drop(context_get_mut);
                 };
             }
+
+            let domain_vars_len = self.domain_vars[context_id].len();
+            
             for field in 0..fields_len {
                 let context_get = self.context_borrow(context_id)?;
-                let ValueType::Ident(field_ident) = context_get.fields.get(field).unwrap().field_type.clone() else {
+                let ValueType::Ident(field_ident) = context_get.fields.get(field).expect("Field should be defined").field_type.clone() else {
                     continue;
                 };
                 drop(context_get);
                 let field_type_set =  self.get_type(&field_ident, context_id)?;
+                if field < domain_vars_len { // Also replace the domain_var ident
+                    self.domain_vars[context_id][field].variable.value_type = field_type_set.clone();
+                }
                 let mut context_get_mut = self.context_borrow_mut(context_id)?;
                 context_get_mut.fields[field].field_type = field_type_set;
                 drop(context_get_mut);
+
             }
         }
         Ok(())
@@ -718,9 +750,13 @@ impl CodeGen {
         CodegenError::err(node.clone(), ErrorRepr::DefinitionIdentNotRecognized)
     }
 
+    fn get_context_type(&mut self, context: usize) -> Result<ContextType, CodegenError> {
+        Ok(self.context_borrow(context)?.context_type.clone())
+    }
+
     /// Single version of ``get_definition_access_isolated`` but only on one context, not including its parents.
     fn get_definition_access(&mut self, context: usize, node: &Rc<Node>, register_group: u64) -> Result<CodegenExpressionResult, CodegenError> {
-        let var_name = Self::get_primary_as_ident(node, ErrorRepr::ExpectedVariableIdentifier)?;
+        let var_name = Self::get_primary_as_ident(node, ErrorRepr::ExpectedIdentifier)?;
         // Runtime variables
         if let Some(var) = self.runtime_vars[context].get(var_name) {
             return Ok(CodegenExpressionResult::trace(
@@ -729,25 +765,46 @@ impl CodeGen {
             ));
         }
         
-        if let Ok(definition) = &self.find_definition_by_ident(node, context) {
-            // Domain
-            if let Ok(domain_id) = self.extract_definition_domain(definition) {
-                return Ok(CodegenExpressionResult::value(CodegenValue::comptime(self.buffer.constant_void(), ComptimeType::Domain(domain_id))))
-            } 
-            
-            // Function
-            if let Ok(func_id) = self.extract_definition_function(definition) {
-                return Ok(CodegenExpressionResult::value(CodegenValue::comptime(self.buffer.constant_void(), ComptimeType::Function(func_id))))
-            } 
-            
-            // Struct (Type)
-            if let Ok(struct_id) = self.extract_definition_struct(definition) {
-                return Ok(CodegenExpressionResult::value(CodegenValue::comptime(self.buffer.constant_void(), ComptimeType::Type(RealtimeValueType::Struct(struct_id)))))
-            } 
-        }
-        //TODO: Add fields here
+        if matches!(self.get_context_type(context)?, ContextType::Domain) {
+            if let Ok(definition) = &self.find_definition_by_ident(node, context) {
+                // Domain
+                if let Ok(domain_id) = self.extract_definition_domain(definition) {
+                    return Ok(CodegenExpressionResult::value(CodegenValue::comptime(self.buffer.constant_void(), ComptimeType::Domain(domain_id))))
+                } 
+                
+                // Function
+                if let Ok(func_id) = self.extract_definition_function(definition) {
+                    return Ok(CodegenExpressionResult::value(CodegenValue::comptime(self.buffer.constant_void(), ComptimeType::Function(func_id))))
+                } 
+                
+                // Struct (Type)
+                if let Ok(struct_id) = self.extract_definition_struct(definition) {
+                    return Ok(CodegenExpressionResult::value(CodegenValue::comptime(self.buffer.constant_void(), ComptimeType::Type(RealtimeValueType::Struct(struct_id)))))
+                } 
+                // Fields (Global Variables a.k.a Domain Variables)
+                if let Ok(domain_definition) = self.find_context_field(context, node) {
+                    let domain_var_value = &self.domain_vars[context][domain_definition.index].variable;
+                    return Ok(CodegenExpressionResult::trace(
+                        domain_var_value.clone(),
+                        CodegenTrace::root(domain_var_value.ident)
+                    ));
+                }
+            }
+        } 
         
         CodegenError::err(node.clone(), ErrorRepr::DefinitionIdentNotRecognized)
+    }
+
+    fn find_context_field(&mut self, context: usize, identifier: &Rc<Node>) -> Result<FieldDefinition, CodegenError> {
+        let identifier_string = Self::get_primary_as_ident(identifier, ErrorRepr::ExpectedIdentifier)?;
+        let struct_context = self.context_borrow(context)?;
+        let field_id = self.extract_definition_field(
+            struct_context
+            .definition_lookup
+            .get(identifier_string)
+            .ok_or(CodegenError::new(identifier.clone(), ErrorRepr::InvalidStructField))?
+        )?;
+        return Ok(FieldDefinition { field: struct_context.fields[field_id].clone(), index: field_id });
     }
 
     fn set_trace_to_value(&mut self, trace: CodegenTrace, value: CodegenValue) -> Result<(), CodegenError> {
@@ -1234,7 +1291,7 @@ mod tests {
         //##println!("LEXER TOKENS\n----------------------\n{:#?}\n----------------------", lexer_tokens);
         let mut parser = Parser::new(lexer_tokens.as_slice());
         let parser_tree = Rc::new(parser.parse().expect("Parser statement block should unwrap"));
-        println!("PARSER TREE\n----------------------\n{:#?}\n----------------------", parser_tree);
+        //##println!("PARSER TREE\n----------------------\n{:#?}\n----------------------", parser_tree);
 
         let mut codegen = CodeGen::new();
         codegen.codegen_from_node(parser_tree.clone()).expect("Codegen should generate");

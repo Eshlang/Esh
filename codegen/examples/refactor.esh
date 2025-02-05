@@ -1,3 +1,5 @@
+string total_crazy;
+
 func hello2() -> (string) {
     Grass.Player hello = Grass.Player {
         hey = Grass.hey();
@@ -9,13 +11,18 @@ func hello2() -> (string) {
 
     num test = 500;
     hello.inventory.items = 800;
+    Grass.endersaltz = 999;
+    total_crazy = "hello";
 
     return hello.wow;
 }
 
 
 domain Grass {
+    num endersaltz;
+
     func hey() -> num {
+        total_crazy = "yeah";
         return 5;
     }
     struct Player {
