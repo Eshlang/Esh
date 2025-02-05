@@ -113,6 +113,7 @@ impl<'a> Lexer<'a> {
             "return" => Some(Keyword::Return),
             "break" => Some(Keyword::Break),
             "true" => Some(Keyword::True),
+            "self" => Some(Keyword::SelfIdentity),
             "false" => Some(Keyword::False),
             "struct" => Some(Keyword::Struct),
             "domain" => Some(Keyword::Domain),

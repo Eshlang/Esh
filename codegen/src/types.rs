@@ -93,7 +93,7 @@ pub enum PrimitiveType {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ComptimeType {
-    Domain(usize), Function(usize), Type(RealtimeValueType) // Comptime Types
+    Domain(usize), Function(usize), Type(RealtimeValueType), StructFunction(usize, u32) // Comptime Types
 }
 
 

@@ -93,6 +93,7 @@ pub enum Keyword {
     For,    // for loop
     While,    // while loop
     Domain, // domain definition
+    SelfIdentity, // "self" identity
 }
 
 #[derive(Clone, Debug, PartialEq)]

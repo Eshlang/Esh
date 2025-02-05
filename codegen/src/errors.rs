@@ -177,6 +177,12 @@ pub enum ErrorRepr {
     ExpectedAssignableExpression,
     #[error("Expected a traceable variable to assign.")]
     NoTraceCantAssign,
-    #[error("This field is already defined!")]
+    #[error("This field is already defined.")]
     FieldAlreadyDefined,
+    #[error("Unexpected primary token (expected number, or string, or identifier)")]
+    UnexpectedPrimaryToken,
+    #[error("Unexpected usage of 'self' keyword in objective, non-individualistic code.")]
+    SelfInObjectiveCode,
+    #[error("Invalid struct definition.")]
+    InvalidStructDefinition,
 }

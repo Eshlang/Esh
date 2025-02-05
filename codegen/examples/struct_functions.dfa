@@ -1,0 +1,46 @@
+seg func
+    df _3 "__1#main.test"
+    df _10 "__3#main.Player.kill"
+    df _15 "__4#main.Player.test"
+    df _18 "__5#main.Player.ghostVersion"
+seg param
+    dp var _0 "_dvg_0#main.myTest" #scope:global
+    dp var _1 "_c_void" #scope:global
+    dp var _2 "self" #scope:line
+    dp var _4 "_rvl_myPlayer" #scope:line
+    dp str _5 "LooserRIP"
+    dp num _6 200
+    dp var _7 "_xl0" #scope:line
+    dp var _8 "_xl1" #scope:line
+    dp num _9 20
+    dp param _11 "self" #type:var
+    dp var _12 "fr" #scope:line
+    dp param _13 "fr" #type:var
+    dp num _14 0
+    dp str _16 "hello"
+    dp num _17 10
+    dp var _19 "_rvl_ghost" #scope:line
+seg code
+    func _3
+        var createlist _4, _5, _6
+        var getlistvalue _8, _4, 2
+        var add _7, _8, _9
+        var setlistvalue _4, 2, _7
+        call _10 _4, _0
+    func _10 _11, _13
+        var setlistvalue _2, 2, _14
+        var getlistvalue _8, _2, 2
+        call _15 _2, _8
+        var add _7, _8, _8
+        var setlistvalue _2, 2, _7
+        var getlistvalue _12, _2, 2
+        ctrl return
+    func _15 _11, _13
+        var setlistvalue _2, 1, _16
+        var set _12, _17
+        ctrl return
+    func _18 _11, _13
+        var set _19, _2
+        call _10 _19, _1
+        var set _12, _19
+        ctrl return

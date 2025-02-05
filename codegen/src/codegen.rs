@@ -4,7 +4,7 @@ use std::rc::Rc;
 use dfbin::enums::{Instruction, Parameter, ParameterValue};
 use dfbin::instruction;
 use dfbin::Constants::Tags::DP;
-use lexer::types::{Keyword, TokenType};
+use lexer::types::{Keyword, Range, Token, TokenType};
 use parser::parser::Node;
 use crate::buffer::CodeGenBuffer;
 use crate::errors::{CodegenError, ErrorRepr};
@@ -895,7 +895,27 @@ impl CodeGen {
             Node::Primary(token) => {
                 let set_value = settings.depth == 0 && settings.variable_necessary; // if the depth is 0, that means this is the ONLY thing in the expression, hence we need to set the final variable.
                 value = match &token.token_type {
-                    TokenType::Ident(ident) => {
+                    TokenType::Ident(_ident) => {
+                        // Struct Function `self` check.
+                        let parent_context = self.parents[context];
+                        if matches!(self.get_context_type(parent_context)?, ContextType::Struct) {
+                            // This might be a stupid workaround or a genius one, but i am creating a fake node to pretend self is being accessed.
+                            // This can be explained as when you type ``hp`` inside a Player { num hp; } struct, it first checks if you mean ``self.hp`` then does the other normal things.
+                            let fake_access_node = Rc::new(Node::Access(
+                                Rc::new(Node::Primary(
+                                    Rc::new(Token {
+                                        token_type: TokenType::Keyword(Keyword::SelfIdentity),
+                                        range: Range::new((0,0), (0,0))}
+                                    )
+                                )),
+                                node.clone()
+                            ));
+
+                            if let Ok(result) = self.generate_expression(context, &fake_access_node, settings) {
+                                return Ok(result);
+                            }
+                        }
+
                         let get_var = self.get_definition_access_isolated(context, node, register_group)?;
                         trace = get_var.trace;
                         // Possibly here, there might be something that necessarily sets 'set_value' to false. I haven't found an edge case like that,
@@ -910,7 +930,24 @@ impl CodeGen {
                         self.buffer.use_number(ParameterValue::Float(*number)),
                         ValueType::Primitive(PrimitiveType::Number)
                     ),
-                    _ => { return CodegenError::err(node.clone(), ErrorRepr::UnexpectedExpressionToken); }
+                    TokenType::Keyword(keyword) => {
+                        match keyword {
+                            Keyword::SelfIdentity => {
+                                let parent_context = self.parents[context];
+                                let ContextType::Struct = self.get_context_type(parent_context)? else {
+                                    return CodegenError::err(node.clone(), ErrorRepr::SelfInObjectiveCode);
+                                };
+                                let self_variable = self.buffer.use_variable("self", DP::Var::Scope::Line);
+                                trace = Some(CodegenTrace::root(self_variable));
+                                CodegenValue::new(
+                                    self_variable,
+                                    ValueType::Struct(parent_context)
+                                )
+                            }
+                            _ => { return CodegenError::err(node.clone(), ErrorRepr::UnexpectedPrimaryToken); }
+                        }
+                    }
+                    _ => { return CodegenError::err(node.clone(), ErrorRepr::UnexpectedPrimaryToken); }
                 };
                 if set_value {
                     let register = self.generate_expression_allocate_register(settings, register_group);
@@ -965,24 +1002,31 @@ impl CodeGen {
                         let register = self.generate_expression_allocate_register(settings, register_group);
                         value.ident = register;
                         let struct_context = self.context_borrow(struct_id)?;
-                        let field_id = self.extract_definition_field(
-                            struct_context
+
+                        let definition = struct_context
                             .definition_lookup
                             .get(access_field_ident)
-                            .ok_or(CodegenError::new(access_field.clone(), ErrorRepr::InvalidStructField))?
-                        )?;
-                        let field_type = struct_context.fields[field_id].field_type.clone();
-                        drop(struct_context);
-                        let field_index = field_id + 1;
-                        self.push_expression_instruction(settings, instruction!(
-                            Var::GetListValue, [ (Ident, register), (Ident, accessed_value.ident), (Int, field_index) ]
-                        ));
-                        if let Some(mut trace_add) = accessed_expression.trace {
-                            trace_add.crumbs.push(CodegenTraceCrumb::Index(field_index));
-                            trace = Some(trace_add);
+                            .ok_or(CodegenError::new(access_field.clone(), ErrorRepr::InvalidStructDefinition))?;
+                    
+                        if let Ok(field_id) = self.extract_definition_field(definition) {
+                            let field_type = struct_context.fields[field_id].field_type.clone();
+                            drop(struct_context);
+                            let field_index = field_id + 1;
+                            self.push_expression_instruction(settings, instruction!(
+                                Var::GetListValue, [ (Ident, register), (Ident, accessed_value.ident), (Int, field_index) ]
+                            ));
+                            if let Some(mut trace_add) = accessed_expression.trace {
+                                trace_add.crumbs.push(CodegenTraceCrumb::Index(field_index));
+                                trace = Some(trace_add);
+                            }
+    
+                            value.value_type = field_type;
+                        } else if let Ok(func_id) = self.extract_definition_function(definition) {
+                            drop(struct_context);
+                            return Ok(CodegenExpressionResult::value(CodegenValue::comptime(self.buffer.constant_void(), ComptimeType::StructFunction(func_id, accessed_value.ident))))
+                        } else {
+                            panic!("Invalid struct access found which *is* correctly looked up but is neither a field nor a function.");
                         }
-
-                        value.value_type = field_type;
                     }
                     ValueType::Comptime(ComptimeType::Domain(domain_cid)) => {
                         let mut set_value = settings.depth == 0 && settings.variable_necessary;
@@ -1063,8 +1107,10 @@ impl CodeGen {
     fn call_function(&mut self, context: usize, function_ident: &Rc<Node>, function_params: &Rc<Node>, return_ident: u32) -> Result<ValueType, CodegenError> {
         // let func_context = self.find_function_by_node(function_ident, context)?;
         let function_ident_evaluation = self.generate_expression(context, function_ident, GenerateExpressionSettings::comptime())?;
-        let ValueType::Comptime(ComptimeType::Function(func_context)) = function_ident_evaluation.value.value_type else {
-            return CodegenError::err(function_ident.clone(), ErrorRepr::ExpectedFunctionIdentifier);
+        let (func_context, struct_func_ident) = match function_ident_evaluation.value.value_type {
+            ValueType::Comptime(ComptimeType::Function(func_context)) => (func_context, None),
+            ValueType::Comptime(ComptimeType::StructFunction(func_context, struct_func_ident)) => (func_context, Some(struct_func_ident)),
+            _ => { return CodegenError::err(function_ident.clone(), ErrorRepr::ExpectedFunctionIdentifier); }
         };
         let func_name = self.get_context_full_name(func_context).clone();
         let func_id = self.buffer.use_function(func_name.as_str());
@@ -1074,6 +1120,9 @@ impl CodeGen {
         let ContextType::Function(ret_type_field) = self.context_borrow(func_context)?.context_type.clone() else {
             return CodegenError::err_headless(ErrorRepr::Generic);
         };
+        if let Some(struct_func_ident) = struct_func_ident {
+            call_instruction.params.push(Parameter::from_ident(struct_func_ident));
+        }
         if !matches!(ret_type_field, ValueType::Primitive(PrimitiveType::None)) { // function has a return value
             call_instruction.params.push(Parameter::from_ident(return_ident))
         }
@@ -1113,13 +1162,10 @@ impl CodeGen {
             ]
         ));
         //println!("Generating function {}, return type: {:#?}", context, return_type);
-        let _self_struct_ident = if matches!(parent_context, ContextType::Struct) {
-            let self_struct_param_ident = self.buffer.use_return_param("self_struct");
+        if matches!(parent_context, ContextType::Struct) {
+            let self_struct_param_ident = self.buffer.use_return_param("self");
             self.buffer.code_buffer.push_parameter(Parameter::from_ident(self_struct_param_ident.0));
-            Some(self_struct_param_ident.1)
-        } else {
-            None
-        };
+        }
         let return_type_ident = if !matches!(return_type, ValueType::Primitive(PrimitiveType::None)) {
             let return_type_param_ident = self.buffer.use_return_param("fr");
             self.buffer.code_buffer.push_parameter(Parameter::from_ident(return_type_param_ident.0));
@@ -1281,7 +1327,7 @@ mod tests {
 
     #[test]
     pub fn decompile_from_file_test() {
-        let name = "refactor";
+        let name = "struct_functions";
         // let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\codegen\examples\";
         let path = r"K:\Programming\GitHub\Esh\codegen\examples\";
 
@@ -1295,7 +1341,7 @@ mod tests {
 
         let mut codegen = CodeGen::new();
         codegen.codegen_from_node(parser_tree.clone()).expect("Codegen should generate");
-        //##println!("CODEGEN CONTEXTS\n----------------------\n{:#?}\n----------------------", codegen.contexts);
+        println!("CODEGEN CONTEXTS\n----------------------\n{:#?}\n----------------------", codegen.contexts);
 
         //##println!("CODEGEN CONTEXT NAMES\n----------------------");
         //##for context in 0..codegen.contexts.len() {

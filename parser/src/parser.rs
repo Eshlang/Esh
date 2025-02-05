@@ -131,7 +131,7 @@ impl<'a> Parser<'a> {
     /// Returns the current statement
     pub(crate) fn statement(&mut self) -> Result<Node, ParserError> {
         match self.curr().token_type {
-            TokenType::Ident(_) => {
+            TokenType::Ident(_) | TokenType::Keyword(Keyword::SelfIdentity) => {
                 let expr = self.assignment();
                 expect!(self, TokenType::Semicolon);
                 self.advance();
@@ -174,7 +174,7 @@ impl<'a> Parser<'a> {
         let expr = Node::Struct(
             {  // Struct name
                 self.advance();
-                expect!(self, TokenType::Ident(_));
+                expect!(self, TokenType::Ident(_) | TokenType::Keyword(Keyword::SelfIdentity));
                 Rc::new(self.ident()?)
             },
             {  // Struct body
@@ -194,7 +194,7 @@ impl<'a> Parser<'a> {
         let expr = Node::Domain(
             {  // Domain name
                 self.advance();
-                expect!(self, TokenType::Ident(_));
+                expect!(self, TokenType::Ident(_) | TokenType::Keyword(Keyword::SelfIdentity));
                 Rc::new(self.ident()?)
             },
             {  // Domain body
@@ -214,7 +214,7 @@ impl<'a> Parser<'a> {
         let expr = Node::Func(
             {  // Function name
                 self.advance();
-                expect!(self, TokenType::Ident(_));
+                expect!(self, TokenType::Ident(_) | TokenType::Keyword(Keyword::SelfIdentity));
                 Rc::new(self.ident()?)
             },
             {  // Function parameters
@@ -226,7 +226,7 @@ impl<'a> Parser<'a> {
                     TokenType::Arrow => {
                         self.advance();
                         match self.curr().token_type {
-                            TokenType::Ident(_) => Rc::new(self.ident()?),
+                            TokenType::Ident(_) | TokenType::Keyword(Keyword::SelfIdentity) => Rc::new(self.ident()?),
                             _ => Rc::new(self.primary()?)
                         }
                     },
@@ -332,12 +332,12 @@ impl<'a> Parser<'a> {
     pub(crate) fn declaration(&mut self) -> Result<Node, ParserError> {
         let start = self.current;
         match self.curr().token_type {
-            TokenType::Ident(_) => (),
+            TokenType::Ident(_) | TokenType::Keyword(Keyword::SelfIdentity) => (),
             _ => return self.expression()
         }
         let expr = self.list_definition()?;
         match self.curr().token_type {
-            TokenType::Ident(_) => return Ok(Node::Declaration(
+            TokenType::Ident(_) | TokenType::Keyword(Keyword::SelfIdentity) => return Ok(Node::Declaration(
                 Rc::new(expr),
                 Rc::new(self.ident()?),
             )),
@@ -356,7 +356,7 @@ impl<'a> Parser<'a> {
             return Ok(expr)
         }
         match self.curr().token_type {
-            TokenType::Ident(_) => return Ok(expr),
+            TokenType::Ident(_) | TokenType::Keyword(Keyword::SelfIdentity) => return Ok(expr),
             TokenType::LBracket => (),
             _ => {
                 self.current = start;
@@ -559,7 +559,7 @@ impl<'a> Parser<'a> {
     /// Returns the current primary node
     pub(crate) fn primary(&mut self) -> Result<Node, ParserError> {
         match self.curr().token_type {
-            TokenType::Ident(_) => {
+            TokenType::Ident(_) | TokenType::Keyword(Keyword::SelfIdentity) => {
                 self.construct()
             },
             TokenType::Number(_) | TokenType::String(_) | TokenType::Keyword(Keyword::True) | TokenType::Keyword(Keyword::False) => {
@@ -570,7 +570,7 @@ impl<'a> Parser<'a> {
                 let start = self.current;
                 self.advance();
                 let expr = match self.curr().token_type {
-                    TokenType::Ident(_) => self.declaration()?,
+                    TokenType::Ident(_) | TokenType::Keyword(Keyword::SelfIdentity) => self.declaration()?,
                     TokenType::RParen => {
                         self.advance();
                         return Ok(Node::None)
@@ -699,7 +699,7 @@ impl<'a> Parser<'a> {
 
     /// Returns the current identifier
     pub(crate) fn ident(&mut self) -> Result<Node, ParserError> {
-        expect!(self, TokenType::Ident(_));
+        expect!(self, TokenType::Ident(_) | TokenType::Keyword(Keyword::SelfIdentity));
         self.advance();
         Ok(Node::Primary(self.prev().clone()))
     }
