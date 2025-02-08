@@ -1023,7 +1023,7 @@ impl CodeGen {
                             value.value_type = field_type;
                         } else if let Ok(func_id) = self.extract_definition_function(definition) {
                             drop(struct_context);
-                            return Ok(CodegenExpressionResult::value(CodegenValue::comptime(self.buffer.constant_void(), ComptimeType::StructFunction(func_id, accessed_value.ident))))
+                            return Ok(CodegenExpressionResult::value(CodegenValue::comptime(self.buffer.constant_void(), ComptimeType::SelfFunction(func_id, accessed_value.ident))))
                         } else {
                             panic!("Invalid struct access found which *is* correctly looked up but is neither a field nor a function.");
                         }
@@ -1109,7 +1109,7 @@ impl CodeGen {
         let function_ident_evaluation = self.generate_expression(context, function_ident, GenerateExpressionSettings::comptime())?;
         let (func_context, struct_func_ident) = match function_ident_evaluation.value.value_type {
             ValueType::Comptime(ComptimeType::Function(func_context)) => (func_context, None),
-            ValueType::Comptime(ComptimeType::StructFunction(func_context, struct_func_ident)) => (func_context, Some(struct_func_ident)),
+            ValueType::Comptime(ComptimeType::SelfFunction(func_context, struct_func_ident)) => (func_context, Some(struct_func_ident)),
             _ => { return CodegenError::err(function_ident.clone(), ErrorRepr::ExpectedFunctionIdentifier); }
         };
         let func_name = self.get_context_full_name(func_context).clone();
@@ -1327,14 +1327,15 @@ mod tests {
 
     #[test]
     pub fn decompile_from_file_test() {
-        let name = "struct_functions";
+        let name = "lists";
         // let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\codegen\examples\";
         let path = r"K:\Programming\GitHub\Esh\codegen\examples\";
 
         let file_bytes = fs::read(format!("{}{}.esh", path, name)).expect("File should read");
         let lexer = Lexer::new(str::from_utf8(&file_bytes).expect("Should encode to utf-8"));
         let lexer_tokens: Vec<Rc<Token>> = lexer.map(|v| Rc::new(v.expect("Lexer token should unwrap"))).collect();
-        //##println!("LEXER TOKENS\n----------------------\n{:#?}\n----------------------", lexer_tokens);
+        
+        println!("LEXER TOKENS\n----------------------\n{:#?}\n----------------------", lexer_tokens);
         let mut parser = Parser::new(lexer_tokens.as_slice());
         let parser_tree = Rc::new(parser.parse().expect("Parser statement block should unwrap"));
         //##println!("PARSER TREE\n----------------------\n{:#?}\n----------------------", parser_tree);

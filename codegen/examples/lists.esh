@@ -1,0 +1,5 @@
+num[] myList;
+
+func test() {
+    myList[5] = 2;
+}
