@@ -5,8 +5,8 @@ use lexer::types::{Keyword, Token, TokenType};
 #[derive(Debug, PartialEq)]
 pub enum Node {
     None,                                           // ()
-    Primary(Rc<Token>),                             // prim
-    ListDefinition(Rc<Node>),                       // ident[]
+    Primary(Rc<Token>),                             // 0
+    ListCall(Rc<Node>, Rc<Node>),                   // ident[expr]
     FunctionCall(Rc<Node>, Rc<Node>),               // ident(tuple/expr)
     Access(Rc<Node>, Rc<Node>),                     // ident.ident
     Construct(Rc<Node>, Rc<Node>),                  // ident {block} 
@@ -27,7 +27,6 @@ pub enum Node {
     And(Rc<Node>, Rc<Node>),                        // expr && expr
     Or(Rc<Node>, Rc<Node>),                         // expr || expr
     List(Vec<Rc<Node>>),                            // [expr, expr, expr]
-    Index(Rc<Node>, Rc<Node>),                      // ident[expr]
     Declaration(Rc<Node>, Rc<Node>),                // ident ident
     Break,                                          // break;
     Return(Rc<Node>),                               // return expr;
@@ -36,9 +35,9 @@ pub enum Node {
     Else(Rc<Node>, Rc<Node>),                       // stmt else {block}
     While(Rc<Node>, Rc<Node>),                      // while cond {block}
     Func(Rc<Node>, Rc<Node>, Rc<Node>, Rc<Node>),   // func ident (tuple/decl) -> tuple/ident {block}
-    Struct(Rc<Node>, Rc<Node>),                       // struct ident {block}
-    Domain(Rc<Node>, Rc<Node>),                       // domain ident {block}
-    Block(Vec<Rc<Node>>),                                   // stmt; stmt; stmt;
+    Struct(Rc<Node>, Rc<Node>),                     // struct ident {block}
+    Domain(Rc<Node>, Rc<Node>),                     // domain ident {block}
+    Block(Vec<Rc<Node>>),                           // stmt; stmt; stmt;
 }
 
 /// A parser error
@@ -317,15 +316,15 @@ impl<'a> Parser<'a> {
 
     /// Returns the current assignment statement
     pub(crate) fn assignment(&mut self) -> Result<Node, ParserError> {
-        let mut expr = self.declaration()?;
-        if !self.is_at_end() && self.curr().token_type == TokenType::Assign {
-            self.advance();
-            expr = Node::Assignment(
-                Rc::new(expr),
-                Rc::new(self.expression()?),
-            );
+        let expr = self.declaration()?;
+        if self.is_at_end() || self.curr().token_type != TokenType::Assign {
+            return Ok(expr);
         }
-        return Ok(expr);
+        self.advance();
+        return Ok(Node::Assignment(
+            Rc::new(expr),
+            Rc::new(self.expression()?),
+        ));
     }
 
     /// Returns the current variable declaration
@@ -333,9 +332,9 @@ impl<'a> Parser<'a> {
         let start = self.current;
         match self.curr().token_type {
             TokenType::Ident(_) | TokenType::Keyword(Keyword::SelfIdentity) => (),
-            _ => return self.expression()
+            _ => return self.expression(),
         }
-        let expr = self.list_definition()?;
+        let expr = self.list_call()?;
         match self.curr().token_type {
             TokenType::Ident(_) | TokenType::Keyword(Keyword::SelfIdentity) => return Ok(Node::Declaration(
                 Rc::new(expr),
@@ -346,39 +345,6 @@ impl<'a> Parser<'a> {
                 return self.expression();
             }
         }
-    }
-
-    /// Returns the current list definition
-    pub(crate) fn list_definition(&mut self) -> Result<Node, ParserError> {
-        let start = self.current;
-        let mut expr = self.ident()?;
-        if self.is_at_end() {
-            return Ok(expr)
-        }
-        match self.curr().token_type {
-            TokenType::Ident(_) | TokenType::Keyword(Keyword::SelfIdentity) => return Ok(expr),
-            TokenType::LBracket => (),
-            _ => {
-                self.current = start;
-                return self.expression();
-            }
-        }
-        while !self.is_at_end() {
-            match self.curr().token_type {
-                TokenType::LBracket => {
-                    self.advance();
-                    if let TokenType::RBracket = self.curr().token_type {
-                        expr = Node::ListDefinition(Rc::new(expr));
-                        self.advance();
-                    } else {
-                        self.current = start;
-                        return self.expression();
-                    }
-                },
-                _ => break
-            }
-        }
-        return Ok(expr);
     }
 
     /// Returns the current return statement
@@ -392,7 +358,57 @@ impl<'a> Parser<'a> {
 
     /// Returns the current expression
     pub(crate) fn expression(&mut self) -> Result<Node, ParserError> {
-        self.logic()
+        self.list_call()
+    }
+
+    /// Returns the current list call
+    pub(crate) fn list_call(&mut self) -> Result<Node, ParserError> {
+        match self.curr().token_type {
+            TokenType::Ident(_) => (),
+            _ => return self.logic(),
+        }
+        let start = self.current;
+        let mut expr = self.ident()?;
+        if self.is_at_end() {
+            return Ok(expr)
+        }
+        match self.curr().token_type {
+            TokenType::Ident(_) => return Ok(expr),
+            TokenType::LBracket => (),
+            _ => {
+                self.current = start;
+                return self.logic();
+            }
+        }
+        while !self.is_at_end() {
+            match dbg!(&self.curr().token_type) {
+                TokenType::LBracket => {
+                    self.advance();
+                    match self.curr().token_type {
+                        TokenType::RBracket => {
+                            expr = Node::ListCall(
+                                Rc::new(expr), 
+                                Rc::new(Node::None)
+                            );
+                            self.advance();
+                        }
+                        _ => {
+                            expr = Node::ListCall(
+                                Rc::new(expr), 
+                                Rc::new(self.expression()?)
+                            );
+                            if let TokenType::RBracket = self.curr().token_type {
+                                self.advance();
+                            } else {
+                                return Err(ParserError::MissingBracket(self.curr().clone()))
+                            }
+                        }
+                    }
+                },
+                _ => break
+            }
+        }
+        return Ok(expr);
     }
 
     /// Returns the current logic operation

@@ -260,6 +260,7 @@ pub fn assignment_test() {
 #[test]
 pub fn list_test() {
     // num[] arr = [1, 2, 3];
+    // arr[0] = arr[2];
     let input = [
         Rc::new(Token {
             token_type: TokenType::Ident("num".to_string()),
@@ -313,37 +314,102 @@ pub fn list_test() {
             token_type: TokenType::Semicolon,
             range: Range::new((0, 21), (0, 21)),
         }),
+        Rc::new(Token {
+            token_type: TokenType::Ident("arr".to_string()),
+            range: Range::new((1, 0), (1, 2)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::LBracket,
+            range: Range::new((1, 3), (1, 3)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Number(0f64),
+            range: Range::new((1, 4), (1, 4)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::RBracket,
+            range: Range::new((1, 5), (1, 5)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Assign,
+            range: Range::new((1, 7), (1, 7)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Ident("arr".to_string()),
+            range: Range::new((1, 9), (1, 11)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::LBracket,
+            range: Range::new((1, 12), (1, 12)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Number(2f64),
+            range: Range::new((1, 13), (1, 13)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::RBracket,
+            range: Range::new((1, 14), (1, 14)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Semicolon,
+            range: Range::new((1, 15), (1, 15)),
+        }),
     ];
-    let expected = Node::Assignment(
-        Rc::new(Node::Declaration(
-            Rc::new(Node::ListDefinition(
+    let expected = Node::Block(vec![
+        Rc::new(Node::Assignment(
+            Rc::new(Node::Declaration(
+                Rc::new(Node::ListCall(
+                    Rc::new(Node::Primary(Rc::new(Token {
+                        token_type: TokenType::Ident("num".to_string()),
+                        range: Range::new((0, 0), (0, 2)),
+                    }))),
+                    Rc::new(Node::None),
+                )),
                 Rc::new(Node::Primary(Rc::new(Token {
-                    token_type: TokenType::Ident("num".to_string()),
-                    range: Range::new((0, 0), (0, 2)),
+                    token_type: TokenType::Ident("arr".to_string()),
+                    range: Range::new((0, 6), (0, 8)),
                 }))),
             )),
-            Rc::new(Node::Primary(Rc::new(Token {
-                token_type: TokenType::Ident("arr".to_string()),
-                range: Range::new((0, 6), (0, 8)),
-            }))),
+            Rc::new(Node::List(vec![
+                Rc::new(Node::Primary(Rc::new(Token {
+                    token_type: TokenType::Number(1f64),
+                    range: Range::new((0, 13), (0, 13)),
+                }))),
+                Rc::new(Node::Primary(Rc::new(Token {
+                    token_type: TokenType::Number(2f64),
+                    range: Range::new((0, 16), (0, 16)),
+                }))),
+                Rc::new(Node::Primary(Rc::new(Token {
+                    token_type: TokenType::Number(3f64),
+                    range: Range::new((0, 19), (0, 19)),
+                }))),
+            ])),
         )),
-        Rc::new(Node::List(vec![
-            Rc::new(Node::Primary(Rc::new(Token {
-                token_type: TokenType::Number(1f64),
-                range: Range::new((0, 13), (0, 13)),
-            }))),
-            Rc::new(Node::Primary(Rc::new(Token {
-                token_type: TokenType::Number(2f64),
-                range: Range::new((0, 16), (0, 16)),
-            }))),
-            Rc::new(Node::Primary(Rc::new(Token {
-                token_type: TokenType::Number(3f64),
-                range: Range::new((0, 19), (0, 19)),
-            }))),
-        ])),
-    );
+        Rc::new(Node::Assignment(
+            Rc::new(Node::ListCall(
+                Rc::new(Node::Primary(Rc::new(Token {
+                    token_type: TokenType::Ident("arr".to_string()),
+                    range: Range::new((1, 0), (1, 2)),
+                }))),
+                Rc::new(Node::Primary(Rc::new(Token {
+                    token_type: TokenType::Number(0f64),
+                    range: Range::new((1, 4), (1, 4)),
+                }))),
+            )),
+            Rc::new(Node::ListCall(
+                Rc::new(Node::Primary(Rc::new(Token {
+                    token_type: TokenType::Ident("arr".to_string()),
+                    range: Range::new((1, 9), (1, 11)),
+                }))),
+                Rc::new(Node::Primary(Rc::new(Token {
+                    token_type: TokenType::Number(2f64),
+                    range: Range::new((1, 13), (1, 13)),
+                }))),
+            )),
+        )),
+    ]);
     let mut parser = Parser::new(&input);
-    match parser.statement() {
+    match parser.statement_block() {
         Ok(output) => assert_eq!(expected, output),
         Err(e) => {
             dbg!(e);
