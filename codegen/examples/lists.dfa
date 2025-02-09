@@ -1,0 +1,20 @@
+seg func
+    df _2 "__1#main.test"
+seg param
+    dp var _0 "_dvg_0#main.myList" #scope:global
+    dp var _1 "_c_void" #scope:global
+    dp var _3 "_rvl_hello" #scope:line
+    dp num _4 15
+    dp var _5 "_xl0" #scope:line
+    dp num _6 4
+    dp num _7 2
+    dp num _8 10
+seg code
+    func _2
+        var set _3, _4
+        var add _5, _6, _7
+        var inc _5, 1
+        var getlistvalue _3, _0, _5
+        var set _5, _8
+        var inc _8, 1
+        var setlistvalue _0, _8, _3

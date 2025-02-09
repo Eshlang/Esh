@@ -559,7 +559,7 @@ impl CodeGen {
         let Some(trace) = expression.trace else {
             return CodegenError::err(node.clone(), ErrorRepr::ExpectedAssignableExpression);
         };
-        self.set_trace_to_value(trace, CodegenValue::new(get_ident, expression.value.value_type.clone()))?;
+        self.set_trace_to_value(context, trace, CodegenValue::new(get_ident, expression.value.value_type.clone()))?;
         Ok(expression.value.value_type)
     }
     
@@ -638,6 +638,16 @@ impl CodeGen {
             ValueType::Primitive(PrimitiveType::String) => {
                 self.buffer.code_buffer.push_instruction(instruction!(Var::Set, [
                     (Ident, set_ident), (String, "")
+                ]))
+            },
+            ValueType::Primitive(PrimitiveType::List(..)) => {
+                self.buffer.code_buffer.push_instruction(instruction!(Var::CreateList, [
+                    (Ident, set_ident)
+                ]))
+            },
+            ValueType::Primitive(PrimitiveType::Map(..)) => {
+                self.buffer.code_buffer.push_instruction(instruction!(Var::CreateDict, [
+                    (Ident, set_ident)
                 ]))
             },
             ValueType::Comptime(..) => {
@@ -807,7 +817,7 @@ impl CodeGen {
         return Ok(FieldDefinition { field: struct_context.fields[field_id].clone(), index: field_id });
     }
 
-    fn set_trace_to_value(&mut self, trace: CodegenTrace, value: CodegenValue) -> Result<(), CodegenError> {
+    fn set_trace_to_value(&mut self, context: usize, mut trace: CodegenTrace, value: CodegenValue) -> Result<(), CodegenError> {
         if trace.crumbs.len() == 0 {
             self.buffer.code_buffer.push_instruction(instruction!(
                 Var::Set, [(Ident, trace.root_ident), (Ident, value.ident)]
@@ -816,9 +826,35 @@ impl CodeGen {
         }
         let register_group = self.buffer.allocate_line_register_group();
         let trace_ident = trace.root_ident;
+        for crumb_index in 0..trace.crumbs.len() {
+            let crumb = trace.crumbs[crumb_index].clone();
+            trace.crumbs[crumb_index] = self.generate_crumb(context, crumb, register_group)?;
+        }
         self.set_trace_to_value_inside(Rc::new(trace), trace_ident, value.ident, 0, register_group);
         self.buffer.free_line_register_group(register_group);
         Ok(())
+    }
+
+    fn generate_crumb(&mut self, context: usize, crumb: CodegenTraceCrumb, register_group: u64) -> Result<CodegenTraceCrumb, CodegenError> {
+        Ok(match crumb {
+            CodegenTraceCrumb::IndexNode(node) => {
+                let index = self.generate_expression_inside(context, &node, GenerateExpressionSettings::group(register_group), register_group)?.value.clone();
+                self.buffer.code_buffer.push_instruction(instruction!(
+                    Var::Inc, [ (Ident, index.ident), (Int, 1) ]
+                ));
+                CodegenTraceCrumb::Index(index.ident)
+            },
+            CodegenTraceCrumb::EntryNode(node) => {
+                let index = self.generate_expression_inside(context, &node, GenerateExpressionSettings::group(register_group), register_group)?.value.clone();
+                if !matches!(index.value_type, ValueType::Primitive(PrimitiveType::String)) {
+                    self.buffer.code_buffer.push_instruction(instruction!(
+                        Var::String, [ (Ident, index.ident), (Ident, index.ident) ]
+                    ));
+                }
+                CodegenTraceCrumb::Index(index.ident)
+            },
+            _ => crumb
+        })
     }
 
     fn set_trace_to_value_inside(&mut self, trace: Rc<CodegenTrace>, set_value_ident: u32, final_value_ident: u32, depth: usize, register_group: u64) {
@@ -834,17 +870,31 @@ impl CodeGen {
 
     fn get_crumb(&mut self, crumb: CodegenTraceCrumb, get_value_ident: u32, set_value_ident: u32) {
         self.buffer.code_buffer.push_instruction(match crumb {
-            CodegenTraceCrumb::Index(index) => instruction!(
+            CodegenTraceCrumb::IndexDirect(index) => instruction!(
                 Var::GetListValue, [(Ident, get_value_ident), (Ident, set_value_ident), (Int, index)]
-            )
+            ),
+            CodegenTraceCrumb::Index(ident) => instruction!(
+                Var::GetListValue, [(Ident, get_value_ident), (Ident, set_value_ident), (Ident, ident)]
+            ),
+            CodegenTraceCrumb::Entry(ident) => instruction!(
+                Var::GetDictValue, [(Ident, get_value_ident), (Ident, set_value_ident), (Ident, ident)]
+            ),
+            _ => panic!("Unimplemented trace crumb type")
         });
     }
 
     fn set_crumb(&mut self, crumb: CodegenTraceCrumb, get_value_ident: u32, set_value_ident: u32) {
         self.buffer.code_buffer.push_instruction(match crumb {
-            CodegenTraceCrumb::Index(index) => instruction!(
+            CodegenTraceCrumb::IndexDirect(index) => instruction!(
                 Var::SetListValue, [(Ident, set_value_ident), (Int, index), (Ident, get_value_ident)]
-            )
+            ),
+            CodegenTraceCrumb::Index(ident) => instruction!(
+                Var::SetListValue, [(Ident, set_value_ident), (Ident, ident), (Ident, get_value_ident)]
+            ),
+            CodegenTraceCrumb::Entry(ident) => instruction!(
+                Var::SetDictValue, [(Ident, set_value_ident), (Ident, ident), (Ident, get_value_ident)]
+            ),
+            _ => panic!("Unimplemented trace crumb type")
         });
     }
 
@@ -978,7 +1028,7 @@ impl CodeGen {
                 } else {
                     let param_group = self.buffer.allocate_line_register_group();
                     let assign_value = self.generate_expression_inside(context, assign_value_node, GenerateExpressionSettings::parameter(param_group), register_group)?;
-                    self.set_trace_to_value(trace_set.clone(), assign_value.value.clone())?;
+                    self.set_trace_to_value(context, trace_set.clone(), assign_value.value.clone())?;
                     self.buffer.free_line_register_group(param_group);
                     assign_value
                 };
@@ -1016,7 +1066,7 @@ impl CodeGen {
                                 Var::GetListValue, [ (Ident, register), (Ident, accessed_value.ident), (Int, field_index) ]
                             ));
                             if let Some(mut trace_add) = accessed_expression.trace {
-                                trace_add.crumbs.push(CodegenTraceCrumb::Index(field_index));
+                                trace_add.crumbs.push(CodegenTraceCrumb::IndexDirect(field_index));
                                 trace = Some(trace_add);
                             }
     
@@ -1042,6 +1092,68 @@ impl CodeGen {
                                 Var::Set, [(Ident, register), (Ident, value.ident)]
                             ))
                         }
+                    }
+                    _ => { return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion); }
+                }
+            }
+            Node::ListCall(called, index_field) => {
+                let called_expression = self.generate_expression_inside(context, called, settings.pass(), register_group)?.clone();
+                let called_value = called_expression.value;
+
+                
+                match called_value.value_type {
+                    ValueType::Primitive(PrimitiveType::List(inside_type)) => {
+                        let register = self.generate_expression_allocate_register(settings, register_group);
+                        value.ident = register;
+
+                        let index = self.generate_expression_inside(context, index_field, GenerateExpressionSettings::group(register_group).keep_comptime(settings), register_group)?.value.clone();
+                        if !matches!(index.value_type, ValueType::Primitive(PrimitiveType::Number)) {
+                            return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion);
+                        }
+                        self.push_expression_instruction(settings, instruction!(
+                            Var::Inc, [ (Ident, index.ident), (Int, 1) ]
+                        ));
+
+                        self.push_expression_instruction(settings, instruction!(
+                            Var::GetListValue, [ (Ident, register), (Ident, called_value.ident), (Ident, index.ident) ]
+                        ));
+                        if let Some(mut trace_add) = called_expression.trace {
+                            trace_add.crumbs.push(CodegenTraceCrumb::IndexNode(index_field.clone()));
+                            trace = Some(trace_add);
+                        }
+
+                        value.value_type = inside_type.as_ref().clone();
+                    }
+                    ValueType::Primitive(PrimitiveType::Map(mapped_type, mapping_type)) => {
+                        let register = self.generate_expression_allocate_register(settings, register_group);
+                        value.ident = register;
+
+                        let index = self.generate_expression_inside(context, index_field, GenerateExpressionSettings::group(register_group).keep_comptime(settings), register_group)?.value.clone();
+                        if &index.value_type != mapping_type.as_ref() {
+                            return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion);
+                        }
+                        if !matches!(index.value_type, ValueType::Primitive(PrimitiveType::String)) {
+                            self.push_expression_instruction(settings, instruction!(
+                                Var::String, [ (Ident, index.ident), (Ident, index.ident) ]
+                            ));
+                        }
+
+                        self.push_expression_instruction(settings, instruction!(
+                            Var::GetDictValue, [ (Ident, register), (Ident, called_value.ident), (Ident, index.ident) ]
+                        ));
+                        if let Some(mut trace_add) = called_expression.trace {
+                            trace_add.crumbs.push(CodegenTraceCrumb::EntryNode(index_field.clone()));
+                            trace = Some(trace_add);
+                        }
+
+                        value.value_type = mapped_type.as_ref().clone();
+                    }
+                    ValueType::Comptime(ComptimeType::Type(called_type)) => {
+                        let value_type = match index_field.as_ref() {
+                            Node::None => RealtimeValueType::Primitive(PrimitiveType::List(Rc::new(called_type.normalize()))),
+                            _ => RealtimeValueType::Primitive(PrimitiveType::Map(Rc::new(called_type.normalize()), Rc::new(self.get_type(index_field, context)?)))
+                        };
+                        return Ok(CodegenExpressionResult::value(CodegenValue::comptime(self.buffer.constant_void(), ComptimeType::Type(value_type))));
                     }
                     _ => { return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion); }
                 }
@@ -1289,7 +1401,7 @@ impl CodeGen {
                     };
                     body_stack.push_front((0, Rc::new(if_block.clone()), Vec::new(), Some(instruction!(EndRep)), body_stack_mode));
                     self.buffer.free_line_register_group(while_allocation);
-                },
+                }
                 _ => {
                     println!("Unrecognized Statement: {:#?}", statement.clone());
                 }
@@ -1328,8 +1440,8 @@ mod tests {
     #[test]
     pub fn decompile_from_file_test() {
         let name = "lists";
-        // let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\codegen\examples\";
-        let path = r"K:\Programming\GitHub\Esh\codegen\examples\";
+        let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\codegen\examples\";
+        // let path = r"K:\Programming\GitHub\Esh\codegen\examples\";
 
         let file_bytes = fs::read(format!("{}{}.esh", path, name)).expect("File should read");
         let lexer = Lexer::new(str::from_utf8(&file_bytes).expect("Should encode to utf-8"));

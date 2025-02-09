@@ -88,7 +88,7 @@ impl RealtimeValueType {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PrimitiveType {
-    None, Number, String, Bool, // Realtime Types
+    None, Number, String, Bool, List(Rc<ValueType>), Map(Rc<ValueType>, Rc<ValueType>) // Realtime Types
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -151,7 +151,7 @@ impl CodegenTrace {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum CodegenTraceCrumb {
-    Index(usize)
+    IndexDirect(usize), IndexNode(Rc<Node>), EntryNode(Rc<Node>), Index(u32), Entry(u32)
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -292,5 +292,12 @@ impl GenerateExpressionSettings {
         let mut passed = self.clone();
         passed.depth += 1;
         passed
+    }
+
+    /// Copies the ``generate_codeblocks`` field from self.
+    pub fn keep_comptime(&self, settings: GenerateExpressionSettings) -> Self {
+        let mut changed = self.clone();
+        changed.generate_codeblocks = settings.generate_codeblocks;
+        changed
     }
 }

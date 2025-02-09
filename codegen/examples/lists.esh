@@ -1,5 +1,8 @@
 num[] myList;
 
 func test() {
-    myList[5] = 2;
+    num hello = 15;
+    hello = myList[4 + 2];
+
+    myList[10] = hello;
 }
