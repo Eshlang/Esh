@@ -1,20 +1,34 @@
 seg func
-    df _2 "__1#main.test"
+    df _3 "__1#main.test"
 seg param
     dp var _0 "_dvg_0#main.myList" #scope:global
-    dp var _1 "_c_void" #scope:global
-    dp var _3 "_rvl_hello" #scope:line
-    dp num _4 15
-    dp var _5 "_xl0" #scope:line
-    dp num _6 4
-    dp num _7 2
-    dp num _8 10
+    dp var _1 "_dvg_0#main.myMap" #scope:global
+    dp var _2 "_c_void" #scope:global
+    dp var _4 "_rvl_hello" #scope:line
+    dp num _5 15
+    dp var _6 "_xl0" #scope:line
+    dp num _7 4
+    dp num _8 2
+    dp var _9 "_xl1" #scope:line
+    dp num _10 10
+    dp var _11 "_xl2" #scope:line
+    dp var _12 "_rvl_myPlayer" #scope:line
+    dp str _13 "hello"
+    dp num _14 200
+    dp str _15 "wow"
+    dp num _16 100000
 seg code
-    func _2
-        var set _3, _4
-        var add _5, _6, _7
-        var inc _5, 1
-        var getlistvalue _3, _0, _5
-        var set _5, _8
-        var inc _8, 1
-        var setlistvalue _0, _8, _3
+    func _3
+        var set _4, _5
+        var add _6, _7, _8
+        var add _9, _6, 1
+        var getlistvalue _4, _0, _9
+        var add _11, _10, 1
+        var setlistvalue _0, _11, _4
+        var createlist _12, _13, _14
+        var string _12, _11
+        var setdictvalue _1, _11, _15
+        var set _4, _16
+        var string _11, _12
+        var getdictvalue _9, _1, _11
+        var setlistvalue _12, 1, _9

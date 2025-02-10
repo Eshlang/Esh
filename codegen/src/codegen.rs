@@ -838,20 +838,25 @@ impl CodeGen {
     fn generate_crumb(&mut self, context: usize, crumb: CodegenTraceCrumb, register_group: u64) -> Result<CodegenTraceCrumb, CodegenError> {
         Ok(match crumb {
             CodegenTraceCrumb::IndexNode(node) => {
-                let index = self.generate_expression_inside(context, &node, GenerateExpressionSettings::group(register_group), register_group)?.value.clone();
+                let index = self.generate_expression_inside(context, &node, GenerateExpressionSettings::parameter(register_group), register_group)?.value.clone();
+                let register_index = self.buffer.allocate_grouped_line_register(register_group);
                 self.buffer.code_buffer.push_instruction(instruction!(
-                    Var::Inc, [ (Ident, index.ident), (Int, 1) ]
+                    Var::Add, [ (Ident, register_index), (Ident, index.ident), (Int, 1) ]
                 ));
-                CodegenTraceCrumb::Index(index.ident)
+                CodegenTraceCrumb::Index(register_index)
             },
             CodegenTraceCrumb::EntryNode(node) => {
-                let index = self.generate_expression_inside(context, &node, GenerateExpressionSettings::group(register_group), register_group)?.value.clone();
-                if !matches!(index.value_type, ValueType::Primitive(PrimitiveType::String)) {
+                let index = self.generate_expression_inside(context, &node, GenerateExpressionSettings::parameter(register_group), register_group)?.value.clone();
+                let register_index = if !matches!(index.value_type, ValueType::Primitive(PrimitiveType::String)) {
+                    let temp_reg = self.buffer.allocate_grouped_line_register(register_group);
                     self.buffer.code_buffer.push_instruction(instruction!(
-                        Var::String, [ (Ident, index.ident), (Ident, index.ident) ]
+                        Var::String, [ (Ident, index.ident), (Ident, temp_reg) ]
                     ));
-                }
-                CodegenTraceCrumb::Index(index.ident)
+                    temp_reg
+                } else {
+                    index.ident
+                };
+                CodegenTraceCrumb::Entry(register_index)
             },
             _ => crumb
         })
@@ -1042,7 +1047,7 @@ impl CodeGen {
                 value = CodegenValue::new(register, func_type);
             }
             Node::Access(accessed, access_field) => {
-                let accessed_expression = self.generate_expression_inside(context, accessed, settings.pass(), register_group)?.clone();
+                let accessed_expression: CodegenExpressionResult = self.generate_expression_inside(context, accessed, settings.pass(), register_group)?.clone();
                 let accessed_value = accessed_expression.value;
                 let access_field_ident = Self::get_primary_as_ident(access_field, ErrorRepr::ExpectedAccessableIdentifier)?;
 
@@ -1106,16 +1111,17 @@ impl CodeGen {
                         let register = self.generate_expression_allocate_register(settings, register_group);
                         value.ident = register;
 
-                        let index = self.generate_expression_inside(context, index_field, GenerateExpressionSettings::group(register_group).keep_comptime(settings), register_group)?.value.clone();
+                        let index = self.generate_expression_inside(context, index_field, GenerateExpressionSettings::parameter(register_group).keep_comptime(settings), register_group)?.value.clone();
                         if !matches!(index.value_type, ValueType::Primitive(PrimitiveType::Number)) {
                             return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion);
                         }
+                        let index_register = self.buffer.allocate_grouped_line_register(register_group);
                         self.push_expression_instruction(settings, instruction!(
-                            Var::Inc, [ (Ident, index.ident), (Int, 1) ]
+                            Var::Add, [ (Ident, index_register), (Ident, index.ident), (Int, 1) ]
                         ));
 
                         self.push_expression_instruction(settings, instruction!(
-                            Var::GetListValue, [ (Ident, register), (Ident, called_value.ident), (Ident, index.ident) ]
+                            Var::GetListValue, [ (Ident, register), (Ident, called_value.ident), (Ident, index_register) ]
                         ));
                         if let Some(mut trace_add) = called_expression.trace {
                             trace_add.crumbs.push(CodegenTraceCrumb::IndexNode(index_field.clone()));
@@ -1128,18 +1134,22 @@ impl CodeGen {
                         let register = self.generate_expression_allocate_register(settings, register_group);
                         value.ident = register;
 
-                        let index = self.generate_expression_inside(context, index_field, GenerateExpressionSettings::group(register_group).keep_comptime(settings), register_group)?.value.clone();
+                        let index = self.generate_expression_inside(context, index_field, GenerateExpressionSettings::parameter(register_group).keep_comptime(settings), register_group)?.value.clone();
                         if &index.value_type != mapping_type.as_ref() {
                             return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion);
                         }
-                        if !matches!(index.value_type, ValueType::Primitive(PrimitiveType::String)) {
+                        let register_index = if !matches!(index.value_type, ValueType::Primitive(PrimitiveType::String)) {
+                            let temp_reg = self.buffer.allocate_grouped_line_register(register_group);
                             self.push_expression_instruction(settings, instruction!(
-                                Var::String, [ (Ident, index.ident), (Ident, index.ident) ]
+                                Var::String, [ (Ident, temp_reg), (Ident, index.ident) ]
                             ));
-                        }
+                            temp_reg
+                        } else {
+                            index.ident
+                        };
 
                         self.push_expression_instruction(settings, instruction!(
-                            Var::GetDictValue, [ (Ident, register), (Ident, called_value.ident), (Ident, index.ident) ]
+                            Var::GetDictValue, [ (Ident, register), (Ident, called_value.ident), (Ident, register_index) ]
                         ));
                         if let Some(mut trace_add) = called_expression.trace {
                             trace_add.crumbs.push(CodegenTraceCrumb::EntryNode(index_field.clone()));
