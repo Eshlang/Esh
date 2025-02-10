@@ -26,9 +26,9 @@ seg code
         var add _11, _10, 1
         var setlistvalue _0, _11, _4
         var createlist _12, _13, _14
-        var string _12, _11
+        var string _12, " ", _11
         var setdictvalue _1, _11, _15
         var set _4, _16
-        var string _11, _12
+        var string _11, " ", _12
         var getdictvalue _9, _1, _11
         var setlistvalue _12, 1, _9

@@ -850,7 +850,7 @@ impl CodeGen {
                 let register_index = if !matches!(index.value_type, ValueType::Primitive(PrimitiveType::String)) {
                     let temp_reg = self.buffer.allocate_grouped_line_register(register_group);
                     self.buffer.code_buffer.push_instruction(instruction!(
-                        Var::String, [ (Ident, index.ident), (Ident, temp_reg) ]
+                        Var::String, [ (Ident, index.ident), (String, " "), (Ident, temp_reg) ]
                     ));
                     temp_reg
                 } else {
@@ -1141,7 +1141,7 @@ impl CodeGen {
                         let register_index = if !matches!(index.value_type, ValueType::Primitive(PrimitiveType::String)) {
                             let temp_reg = self.buffer.allocate_grouped_line_register(register_group);
                             self.push_expression_instruction(settings, instruction!(
-                                Var::String, [ (Ident, temp_reg), (Ident, index.ident) ]
+                                Var::String, [ (Ident, temp_reg), (String, " "), (Ident, index.ident) ]
                             ));
                             temp_reg
                         } else {
@@ -1450,8 +1450,8 @@ mod tests {
     #[test]
     pub fn decompile_from_file_test() {
         let name = "lists";
-        let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\codegen\examples\";
-        // let path = r"K:\Programming\GitHub\Esh\codegen\examples\";
+        // let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\codegen\examples\";
+        let path = r"K:\Programming\GitHub\Esh\codegen\examples\";
 
         let file_bytes = fs::read(format!("{}{}.esh", path, name)).expect("File should read");
         let lexer = Lexer::new(str::from_utf8(&file_bytes).expect("Should encode to utf-8"));
