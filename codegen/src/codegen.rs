@@ -905,7 +905,7 @@ impl CodeGen {
 
     // Used internally by the ``generate_expression`` and ``generate_expression_inside`` functions, to generate the FINAL register in which
     // the resulting calculation of *that* branch (not the overall expression) is stored.
-    fn generate_expression_allocate_register(&mut self, settings: GenerateExpressionSettings, register_group: u64) -> u32 {
+    fn generate_expression_allocate_register(&mut self, settings: &GenerateExpressionSettings, register_group: u64) -> u32 {
         if settings.generate_codeblocks == false {
             return self.buffer.constant_void();
         }
@@ -923,7 +923,7 @@ impl CodeGen {
     }
 
     // Used internally by the ``generate_expression`` and ``generate_expression_inside`` functions to push instructions to the code buffer.
-    fn push_expression_instruction(&mut self, settings: GenerateExpressionSettings, instruction: Instruction) {
+    fn push_expression_instruction(&mut self, settings: &GenerateExpressionSettings, instruction: Instruction) {
         if settings.generate_codeblocks {
             self.buffer.code_buffer.push_instruction(instruction);
         }
@@ -966,7 +966,7 @@ impl CodeGen {
                                 node.clone()
                             ));
 
-                            if let Ok(result) = self.generate_expression(context, &fake_access_node, settings) {
+                            if let Ok(result) = self.generate_expression(context, &fake_access_node, settings.clone()) {
                                 return Ok(result);
                             }
                         }
@@ -1005,14 +1005,14 @@ impl CodeGen {
                     _ => { return CodegenError::err(node.clone(), ErrorRepr::UnexpectedPrimaryToken); }
                 };
                 if set_value {
-                    let register = self.generate_expression_allocate_register(settings, register_group);
-                    self.push_expression_instruction(settings, instruction!(
+                    let register = self.generate_expression_allocate_register(&settings, register_group);
+                    self.push_expression_instruction(&settings, instruction!(
                         Var::Set, [(Ident, register), (Ident, value.ident)]
                     ))
                 }
             }
             Node::Construct(construct_ident, construct_body) => {
-                let register = self.generate_expression_allocate_register(settings, register_group);
+                let register = self.generate_expression_allocate_register(&settings, register_group);
                 let created_struct = self.create_struct_instance_from_node(context, construct_ident, construct_body, register)?;
                 value = CodegenValue::new(register, created_struct);
             }
@@ -1042,7 +1042,7 @@ impl CodeGen {
                 }
             }
             Node::FunctionCall(func_ident, func_params) => {
-                let register = self.generate_expression_allocate_register(settings, register_group);
+                let register = self.generate_expression_allocate_register(&settings, register_group);
                 let func_type = self.call_function(context, func_ident, func_params, register)?;
                 value = CodegenValue::new(register, func_type);
             }
@@ -1054,7 +1054,7 @@ impl CodeGen {
                 
                 match accessed_value.value_type {
                     ValueType::Struct(struct_id) => {
-                        let register = self.generate_expression_allocate_register(settings, register_group);
+                        let register = self.generate_expression_allocate_register(&settings, register_group);
                         value.ident = register;
                         let struct_context = self.context_borrow(struct_id)?;
 
@@ -1067,7 +1067,7 @@ impl CodeGen {
                             let field_type = struct_context.fields[field_id].field_type.clone();
                             drop(struct_context);
                             let field_index = field_id + 1;
-                            self.push_expression_instruction(settings, instruction!(
+                            self.push_expression_instruction(&settings, instruction!(
                                 Var::GetListValue, [ (Ident, register), (Ident, accessed_value.ident), (Int, field_index) ]
                             ));
                             if let Some(mut trace_add) = accessed_expression.trace {
@@ -1092,8 +1092,8 @@ impl CodeGen {
                         }
                         trace = get_access.trace;
                         if set_value {
-                            let register = self.generate_expression_allocate_register(settings, register_group);
-                            self.push_expression_instruction(settings, instruction!(
+                            let register = self.generate_expression_allocate_register(&settings, register_group);
+                            self.push_expression_instruction(&settings, instruction!(
                                 Var::Set, [(Ident, register), (Ident, value.ident)]
                             ))
                         }
@@ -1108,19 +1108,19 @@ impl CodeGen {
                 
                 match called_value.value_type {
                     ValueType::Primitive(PrimitiveType::List(inside_type)) => {
-                        let register = self.generate_expression_allocate_register(settings, register_group);
+                        let register = self.generate_expression_allocate_register(&settings, register_group);
                         value.ident = register;
 
-                        let index = self.generate_expression_inside(context, index_field, GenerateExpressionSettings::parameter(register_group).keep_comptime(settings), register_group)?.value.clone();
+                        let index = self.generate_expression_inside(context, index_field, GenerateExpressionSettings::parameter(register_group).keep_comptime(&settings), register_group)?.value.clone();
                         if !matches!(index.value_type, ValueType::Primitive(PrimitiveType::Number)) {
                             return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion);
                         }
                         let index_register = self.buffer.allocate_grouped_line_register(register_group);
-                        self.push_expression_instruction(settings, instruction!(
+                        self.push_expression_instruction(&settings, instruction!(
                             Var::Add, [ (Ident, index_register), (Ident, index.ident), (Int, 1) ]
                         ));
 
-                        self.push_expression_instruction(settings, instruction!(
+                        self.push_expression_instruction(&settings, instruction!(
                             Var::GetListValue, [ (Ident, register), (Ident, called_value.ident), (Ident, index_register) ]
                         ));
                         if let Some(mut trace_add) = called_expression.trace {
@@ -1131,16 +1131,16 @@ impl CodeGen {
                         value.value_type = inside_type.as_ref().clone();
                     }
                     ValueType::Primitive(PrimitiveType::Map(mapped_type, mapping_type)) => {
-                        let register = self.generate_expression_allocate_register(settings, register_group);
+                        let register = self.generate_expression_allocate_register(&settings, register_group);
                         value.ident = register;
 
-                        let index = self.generate_expression_inside(context, index_field, GenerateExpressionSettings::parameter(register_group).keep_comptime(settings), register_group)?.value.clone();
+                        let index = self.generate_expression_inside(context, index_field, GenerateExpressionSettings::parameter(register_group).keep_comptime(&settings), register_group)?.value.clone();
                         if &index.value_type != mapping_type.as_ref() {
                             return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion);
                         }
                         let register_index = if !matches!(index.value_type, ValueType::Primitive(PrimitiveType::String)) {
                             let temp_reg = self.buffer.allocate_grouped_line_register(register_group);
-                            self.push_expression_instruction(settings, instruction!(
+                            self.push_expression_instruction(&settings, instruction!(
                                 Var::String, [ (Ident, temp_reg), (String, " "), (Ident, index.ident) ]
                             ));
                             temp_reg
@@ -1148,7 +1148,7 @@ impl CodeGen {
                             index.ident
                         };
 
-                        self.push_expression_instruction(settings, instruction!(
+                        self.push_expression_instruction(&settings, instruction!(
                             Var::GetDictValue, [ (Ident, register), (Ident, called_value.ident), (Ident, register_index) ]
                         ));
                         if let Some(mut trace_add) = called_expression.trace {
@@ -1169,13 +1169,13 @@ impl CodeGen {
                 }
             }
             Node::Sum(l, r) => {
-                let register = self.generate_expression_allocate_register(settings, register_group);
+                let register = self.generate_expression_allocate_register(&settings, register_group);
                 let l = self.generate_expression_inside(context, l, settings.pass(), register_group)?.value.clone();
                 let r = self.generate_expression_inside(context, r, settings.pass(), register_group)?.value.clone();
                 value.ident = register;
                 match (l.value_type, r.value_type) {
                     (ValueType::Primitive(PrimitiveType::Number), ValueType::Primitive(PrimitiveType::Number)) => {
-                        self.push_expression_instruction(settings, instruction!(
+                        self.push_expression_instruction(&settings, instruction!(
                             Var::Add, [ (Ident, register), (Ident, l.ident), (Ident, r.ident) ]
                         ));
                         value.value_type = ValueType::Primitive(PrimitiveType::Number);
@@ -1184,13 +1184,13 @@ impl CodeGen {
                 }
             }
             Node::Product(l, r) => {
-                let register = self.generate_expression_allocate_register(settings, register_group);
+                let register = self.generate_expression_allocate_register(&settings, register_group);
                 let l = self.generate_expression_inside(context, l, settings.pass(), register_group)?.value.clone();
                 let r = self.generate_expression_inside(context, r, settings.pass(), register_group)?.value.clone();
                 value.ident = register;
                 match (l.value_type, r.value_type) {
                     (ValueType::Primitive(PrimitiveType::Number), ValueType::Primitive(PrimitiveType::Number)) => {
-                        self.push_expression_instruction(settings, instruction!(
+                        self.push_expression_instruction(&settings, instruction!(
                             Var::Mul, [ (Ident, register), (Ident, l.ident), (Ident, r.ident) ]
                         ));
                         value.value_type = ValueType::Primitive(PrimitiveType::Number);

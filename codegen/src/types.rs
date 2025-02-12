@@ -206,7 +206,7 @@ pub enum CodegenAccessNode {
     Index(Rc<Node>)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 /// Settings for the ``generate_expression`` function - if set_ident and register_group both aren't provided, and save_value is true, and variable_necessary is true / the expression isn't primary, it will generate a new infinitely-lasting register that you'll have to free manually.
 /// This is unrecommended behavior.
 pub struct GenerateExpressionSettings {
@@ -295,7 +295,7 @@ impl GenerateExpressionSettings {
     }
 
     /// Copies the ``generate_codeblocks`` field from self.
-    pub fn keep_comptime(&self, settings: GenerateExpressionSettings) -> Self {
+    pub fn keep_comptime(&self, settings: &GenerateExpressionSettings) -> Self {
         let mut changed = self.clone();
         changed.generate_codeblocks = settings.generate_codeblocks;
         changed
