@@ -1,7 +1,7 @@
 use std::{iter::Peekable, str::Chars};
 
 use errors::{LexerError, LexerErrorKind};
-use types::{Keyword, Position, Range, Token, TokenType};
+use types::{Keyword, Position, Range, Token, TokenType, ValuedKeyword};
 
 mod errors;
 pub mod types;
@@ -108,17 +108,20 @@ impl<'a> Lexer<'a> {
     fn keyword_from_ident(input: &str) -> Option<Keyword> {
         match input {
             "func" => Some(Keyword::Func),
-            "if" => Some(Keyword::If),
-            "else" => Some(Keyword::Else),
-            "return" => Some(Keyword::Return),
-            "break" => Some(Keyword::Break),
-            "true" => Some(Keyword::True),
-            "self" => Some(Keyword::SelfIdentity),
-            "false" => Some(Keyword::False),
             "struct" => Some(Keyword::Struct),
             "domain" => Some(Keyword::Domain),
+
+            "if" => Some(Keyword::If),
+            "else" => Some(Keyword::Else),
             "for" => Some(Keyword::For),
             "while" => Some(Keyword::While),
+            
+            "return" => Some(Keyword::Return),
+            "break" => Some(Keyword::Break),
+
+            "true" => Some(Keyword::Value(ValuedKeyword::True)),
+            "self" => Some(Keyword::Value(ValuedKeyword::SelfIdentity)),
+            "false" => Some(Keyword::Value(ValuedKeyword::False)),
 
             _ => None,
         }

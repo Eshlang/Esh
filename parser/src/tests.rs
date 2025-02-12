@@ -1,7 +1,6 @@
-use lexer::types::Range;
 use crate::parser::*;
 use std::rc::Rc;
-use lexer::types::{Keyword, Token, TokenType};
+use lexer::types::{Keyword, Token, TokenType, Range, ValuedKeyword};
 
 #[test]
 pub fn expression_test() {
@@ -737,7 +736,7 @@ pub fn while_test() {
             range: Range::new((0, 13), (0, 14)),
         }),
         Rc::new(Token {
-            token_type: TokenType::Keyword(Keyword::True),
+            token_type: TokenType::Keyword(Keyword::Value(ValuedKeyword::True)),
             range: Range::new((0, 16), (0, 19)),
         }),
         Rc::new(Token {
@@ -745,7 +744,7 @@ pub fn while_test() {
             range: Range::new((0, 21), (0, 22)),
         }),
         Rc::new(Token {
-            token_type: TokenType::Keyword(Keyword::False),
+            token_type: TokenType::Keyword(Keyword::Value(ValuedKeyword::False)),
             range: Range::new((0, 24), (0, 28)),
         }),
         Rc::new(Token {
@@ -791,11 +790,11 @@ pub fn while_test() {
             )),
             Rc::new(Node::NotEqual(
                 Rc::new(Node::Primary(Rc::new(Token {
-                    token_type: TokenType::Keyword(Keyword::True),
+                    token_type: TokenType::Keyword(Keyword::Value(ValuedKeyword::True)),
                     range: Range::new((0, 16), (0, 19)),
                 }))),
                 Rc::new(Node::Primary(Rc::new(Token {
-                    token_type: TokenType::Keyword(Keyword::False),
+                    token_type: TokenType::Keyword(Keyword::Value(ValuedKeyword::False)),
                     range: Range::new((0, 24), (0, 28)),
                 }))),
             )),
@@ -856,7 +855,7 @@ pub fn if_statement_test() {
             range: Range::new((0, 10), (0, 11)),
         }),
         Rc::new(Token {
-            token_type: TokenType::Keyword(Keyword::True),
+            token_type: TokenType::Keyword(Keyword::Value(ValuedKeyword::True)),
             range: Range::new((0, 13), (0, 16)),
         }),
         Rc::new(Token {
@@ -864,7 +863,7 @@ pub fn if_statement_test() {
             range: Range::new((0, 18), (0, 19)),
         }),
         Rc::new(Token {
-            token_type: TokenType::Keyword(Keyword::False),
+            token_type: TokenType::Keyword(Keyword::Value(ValuedKeyword::False)),
             range: Range::new((0, 21), (0, 25)),
         }),
         Rc::new(Token {
@@ -910,11 +909,11 @@ pub fn if_statement_test() {
             )),
             Rc::new(Node::NotEqual(
                 Rc::new(Node::Primary(Rc::new(Token {
-                    token_type: TokenType::Keyword(Keyword::True),
+                    token_type: TokenType::Keyword(Keyword::Value(ValuedKeyword::True)),
                     range: Range::new((0, 13), (0, 16)),
                 }))),
                 Rc::new(Node::Primary(Rc::new(Token {
-                    token_type: TokenType::Keyword(Keyword::False),
+                    token_type: TokenType::Keyword(Keyword::Value(ValuedKeyword::False)),
                     range: Range::new((0, 21), (0, 25)),
                 }))),
             )),

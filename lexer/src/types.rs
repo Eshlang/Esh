@@ -83,16 +83,24 @@ pub enum TokenType {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Keyword {
     Func,   // functions
+    Struct, // struct definition
+    Domain, // domain definition
+
     If,     // ifs
     Else,   // else
-    Return, // return
-    Break,  // break
-    True,   // true (boolean)
-    False,  // false (boolean)
-    Struct, // struct definition
     For,    // for loop
     While,    // while loop
-    Domain, // domain definition
+
+    Return, // return
+    Break,  // break
+
+    Value(ValuedKeyword) // keywords with value, ex "true"
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ValuedKeyword {
+    True,   // true (boolean)
+    False,  // false (boolean)
     SelfIdentity, // "self" identity
 }
 

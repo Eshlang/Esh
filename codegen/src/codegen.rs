@@ -4,7 +4,7 @@ use std::rc::Rc;
 use dfbin::enums::{Instruction, Parameter, ParameterValue};
 use dfbin::instruction;
 use dfbin::Constants::Tags::DP;
-use lexer::types::{Keyword, Range, Token, TokenType};
+use lexer::types::{Keyword, Range, Token, TokenType, ValuedKeyword};
 use parser::parser::Node;
 use crate::buffer::CodeGenBuffer;
 use crate::errors::{CodegenError, ErrorRepr};
@@ -925,7 +925,7 @@ impl CodeGen {
                             let fake_access_node = Rc::new(Node::Access(
                                 Rc::new(Node::Primary(
                                     Rc::new(Token {
-                                        token_type: TokenType::Keyword(Keyword::SelfIdentity),
+                                        token_type: TokenType::Keyword(Keyword::Value(ValuedKeyword::SelfIdentity)),
                                         range: Range::new((0,0), (0,0))}
                                     )
                                 )),
@@ -953,7 +953,7 @@ impl CodeGen {
                     ),
                     TokenType::Keyword(keyword) => {
                         match keyword {
-                            Keyword::SelfIdentity => {
+                            Keyword::Value(ValuedKeyword::SelfIdentity) => {
                                 let parent_context = self.parents[context];
                                 let ContextType::Struct = self.get_context_type(parent_context)? else {
                                     return CodegenError::err(node.clone(), ErrorRepr::SelfInObjectiveCode);
