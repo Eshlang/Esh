@@ -4,40 +4,42 @@ use lexer::types::{Keyword, Token, TokenType};
 /// A syntactical node
 #[derive(Debug, PartialEq)]
 pub enum Node {
-    None,                                           // ()
-    Primary(Rc<Token>),                             // 0
-    ListCall(Rc<Node>, Rc<Node>),                   // ident[expr]
-    FunctionCall(Rc<Node>, Rc<Node>),               // ident(tuple/expr)
-    Access(Rc<Node>, Rc<Node>),                     // ident.ident
-    Construct(Rc<Node>, Rc<Node>),                  // ident {block} 
-    Not(Rc<Node>),                                  // !expr
-    Negative(Rc<Node>),                             // -expr
-    Product(Rc<Node>, Rc<Node>),                    // expr * expr
-    Quotient(Rc<Node>, Rc<Node>),                   // expr / expr
-    Modulo(Rc<Node>, Rc<Node>),                     // expr % expr
-    Sum(Rc<Node>, Rc<Node>),                        // expr + expr
-    Difference(Rc<Node>, Rc<Node>),                 // expr - expr
-    LessThan(Rc<Node>, Rc<Node>),                   // expr < expr
-    GreaterThan(Rc<Node>, Rc<Node>),                // expr > expr
-    LessThanOrEqualTo(Rc<Node>, Rc<Node>),          // expr <= expr
-    GreaterThanOrEqualTo(Rc<Node>, Rc<Node>),       // expr >= expr
-    Tuple(Vec<Rc<Node>>),                           // (decl/expr, decl/expr, decl/expr)
-    Equal(Rc<Node>, Rc<Node>),                      // expr == expr
-    NotEqual(Rc<Node>, Rc<Node>),                   // expr != expr
-    And(Rc<Node>, Rc<Node>),                        // expr && expr
-    Or(Rc<Node>, Rc<Node>),                         // expr || expr
-    List(Vec<Rc<Node>>),                            // [expr, expr, expr]
-    Declaration(Rc<Node>, Rc<Node>),                // ident ident
-    Break,                                          // break;
-    Return(Rc<Node>),                               // return expr;
-    Assignment(Rc<Node>, Rc<Node>),                 // decl/ident = expr;
-    If(Rc<Node>, Rc<Node>),                         // if cond {block}
-    Else(Rc<Node>, Rc<Node>),                       // stmt else {block}
-    While(Rc<Node>, Rc<Node>),                      // while cond {block}
-    Func(Rc<Node>, Rc<Node>, Rc<Node>, Rc<Node>),   // func ident (tuple/decl) -> tuple/ident {block}
-    Struct(Rc<Node>, Rc<Node>),                     // struct ident {block}
-    Domain(Rc<Node>, Rc<Node>),                     // domain ident {block}
-    Block(Vec<Rc<Node>>),                           // stmt; stmt; stmt;
+    None,                                                       // ()
+    Primary(Rc<Token>),                                         // 0
+    FunctionCall(Rc<Node>, Rc<Node>),                           // ident(tuple/expr)
+    Access(Rc<Node>, Rc<Node>),                                 // ident.ident
+    Construct(Rc<Node>, Rc<Node>),                              // ident {block} 
+    Not(Rc<Node>),                                              // !expr
+    Negative(Rc<Node>),                                         // -expr
+    Product(Rc<Node>, Rc<Node>),                                // expr * expr
+    Quotient(Rc<Node>, Rc<Node>),                               // expr / expr
+    Modulo(Rc<Node>, Rc<Node>),                                 // expr % expr
+    Sum(Rc<Node>, Rc<Node>),                                    // expr + expr
+    Difference(Rc<Node>, Rc<Node>),                             // expr - expr
+    LessThan(Rc<Node>, Rc<Node>),                               // expr < expr
+    GreaterThan(Rc<Node>, Rc<Node>),                            // expr > expr
+    LessThanOrEqualTo(Rc<Node>, Rc<Node>),                      // expr <= expr
+    GreaterThanOrEqualTo(Rc<Node>, Rc<Node>),                   // expr >= expr
+    Tuple(Vec<Rc<Node>>),                                       // (decl/expr, decl/expr, decl/expr)
+    Equal(Rc<Node>, Rc<Node>),                                  // expr == expr
+    NotEqual(Rc<Node>, Rc<Node>),                               // expr != expr
+    And(Rc<Node>, Rc<Node>),                                    // expr && expr
+    Or(Rc<Node>, Rc<Node>),                                     // expr || expr
+    ListCall(Rc<Node>, Rc<Node>),                               // ident[expr]
+    List(Vec<Rc<Node>>),                                        // [expr, expr, expr]
+    Vector(Rc<Node>, Rc<Node>, Rc<Node>),                       // <expr, expr, expr>
+    Location(Rc<Node>, Rc<Node>, Rc<Node>, Rc<Node>, Rc<Node>), // <expr, expr, expr, expr, expr>
+    Declaration(Rc<Node>, Rc<Node>),                            // ident ident
+    Break,                                                      // break;
+    Return(Rc<Node>),                                           // return expr;
+    Assignment(Rc<Node>, Rc<Node>),                             // decl/ident = expr;
+    If(Rc<Node>, Rc<Node>),                                     // if cond {block}
+    Else(Rc<Node>, Rc<Node>),                                   // stmt else {block}
+    While(Rc<Node>, Rc<Node>),                                  // while cond {block}
+    Func(Rc<Node>, Rc<Node>, Rc<Node>, Rc<Node>),               // func ident (tuple/decl) -> tuple/ident {block}
+    Struct(Rc<Node>, Rc<Node>),                                 // struct ident {block}
+    Domain(Rc<Node>, Rc<Node>),                                 // domain ident {block}
+    Block(Vec<Rc<Node>>),                                       // stmt; stmt; stmt;
 }
 
 /// A parser error
@@ -50,6 +52,7 @@ pub enum ParserError {
     MissingParenthesis(Rc<Token>),  // Expected opening/closing parenthesis
     MissingBracket(Rc<Token>),      // Expected opening/closing bracket
     MissingBrace(Rc<Token>),        // Expected opening/closing brace
+    MissingAngleBracket(Rc<Token>), // Expected opening/closing angle bracket
 }
 
 /// Returns a [ParserError] if [self.curr()](Parser::curr()) does not match the input.
@@ -358,57 +361,7 @@ impl<'a> Parser<'a> {
 
     /// Returns the current expression
     pub(crate) fn expression(&mut self) -> Result<Node, ParserError> {
-        self.list_call()
-    }
-
-    /// Returns the current list call
-    pub(crate) fn list_call(&mut self) -> Result<Node, ParserError> {
-        match self.curr().token_type {
-            TokenType::Ident(_) => (),
-            _ => return self.logic(),
-        }
-        let start = self.current;
-        let mut expr = self.ident()?;
-        if self.is_at_end() {
-            return Ok(expr)
-        }
-        match self.curr().token_type {
-            TokenType::Ident(_) => return Ok(expr),
-            TokenType::LBracket => (),
-            _ => {
-                self.current = start;
-                return self.logic();
-            }
-        }
-        while !self.is_at_end() {
-            match dbg!(&self.curr().token_type) {
-                TokenType::LBracket => {
-                    self.advance();
-                    match self.curr().token_type {
-                        TokenType::RBracket => {
-                            expr = Node::ListCall(
-                                Rc::new(expr), 
-                                Rc::new(Node::None)
-                            );
-                            self.advance();
-                        }
-                        _ => {
-                            expr = Node::ListCall(
-                                Rc::new(expr), 
-                                Rc::new(self.expression()?)
-                            );
-                            if let TokenType::RBracket = self.curr().token_type {
-                                self.advance();
-                            } else {
-                                return Err(ParserError::MissingBracket(self.curr().clone()))
-                            }
-                        }
-                    }
-                },
-                _ => break
-            }
-        }
-        return Ok(expr);
+        self.logic()
     }
 
     /// Returns the current logic operation
@@ -475,10 +428,16 @@ impl<'a> Parser<'a> {
                 },
                 TokenType::RAngle => {
                     self.advance();
-                    expr = Node::GreaterThan(
-                        Rc::new(expr), 
-                        Rc::new(self.term()?),
-                    )
+                    match self.curr().token_type {
+                        TokenType::Ident(_) | TokenType::Number(_) | TokenType::Dash => expr = Node::GreaterThan(
+                            Rc::new(expr), 
+                            Rc::new(self.term()?),
+                        ),
+                        _ => {
+                            self.current -= 1;
+                            break;
+                        }
+                    }
                 },
                 TokenType::LTEqual => {
                     self.advance();
@@ -568,8 +527,58 @@ impl<'a> Parser<'a> {
                 self.advance();
                 Ok(Node::Negative(Rc::new(self.unary()?)))
             },
-            _ => self.primary(),
+            _ => self.list_call(),
         }
+    }
+
+    /// Returns the current list call
+    pub(crate) fn list_call(&mut self) -> Result<Node, ParserError> {
+        match self.curr().token_type {
+            TokenType::Ident(_) => (),
+            _ => return self.primary(),
+        }
+        let start = self.current;
+        let mut expr = self.ident()?;
+        if self.is_at_end() {
+            return Ok(expr)
+        }
+        match self.curr().token_type {
+            TokenType::Ident(_) => return Ok(expr),
+            TokenType::LBracket => (),
+            _ => {
+                self.current = start;
+                return self.primary();
+            }
+        }
+        while !self.is_at_end() {
+            match dbg!(&self.curr().token_type) {
+                TokenType::LBracket => {
+                    self.advance();
+                    match self.curr().token_type {
+                        TokenType::RBracket => {
+                            expr = Node::ListCall(
+                                Rc::new(expr), 
+                                Rc::new(Node::None)
+                            );
+                            self.advance();
+                        }
+                        _ => {
+                            expr = Node::ListCall(
+                                Rc::new(expr), 
+                                Rc::new(self.expression()?)
+                            );
+                            if let TokenType::RBracket = self.curr().token_type {
+                                self.advance();
+                            } else {
+                                return Err(ParserError::MissingBracket(self.curr().clone()))
+                            }
+                        }
+                    }
+                },
+                _ => break
+            }
+        }
+        return Ok(expr);
     }
 
     /// Returns the current primary node
@@ -607,7 +616,10 @@ impl<'a> Parser<'a> {
             },
             TokenType::LBracket => {
                 self.list()
-            }
+            },
+            TokenType::LAngle => {
+                self.vector()
+            },
             _ => {
                 Err(ParserError::InvalidToken(self.curr().clone()))
             }
@@ -711,6 +723,45 @@ impl<'a> Parser<'a> {
             self.advance();
         }
         return Ok(Node::List(block));
+    }
+
+    /// Returns the current vector or location
+    pub(crate) fn vector(&mut self) -> Result<Node, ParserError> {
+        expect!(self, TokenType::LAngle);
+        self.advance();
+        let expr1 = self.expression()?;
+        expect!(self, TokenType::Comma);
+        self.advance();
+        let expr2 = self.expression()?;
+        expect!(self, TokenType::Comma);
+        self.advance();
+        let expr3 = self.expression()?;
+        match self.curr().token_type {
+            TokenType::RAngle =>  {
+                self.advance();
+                return Ok(Node::Vector(
+                    Rc::new(expr1), 
+                    Rc::new(expr2), 
+                    Rc::new(expr3),
+                ));
+            },
+            TokenType::Comma => (),
+            _ => return Err(ParserError::MissingAngleBracket(self.curr().clone()))
+        }
+        self.advance();
+        let expr4 = self.expression()?;
+        expect!(self, TokenType::Comma);
+        self.advance();
+        let expr5 = self.expression()?;
+        expect!(self, TokenType::RAngle);
+        self.advance();
+        return Ok(Node::Location(
+            Rc::new(expr1), 
+            Rc::new(expr2), 
+            Rc::new(expr3),
+            Rc::new(expr4), 
+            Rc::new(expr5),
+        ));
     }
 
     /// Returns the current identifier

@@ -419,6 +419,222 @@ pub fn list_test() {
 }
 
 #[test]
+pub fn location_test() {
+    // vec spawn = <0, 0, 0>;
+    // loc playerLoc = <0, 25 * 2, 0, 0, sin(30)>;
+    let input = [
+        Rc::new(Token {
+            token_type: TokenType::Ident("vec".to_string()),
+            range: Range::new((0, 0), (0, 2)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Ident("spawn".to_string()),
+            range: Range::new((0, 4), (0, 8)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Assign,
+            range: Range::new((0, 10), (0, 10)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::LAngle,
+            range: Range::new((0, 12), (0, 12)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Number(0f64),
+            range: Range::new((0, 13), (0, 13)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Comma,
+            range: Range::new((0, 14), (0, 14)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Number(0f64),
+            range: Range::new((0, 16), (0, 16)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Comma,
+            range: Range::new((0, 17), (0, 17)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Number(0f64),
+            range: Range::new((0, 19), (0, 19)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::RAngle,
+            range: Range::new((0, 20), (0, 20)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Semicolon,
+            range: Range::new((0, 21), (0, 21)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Ident("loc".to_string()),
+            range: Range::new((0, 0), (0, 2)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Ident("playerLoc".to_string()),
+            range: Range::new((0, 4), (0, 12)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Assign,
+            range: Range::new((0, 14), (0, 14)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::LAngle,
+            range: Range::new((0, 16), (0, 16)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Number(0f64),
+            range: Range::new((0, 17), (0, 17)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Comma,
+            range: Range::new((0, 18), (0, 18)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Number(25f64),
+            range: Range::new((0, 20), (0, 21)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Asterisk,
+            range: Range::new((0, 23), (0, 23)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Number(2f64),
+            range: Range::new((0, 25), (0, 25)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Comma,
+            range: Range::new((0, 26), (0, 26)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Number(0f64),
+            range: Range::new((0, 28), (0, 28)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Comma,
+            range: Range::new((0, 29), (0, 29)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Number(0f64),
+            range: Range::new((0, 31), (0, 31)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Comma,
+            range: Range::new((0, 32), (0, 32)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Ident("sin".to_string()),
+            range: Range::new((0, 34), (0, 36)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::LParen,
+            range: Range::new((0, 37), (0, 37)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Number(30f64),
+            range: Range::new((0, 38), (0, 39)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::RParen,
+            range: Range::new((0, 40), (0, 40)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::RAngle,
+            range: Range::new((0, 41), (0, 41)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Semicolon,
+            range: Range::new((0, 42), (0, 42)),
+        }),
+    ];
+    let expected = Node::Block(vec![
+        Rc::new(Node::Assignment(
+            Rc::new(Node::Declaration(
+                Rc::new(Node::Primary(Rc::new(Token {
+                    token_type: TokenType::Ident("vec".to_string()),
+                    range: Range::new((0, 0), (0, 2)),
+                }))),
+                Rc::new(Node::Primary(Rc::new(Token {
+                    token_type: TokenType::Ident("spawn".to_string()),
+                    range: Range::new((0, 4), (0, 8)),
+                }))),
+            )),
+            Rc::new(Node::Vector(
+                Rc::new(Node::Primary(Rc::new(Token {
+                    token_type: TokenType::Number(0f64),
+                    range: Range::new((0, 13), (0, 13)),
+                }))),
+                Rc::new(Node::Primary(Rc::new(Token {
+                    token_type: TokenType::Number(0f64),
+                    range: Range::new((0, 16), (0, 16)),
+                }))),
+                Rc::new(Node::Primary(Rc::new(Token {
+                    token_type: TokenType::Number(0f64),
+                    range: Range::new((0, 19), (0, 19)),
+                }))),
+            )),
+        )),
+        Rc::new(Node::Assignment(
+            Rc::new(Node::Declaration(
+                Rc::new(Node::Primary(Rc::new(Token {
+                    token_type: TokenType::Ident("loc".to_string()),
+                    range: Range::new((0, 0), (0, 2)),
+                }))),
+                Rc::new(Node::Primary(Rc::new(Token {
+                    token_type: TokenType::Ident("playerLoc".to_string()),
+                    range: Range::new((0, 4), (0, 12)),
+                }))),
+            )),
+            Rc::new(Node::Location(
+                Rc::new(Node::Primary(Rc::new(Token {
+                    token_type: TokenType::Number(0f64),
+                    range: Range::new((0, 17), (0, 17)),
+                }))),
+                Rc::new(Node::Product(
+                    Rc::new(Node::Primary(Rc::new(Token {
+                        token_type: TokenType::Number(25f64),
+                        range: Range::new((0, 20), (0, 21)),
+                    }))),
+                    Rc::new(Node::Primary(Rc::new(Token {
+                        token_type: TokenType::Number(2f64),
+                        range: Range::new((0, 25), (0, 25)),
+                    }))),
+                )),
+                Rc::new(Node::Primary(Rc::new(Token {
+                    token_type: TokenType::Number(0f64),
+                    range: Range::new((0, 28), (0, 28)),
+                }))),
+                Rc::new(Node::Primary(Rc::new(Token {
+                    token_type: TokenType::Number(0f64),
+                    range: Range::new((0, 31), (0, 31)),
+                }))),
+                Rc::new(Node::FunctionCall(
+                    Rc::new(Node::Primary(Rc::new(Token {
+                        token_type: TokenType::Ident("sin".to_string()),
+                        range: Range::new((0, 34), (0, 36)),
+                    }))),
+                    Rc::new(Node::Tuple(vec![
+                        Rc::new(Node::Primary(Rc::new(Token {
+                            token_type: TokenType::Number(30f64),
+                            range: Range::new((0, 38), (0, 39)),
+                        })))
+                    ]))
+                )),
+            )),
+        )),
+    ]);
+    let mut parser = Parser::new(&input);
+    match parser.statement_block() {
+        Ok(output) => assert_eq!(expected, output),
+        Err(e) => {
+            dbg!(e);
+            panic!()
+        }
+    }
+}
+
+#[test]
 pub fn statement_block_test() {
     // num x;
     // str y = "hello";
