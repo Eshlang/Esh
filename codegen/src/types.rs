@@ -339,9 +339,9 @@ impl GenerateExpressionSettings {
     }
 
     /// Makes the expression expect a type.
-    pub fn expect_type(&self, value_type: ValueType) -> Self {
+    pub fn expect_type(&self, value_type: &ValueType) -> Self {
         let mut changed = self.clone();
-        changed.expected_type = Some(value_type);
+        changed.expected_type = Some(value_type.clone());
         changed
     }
 

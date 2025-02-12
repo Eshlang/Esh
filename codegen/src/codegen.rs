@@ -541,7 +541,7 @@ impl CodeGen {
             let field = self.extract_definition_field(def)?;
             let field_type = struct_context.fields.get(field).expect("Struct context should have this field.").field_type.clone();
             drop(struct_context);
-            let field_expression = self.generate_expression(context, assigned_value, GenerateExpressionSettings::parameter(register_group))?;
+            let field_expression = self.generate_expression(context, assigned_value, GenerateExpressionSettings::parameter(register_group).expect_type(&field_type))?;
             if field_expression.value.value_type != field_type {
                 return CodegenError::err(assigned_value.clone(), ErrorRepr::UnexpectedStructFieldType)
             }
@@ -895,16 +895,33 @@ impl CodeGen {
         }
     }
 
-    fn generate_expression(&mut self, context: usize, root_node: &Rc<Node>, settings: GenerateExpressionSettings) -> Result<CodegenExpressionResult, CodegenError> {
-        //TODO: Refactor by removing ``set_ident`` as the workaround, and moving to register group based stuff
-        // means a lot of refactoring needs to be done for stuff that *uses* generate_expression, but i think it's worth it
+    fn implicitly_cast(&mut self, context: usize, root_node: &Rc<Node>, mut result: CodegenExpressionResult, settings: &GenerateExpressionSettings, register_group: u64) -> Result<CodegenExpressionResult, CodegenError> {
+        let Some(value_type) = settings.expected_type.clone() else {
+            return Ok(result);
+        };
+        if value_type == result.value.value_type {
+            return Ok(result);
+        }
+        match (&result.value.value_type, &value_type) { //var string 0, 0
+            (ValueType::Primitive(PrimitiveType::Number), ValueType::Primitive(PrimitiveType::String)) => {
+                let register = self.generate_expression_allocate_register(&settings, register_group);
+                self.push_expression_instruction(&settings, instruction!(
+                    Var::String, [(Ident, register), (Ident, result.value.ident)]
+                ));
+                result.value.ident = register;
+                result.value.value_type = value_type.clone();
+            }
+            _ => { return CodegenError::err(root_node.clone(), ErrorRepr::CantImplicitlyCast); }
+        };
 
-    
-        //##println!("{:#?}", root_node);
+        return Ok(result);
+    }
+
+    fn generate_expression(&mut self, context: usize, root_node: &Rc<Node>, settings: GenerateExpressionSettings) -> Result<CodegenExpressionResult, CodegenError> {
         let mut expression_stack= VecDeque::new();
         expression_stack.push_back(CodegenExpressionStack::Node(root_node));
         let register_group = self.buffer.allocate_line_register_group();
-        let result = self.generate_expression_inside(context, root_node, settings, register_group)?;
+        let result = self.generate_expression_inside(context, root_node, settings.clone(), register_group)?;
         self.buffer.free_line_register_group(register_group);
         Ok(result)
     }
@@ -928,7 +945,7 @@ impl CodeGen {
                                         token_type: TokenType::Keyword(Keyword::Value(ValuedKeyword::SelfIdentity)),
                                         range: Range::new((0,0), (0,0))}
                                     )
-                                )),
+                                )),     
                                 node.clone()
                             ));
 
@@ -995,17 +1012,14 @@ impl CodeGen {
                     return CodegenError::err(assign_var_node.clone(), ErrorRepr::NoTraceCantAssign)
                 };
                 let assign_value = if trace_set.crumbs.len() == 0 { // No access variable, set_ident method
-                    self.generate_expression_inside(context, assign_value_node, GenerateExpressionSettings::ident(value.ident), register_group)?
+                    self.generate_expression_inside(context, assign_value_node, GenerateExpressionSettings::ident(value.ident).expect_type(&assign_var.value.value_type), register_group)?
                 } else {
                     let param_group = self.buffer.allocate_line_register_group();
-                    let assign_value = self.generate_expression_inside(context, assign_value_node, GenerateExpressionSettings::parameter(param_group), register_group)?;
+                    let assign_value = self.generate_expression_inside(context, assign_value_node, GenerateExpressionSettings::parameter(param_group).expect_type(&assign_var.value.value_type), register_group)?;
                     self.set_trace_to_value(context, trace_set.clone(), assign_value.value.clone())?;
                     self.buffer.free_line_register_group(param_group);
                     assign_value
                 };
-                if assign_var.value.value_type != assign_value.value.value_type {
-                    return CodegenError::err(assign_value_node.clone(), ErrorRepr::InvalidVariableType)
-                }
             }
             Node::FunctionCall(func_ident, func_params) => {
                 let register = self.generate_expression_allocate_register(&settings, register_group);
@@ -1166,10 +1180,12 @@ impl CodeGen {
             }
             _ => { return CodegenError::err(node.clone(), ErrorRepr::UnexpectedExpressionToken); }
         }
-        Ok(CodegenExpressionResult {
+        let result = CodegenExpressionResult {
             value,
             trace
-        })
+        };
+        let result = self.implicitly_cast(context, node, result, &settings, register_group)?;
+        Ok(result)
     }
 
     fn declare_runtime_variable(&mut self, context: usize, decl_type: &Rc<Node>, decl_ident: &Rc<Node>) -> Result<(&RuntimeVariable, String), CodegenError> {
@@ -1194,7 +1210,7 @@ impl CodeGen {
 
     fn call_function(&mut self, context: usize, function_ident: &Rc<Node>, function_params: &Rc<Node>, return_ident: u32) -> Result<ValueType, CodegenError> {
         // let func_context = self.find_function_by_node(function_ident, context)?;
-        let function_ident_evaluation = self.generate_expression(context, function_ident, GenerateExpressionSettings::comptime())?;
+        let function_ident_evaluation = self.generate_expression(context, function_ident, GenerateExpressionSettings::comptime().prefer_category(IdentifierCategory::Function))?;
         let (func_context, struct_func_ident) = match function_ident_evaluation.value.value_type {
             ValueType::Comptime(ComptimeType::Function(func_context)) => (func_context, None),
             ValueType::Comptime(ComptimeType::SelfFunction(func_context, struct_func_ident)) => (func_context, Some(struct_func_ident)),
@@ -1224,10 +1240,7 @@ impl CodeGen {
             return CodegenError::err(function_params.clone(), ErrorRepr::ExpectedFunctionParameter)
         }
         for (param, param_field) in params.into_iter().zip(func_fields) {
-            let param_expression = self.generate_expression(context, &param, GenerateExpressionSettings::parameter(param_register_group))?;
-            if param_expression.value.value_type != param_field.field_type {
-                return CodegenError::err(param.clone(), ErrorRepr::UnexpectedFunctionParameterType)
-            }
+            let param_expression = self.generate_expression(context, &param, GenerateExpressionSettings::parameter(param_register_group).expect_type(&param_field.field_type))?;
             call_instruction.params.push(Parameter::from_ident(param_expression.value.ident));
         }
 
@@ -1319,10 +1332,7 @@ impl CodeGen {
                 },
                 Node::If(if_condition, if_block) => {
                     let if_allocation = self.buffer.allocate_line_register_group();
-                    let expr_id = self.generate_expression(context, if_condition, GenerateExpressionSettings::parameter(if_allocation))?;
-                    if !matches!(expr_id.value.value_type, ValueType::Primitive(PrimitiveType::Bool)) {
-                        return CodegenError::err(statement.clone(), ErrorRepr::InvalidVariableType)
-                    }
+                    let expr_id = self.generate_expression(context, if_condition, GenerateExpressionSettings::parameter(if_allocation).expect_type(&ValueType::Primitive(PrimitiveType::Bool)))?;
                     self.buffer.code_buffer.push_instruction(instruction!(
                         Varif::Eq, [
                             (Ident, expr_id.value.ident),
@@ -1343,10 +1353,7 @@ impl CodeGen {
                         let Some(return_type_ident_some) = return_type_ident else {
                             return CodegenError::err(return_value.clone(), ErrorRepr::UnexpectedReturnValue)
                         };
-                        let expr_id: CodegenExpressionResult = self.generate_expression(context, return_value, GenerateExpressionSettings::ident(return_type_ident_some))?;
-                        if expr_id.value.value_type != return_type {
-                            return CodegenError::err(statement.clone(), ErrorRepr::InvalidReturnValueType)
-                        }
+                        self.generate_expression(context, return_value, GenerateExpressionSettings::ident(return_type_ident_some).expect_type(&return_type))?;
                     }
                     self.buffer.code_buffer.push_instruction(instruction!(Ctrl::Return));
                     if body_stack.len() == 1 { // This is the core branch.
@@ -1360,10 +1367,7 @@ impl CodeGen {
                 Node::While(while_cond, while_block) => {
                     self.buffer.code_buffer.push_instruction(instruction!(Rep::Forever));
                     let while_allocation = self.buffer.allocate_line_register_group();
-                    let expr_id = self.generate_expression(context, while_cond, GenerateExpressionSettings::parameter(while_allocation))?;
-                    if !matches!(expr_id.value.value_type, ValueType::Primitive(PrimitiveType::Bool)) {
-                        return CodegenError::err(statement.clone(), ErrorRepr::InvalidVariableType)
-                    }
+                    let expr_id = self.generate_expression(context, while_cond, GenerateExpressionSettings::parameter(while_allocation).expect_type(&ValueType::Primitive(PrimitiveType::Bool)))?;
                     self.buffer.code_buffer.push_instruction(instruction!(
                         Varif::Eq, [
                             (Ident, expr_id.value.ident),
@@ -1415,9 +1419,9 @@ mod tests {
 
     #[test]
     pub fn decompile_from_file_test() {
-        let name = "ambiguity";
-        let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\codegen\examples\";
-        // let path = r"K:\Programming\GitHub\Esh\codegen\examples\";
+        let name = "implicit_casts";
+        // let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\codegen\examples\";
+        let path = r"K:\Programming\GitHub\Esh\codegen\examples\";
 
         let file_bytes = fs::read(format!("{}{}.esh", path, name)).expect("File should read");
         let lexer = Lexer::new(str::from_utf8(&file_bytes).expect("Should encode to utf-8"));

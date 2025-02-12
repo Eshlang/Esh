@@ -185,4 +185,6 @@ pub enum ErrorRepr {
     SelfInObjectiveCode,
     #[error("Invalid struct definition.")]
     InvalidStructDefinition,
+    #[error("Can't implicitly cast this expression to the expected type.")]
+    CantImplicitlyCast,
 }

@@ -1,0 +1,8 @@
+func main() {
+    num hello = 150;
+    hello = 200 + 100;
+
+    string hey;
+    hey = hello + 10;
+    hey = 5;
+}
