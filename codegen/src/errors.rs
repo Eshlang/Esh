@@ -187,4 +187,6 @@ pub enum ErrorRepr {
     InvalidStructDefinition,
     #[error("Can't implicitly cast this expression to the expected type.")]
     CantImplicitlyCast,
+    #[error("Expected a list type.")]
+    ExpectedListType,
 }

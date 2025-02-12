@@ -1,34 +1,54 @@
 seg func
     df _3 "__1#main.test"
+    df _19 "__2#main.new"
 seg param
     dp var _0 "_dvg_0#main.myList" #scope:global
     dp var _1 "_dvg_0#main.myMap" #scope:global
     dp var _2 "_c_void" #scope:global
-    dp var _4 "_rvl_hello" #scope:line
-    dp num _5 15
-    dp var _6 "_xl0" #scope:line
-    dp num _7 4
-    dp num _8 2
-    dp var _9 "_xl1" #scope:line
-    dp num _10 10
-    dp var _11 "_xl2" #scope:line
-    dp var _12 "_rvl_myPlayer" #scope:line
-    dp str _13 "hello"
-    dp num _14 200
-    dp str _15 "wow"
-    dp num _16 100000
+    dp num _4 1
+    dp num _5 2
+    dp num _6 3
+    dp var _7 "_rvl_hello" #scope:line
+    dp num _8 15
+    dp var _9 "_xl0" #scope:line
+    dp num _10 4
+    dp var _11 "_xl1" #scope:line
+    dp num _12 10
+    dp var _13 "_xl2" #scope:line
+    dp var _14 "_rvl_myPlayer" #scope:line
+    dp str _15 "hello"
+    dp num _16 200
+    dp str _17 "wow"
+    dp num _18 100000
+    dp var _20 "_rvl_testList" #scope:line
+    dp var _21 "_xl3" #scope:line
+    dp str _22 "aa"
+    dp str _23 "bb"
+    dp str _24 "cc"
+    dp str _25 "dd"
+    dp num _26 5
+    dp str _27 "ee"
 seg code
     func _3
-        var set _4, _5
-        var add _6, _7, _8
-        var add _9, _6, 1
-        var getlistvalue _4, _0, _9
-        var add _11, _10, 1
-        var setlistvalue _0, _11, _4
-        var createlist _12, _13, _14
-        var string _12, " ", _11
-        var setdictvalue _1, _11, _15
-        var set _4, _16
-        var string _11, " ", _12
-        var getdictvalue _9, _1, _11
-        var setlistvalue _12, 1, _9
+        var createlist _0, _4, _5, _6
+        var set _7, _8
+        var add _9, _10, _5
+        var add _11, _9, 1
+        var getlistvalue _7, _0, _11
+        var add _13, _12, 1
+        var setlistvalue _0, _13, _7
+        var createlist _14, _15, _16
+        var string _14, " ", _13
+        var setdictvalue _1, _13, _17
+        var set _7, _18
+        var string _13, " ", _14
+        var getdictvalue _11, _1, _13
+        var setlistvalue _14, 1, _11
+    func _19
+        var createlist _20
+        var string _11, _4
+        var string _13, _5
+        var string _21, _6
+        var createlist _20, _11, _13, _21
+        var string _21, _26
+        var createlist _20, _22, _23, _24, _25, _21, _27

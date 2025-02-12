@@ -2,6 +2,7 @@ num[] myList;
 string[Player] myMap;
 
 func test() {
+    myList = [1,2,3];
     num hello = 15;
     hello = myList[4 + 2];
 
@@ -14,6 +15,12 @@ func test() {
     hello = 100000;
 
     myPlayer.uuid = myMap[myPlayer];
+}
+
+func new() {
+    string[] testList = [];
+    testList = [1,2,3];
+    testList = ["aa","bb","cc","dd",5,"ee"];
 }
 
 struct Player {

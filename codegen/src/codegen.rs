@@ -888,10 +888,16 @@ impl CodeGen {
         return self.buffer.allocate_grouped_line_register(register_group);
     }
 
-    // Used internally by the ``generate_expression`` and ``generate_expression_inside`` functions to push instructions to the code buffer.
+    /// Used internally by the ``generate_expression`` and ``generate_expression_inside`` functions to push instructions to the code buffer.
     fn push_expression_instruction(&mut self, settings: &GenerateExpressionSettings, instruction: Instruction) {
         if settings.generate_codeblocks {
             self.buffer.code_buffer.push_instruction(instruction);
+        }
+    }
+    /// Used internally by the ``generate_expression`` and ``generate_expression_inside`` functions to push parameters to the code buffer.
+    fn push_expression_parameter(&mut self, settings: &GenerateExpressionSettings, parameter: Parameter) {
+        if settings.generate_codeblocks {
+            self.buffer.code_buffer.push_parameter(parameter);
         }
     }
 
@@ -925,6 +931,7 @@ impl CodeGen {
         self.buffer.free_line_register_group(register_group);
         Ok(result)
     }
+    
 
     fn generate_expression_inside(&mut self, context: usize, node: &Rc<Node>, settings: GenerateExpressionSettings, register_group: u64) -> Result<CodegenExpressionResult, CodegenError> {
         let mut value = CodegenValue::default();
@@ -968,9 +975,9 @@ impl CodeGen {
                         self.buffer.use_number(ParameterValue::Float(*number)),
                         ValueType::Primitive(PrimitiveType::Number)
                     ),
-                    TokenType::Keyword(keyword) => {
+                    TokenType::Keyword(Keyword::Value(keyword)) => {
                         match keyword {
-                            Keyword::Value(ValuedKeyword::SelfIdentity) => {
+                            ValuedKeyword::SelfIdentity => {
                                 let parent_context = self.parents[context];
                                 let ContextType::Struct = self.get_context_type(parent_context)? else {
                                     return CodegenError::err(node.clone(), ErrorRepr::SelfInObjectiveCode);
@@ -1148,6 +1155,39 @@ impl CodeGen {
                     _ => { return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion); }
                 }
             }
+            Node::List(tuple) => {
+                let expected_list_type = 
+                    settings.expected_type
+                    .clone()
+                    .unwrap_or(if tuple.len() > 0 {
+                        ValueType::Primitive(PrimitiveType::List(Rc::new(self.generate_expression_inside(context, &tuple[0], GenerateExpressionSettings::comptime(), register_group)?.value.value_type)))
+                    } else { 
+                        ValueType::Primitive(PrimitiveType::List(Rc::new(ValueType::Primitive(PrimitiveType::None))))
+                    });
+                value.value_type = expected_list_type.clone();
+                let ValueType::Primitive(PrimitiveType::List(expected_type)) = expected_list_type else {
+                    return CodegenError::err(node.clone(), ErrorRepr::ExpectedListType);
+                };
+                let expected_type = expected_type.as_ref().clone();
+                let register = self.generate_expression_allocate_register(&settings, register_group);
+                value.ident = register;
+
+                let mut values = Vec::new();
+                for element in tuple {
+                    values.push(self.generate_expression_inside(context, element, settings.pass().expect_type(&expected_type), register_group)?.value.clone());
+                }
+                self.push_expression_instruction(&settings,
+                    instruction!( Var::CreateList, [ (Ident, register) ])
+                );
+                for (values, value) in values.iter().enumerate() {
+                    if values % 26 == 0 && values > 0 {
+                        self.push_expression_instruction(&settings, 
+                            instruction!( Var::AppendList, [ (Ident, register) ])
+                        );
+                    }
+                    self.push_expression_parameter(&settings, Parameter::from_ident(value.ident));
+                }
+            }
             Node::Sum(l, r) => {
                 let register = self.generate_expression_allocate_register(&settings, register_group);
                 let l = self.generate_expression_inside(context, l, settings.pass(), register_group)?.value.clone();
@@ -1159,6 +1199,12 @@ impl CodeGen {
                             Var::Add, [ (Ident, register), (Ident, l.ident), (Ident, r.ident) ]
                         ));
                         value.value_type = ValueType::Primitive(PrimitiveType::Number);
+                    }
+                    (ValueType::Primitive(PrimitiveType::String), ValueType::Primitive(PrimitiveType::String) | ValueType::Primitive(PrimitiveType::Number)) => {
+                        self.push_expression_instruction(&settings, instruction!(
+                            Var::String, [ (Ident, register), (Ident, l.ident), (Ident, r.ident) ]
+                        ));
+                        value.value_type = ValueType::Primitive(PrimitiveType::String);
                     }
                     _ => { return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion); }
                 }
@@ -1174,6 +1220,12 @@ impl CodeGen {
                             Var::Mul, [ (Ident, register), (Ident, l.ident), (Ident, r.ident) ]
                         ));
                         value.value_type = ValueType::Primitive(PrimitiveType::Number);
+                    }
+                    (ValueType::Primitive(PrimitiveType::String), ValueType::Primitive(PrimitiveType::Number)) => {
+                        self.push_expression_instruction(&settings, instruction!(
+                            Var::RepeatString, [ (Ident, register), (Ident, l.ident), (Ident, r.ident) ]
+                        ));
+                        value.value_type = ValueType::Primitive(PrimitiveType::String);
                     }
                     _ => { return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion); }
                 }
@@ -1419,7 +1471,7 @@ mod tests {
 
     #[test]
     pub fn decompile_from_file_test() {
-        let name = "implicit_casts";
+        let name = "lists";
         // let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\codegen\examples\";
         let path = r"K:\Programming\GitHub\Esh\codegen\examples\";
 
