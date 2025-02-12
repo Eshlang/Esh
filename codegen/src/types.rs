@@ -52,6 +52,16 @@ pub enum ValueType {
     Ident(Rc<Node>),
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum IdentifierCategory {
+    Field,
+    RuntimeVariable,
+    Domain,
+    Function,
+    Type,
+    SelfFunction
+}
+
 impl ValueType {
     pub fn is_realtime(&self) -> bool {
         match self {
@@ -228,7 +238,13 @@ pub struct GenerateExpressionSettings {
     pub variable_necessary: bool,
 
     /// This is used internally by the ``generate_expression`` function to denote the depth of an expression layer.
-    pub depth: usize
+    pub depth: usize,
+
+    /// If this is set to a value type, the expression will, at the end of the result,
+    /// try to implicitly cast it into that type, and if it can't - it'll error.
+    pub expected_type: Option<ValueType>,
+
+    pub preferred_category: IdentifierCategory,
 }
 
 impl GenerateExpressionSettings {
@@ -238,6 +254,8 @@ impl GenerateExpressionSettings {
             set_ident: Some(ident),
             register_group: None,
             variable_necessary: true,
+            expected_type: None,
+            preferred_category: IdentifierCategory::RuntimeVariable,
             depth: 0,
         }
     }
@@ -247,6 +265,8 @@ impl GenerateExpressionSettings {
             set_ident: None,
             register_group: Some(group),
             variable_necessary: true,
+            expected_type: None,
+            preferred_category: IdentifierCategory::RuntimeVariable,
             depth: 0,
         }
     }
@@ -256,6 +276,8 @@ impl GenerateExpressionSettings {
             set_ident: None,
             register_group: None,
             variable_necessary: false,
+            expected_type: None,
+            preferred_category: IdentifierCategory::RuntimeVariable,
             depth: 0,
         }
     }
@@ -270,6 +292,8 @@ impl GenerateExpressionSettings {
             set_ident: None,
             register_group: Some(group),
             variable_necessary: false,
+            expected_type: None,
+            preferred_category: IdentifierCategory::RuntimeVariable,
             depth: 0,
         }
     }
@@ -283,14 +307,27 @@ impl GenerateExpressionSettings {
             set_ident: Some(ident),
             register_group: None,
             variable_necessary: false,
+            expected_type: None,
+            preferred_category: IdentifierCategory::RuntimeVariable,
             depth: 0,
         }
     }
 
-    // This is used internally by the ``generate_expression`` function to pass the settings onto other branches of the expressions.
+    /// This is used internally by the ``generate_expression`` function to pass the settings onto other branches of the expressions.
     pub fn pass(&self) -> Self {
         let mut passed = self.clone();
         passed.depth += 1;
+        passed.expected_type = None;
+        passed.preferred_category = IdentifierCategory::RuntimeVariable;
+        passed
+    }
+
+    /// Combination of ``.pass`` and ``.prefer_category``
+    pub fn pass_prefer(&self, category: IdentifierCategory) -> Self {
+        let mut passed = self.clone();
+        passed.depth += 1;
+        passed.expected_type = None;
+        passed.preferred_category = category;
         passed
     }
 
@@ -298,6 +335,20 @@ impl GenerateExpressionSettings {
     pub fn keep_comptime(&self, settings: &GenerateExpressionSettings) -> Self {
         let mut changed = self.clone();
         changed.generate_codeblocks = settings.generate_codeblocks;
+        changed
+    }
+
+    /// Makes the expression expect a type.
+    pub fn expect_type(&self, value_type: ValueType) -> Self {
+        let mut changed = self.clone();
+        changed.expected_type = Some(value_type);
+        changed
+    }
+
+    /// Makes the expression prefer a comptime category type (such as a domain, function, etc.)
+    pub fn prefer_category(&self, category: IdentifierCategory) -> Self {
+        let mut changed = self.clone();
+        changed.preferred_category = category;
         changed
     }
 }

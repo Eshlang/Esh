@@ -9,7 +9,7 @@ use parser::parser::Node;
 use crate::buffer::CodeGenBuffer;
 use crate::errors::{CodegenError, ErrorRepr};
 use crate::context::{CodeDefinition, CodeScope, Context, ContextType};
-use crate::types::{CodegenAccessNode, CodegenBodyStackMode, CodegenExpressionResult, CodegenExpressionStack, CodegenExpressionType, CodegenTrace, CodegenTraceCrumb, CodegenValue, ComptimeType, Field, FieldDefinition, GenerateExpressionSettings, PrimitiveType, RealtimeValueType, RuntimeVariable, ValueType};
+use crate::types::{CodegenAccessNode, CodegenBodyStackMode, CodegenExpressionResult, CodegenExpressionStack, CodegenExpressionType, CodegenTrace, CodegenTraceCrumb, CodegenValue, ComptimeType, IdentifierCategory, Field, FieldDefinition, GenerateExpressionSettings, PrimitiveType, RealtimeValueType, RuntimeVariable, ValueType};
 
 pub struct CodeGen {
     pub context_map: HashMap<String, usize>,
@@ -295,7 +295,7 @@ impl CodeGen {
     }
 
     fn get_type(&mut self, node: &Rc<Node>, context: usize) -> Result<ValueType, CodegenError> {
-        let ValueType::Comptime(ComptimeType::Type(construct_field_type_realtime)) = self.generate_expression(context, node, GenerateExpressionSettings::comptime())?.value.value_type else {
+        let ValueType::Comptime(ComptimeType::Type(construct_field_type_realtime)) = self.generate_expression(context, node, GenerateExpressionSettings::comptime().prefer_category(IdentifierCategory::Type))?.value.value_type else {
             return CodegenError::err(node.clone(), ErrorRepr::ExpectedType);
         };
         return Ok(construct_field_type_realtime.normalize());
@@ -518,50 +518,6 @@ impl CodeGen {
         self.find_variable_by_name_full(context, var_name, node)
     }
 
-    fn set_variable_to_ident(&mut self, context: usize, node: &Rc<Node>, set_ident: u32) -> Result<ValueType, CodegenError> {
-        match node.as_ref() {
-            Node::Primary(..) => {
-                let var_name = Self::get_primary_as_ident(node, ErrorRepr::ExpectedVariable)?;
-                let runtime_var = self.find_variable_by_name_full(context, var_name, node)?.variable.clone();
-                self.buffer.code_buffer.push_instruction(instruction!(Var::Set, [
-                    (Ident, set_ident), (Ident, runtime_var.ident)
-                ]));
-                Ok(runtime_var.value_type)
-            }
-            Node::Access(access_parent, access_field) => {
-                let accessed_field_type = self.set_variable_to_ident(context, access_parent, set_ident)?;
-                let ValueType::Struct(accessed_struct_id) = accessed_field_type else {
-                    return CodegenError::err(access_parent.clone(), ErrorRepr::ExpectedAccessableType);
-                };
-                let struct_context = self.context_borrow(accessed_struct_id)?;
-                let access_field_ident = Self::get_primary_as_ident(access_field, ErrorRepr::ExpectedVariable)?;
-                let field_id = self.extract_definition_field(
-                    struct_context
-                    .definition_lookup
-                    .get(access_field_ident)
-                    .ok_or(CodegenError::new(access_field.clone(), ErrorRepr::InvalidStructField))?
-                )?;
-                let field_type = struct_context.fields[field_id].field_type.clone();
-                drop(struct_context);
-                self.buffer.code_buffer.push_instruction(instruction!(Var::GetListValue, [
-                    (Ident, set_ident), (Ident, set_ident), (Int, field_id+1)
-                ]));
-                Ok(field_type)
-            }
-            _ => {
-                CodegenError::err(node.clone(), ErrorRepr::ExpectedVariable)
-            }
-        }
-    }
-
-    fn set_ident_to_variable(&mut self, context: usize, node: &Rc<Node>, get_ident: u32) -> Result<ValueType, CodegenError> {
-        let expression = self.generate_expression(context, node, GenerateExpressionSettings::comptime())?;
-        let Some(trace) = expression.trace else {
-            return CodegenError::err(node.clone(), ErrorRepr::ExpectedAssignableExpression);
-        };
-        self.set_trace_to_value(context, trace, CodegenValue::new(get_ident, expression.value.value_type.clone()))?;
-        Ok(expression.value.value_type)
-    }
     
     fn create_struct_instance_from_node(&mut self, context: usize, construct_ident: &Rc<Node>, construct_body_node: &Rc<Node>, set_ident: u32) -> Result<ValueType, CodegenError> {
         let construct_field_type = self.get_type(construct_ident, context)?;
@@ -739,7 +695,7 @@ impl CodeGen {
     /// 
     /// In a struct function it'd first look for the runtime variables, then the struct fields,
     /// then the parent scope (of the struct, not function)'s domains, then its fields, etc.
-    fn get_definition_access_isolated(&mut self, context: usize, node: &Rc<Node>, register_group: u64) -> Result<CodegenExpressionResult, CodegenError> {
+    fn get_definition_access_isolated(&mut self, context: usize, settings: &GenerateExpressionSettings, node: &Rc<Node>, register_group: u64) -> Result<CodegenExpressionResult, CodegenError> {
         let mut current_context = context;
         
         // Primitive Types
@@ -749,7 +705,7 @@ impl CodeGen {
         }
 
         loop {
-            if let Ok(value) = self.get_definition_access(current_context, node, register_group) {
+            if let Ok(value) = self.get_definition_access(current_context, settings, node, register_group) {
                 return Ok(value);
             }
             if current_context == 0 {
@@ -765,44 +721,54 @@ impl CodeGen {
     }
 
     /// Single version of ``get_definition_access_isolated`` but only on one context, not including its parents.
-    fn get_definition_access(&mut self, context: usize, node: &Rc<Node>, register_group: u64) -> Result<CodegenExpressionResult, CodegenError> {
+    fn get_definition_access(&mut self, context: usize, settings: &GenerateExpressionSettings, node: &Rc<Node>, register_group: u64) -> Result<CodegenExpressionResult, CodegenError> {
         let var_name = Self::get_primary_as_ident(node, ErrorRepr::ExpectedIdentifier)?;
+        let mut found = Vec::new();
+        
         // Runtime variables
         if let Some(var) = self.runtime_vars[context].get(var_name) {
-            return Ok(CodegenExpressionResult::trace(
+            found.push((CodegenExpressionResult::trace(
                 var.variable.clone(),
                 CodegenTrace::root(var.variable.ident)
-            ));
+            ), IdentifierCategory::RuntimeVariable));
         }
         
         if matches!(self.get_context_type(context)?, ContextType::Domain) {
             if let Ok(definition) = &self.find_definition_by_ident(node, context) {
                 // Domain
                 if let Ok(domain_id) = self.extract_definition_domain(definition) {
-                    return Ok(CodegenExpressionResult::value(CodegenValue::comptime(self.buffer.constant_void(), ComptimeType::Domain(domain_id))))
+                    found.push((CodegenExpressionResult::value(CodegenValue::comptime(self.buffer.constant_void(), ComptimeType::Domain(domain_id))), IdentifierCategory::Domain));
                 } 
                 
                 // Function
                 if let Ok(func_id) = self.extract_definition_function(definition) {
-                    return Ok(CodegenExpressionResult::value(CodegenValue::comptime(self.buffer.constant_void(), ComptimeType::Function(func_id))))
+                    found.push((CodegenExpressionResult::value(CodegenValue::comptime(self.buffer.constant_void(), ComptimeType::Function(func_id))), IdentifierCategory::Function));
                 } 
                 
                 // Struct (Type)
                 if let Ok(struct_id) = self.extract_definition_struct(definition) {
-                    return Ok(CodegenExpressionResult::value(CodegenValue::comptime(self.buffer.constant_void(), ComptimeType::Type(RealtimeValueType::Struct(struct_id)))))
+                    found.push((CodegenExpressionResult::value(CodegenValue::comptime(self.buffer.constant_void(), ComptimeType::Type(RealtimeValueType::Struct(struct_id)))), IdentifierCategory::Type));
                 } 
                 // Fields (Global Variables a.k.a Domain Variables)
                 if let Ok(domain_definition) = self.find_context_field(context, node) {
                     let domain_var_value = &self.domain_vars[context][domain_definition.index].variable;
-                    return Ok(CodegenExpressionResult::trace(
+                    found.push((CodegenExpressionResult::trace(
                         domain_var_value.clone(),
                         CodegenTrace::root(domain_var_value.ident)
-                    ));
+                    ), IdentifierCategory::Field));
                 }
             }
         } 
-        
-        CodegenError::err(node.clone(), ErrorRepr::DefinitionIdentNotRecognized)
+
+        for definition in found.iter() {
+            if definition.1 == settings.preferred_category {
+                return Ok(definition.0.clone());
+            }
+        }
+        Ok(found
+            .get(0)
+            .ok_or(CodegenError::new(node.clone(), ErrorRepr::DefinitionIdentNotRecognized))?
+            .0.clone())
     }
 
     fn find_context_field(&mut self, context: usize, identifier: &Rc<Node>) -> Result<FieldDefinition, CodegenError> {
@@ -971,7 +937,7 @@ impl CodeGen {
                             }
                         }
 
-                        let get_var = self.get_definition_access_isolated(context, node, register_group)?;
+                        let get_var = self.get_definition_access_isolated(context, &settings, node, register_group)?;
                         trace = get_var.trace;
                         // Possibly here, there might be something that necessarily sets 'set_value' to false. I haven't found an edge case like that,
                         // but even if there is one it's just an extra unnecessary codeblock.
@@ -1085,7 +1051,7 @@ impl CodeGen {
                     }
                     ValueType::Comptime(ComptimeType::Domain(domain_cid)) => {
                         let mut set_value = settings.depth == 0 && settings.variable_necessary;
-                        let get_access = self.get_definition_access(domain_cid, access_field, register_group)?;
+                        let get_access = self.get_definition_access(domain_cid, &settings, access_field, register_group)?;
                         value = get_access.value;
                         if value.value_type.is_comptime() {
                             set_value = false;
@@ -1449,9 +1415,9 @@ mod tests {
 
     #[test]
     pub fn decompile_from_file_test() {
-        let name = "lists";
-        // let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\codegen\examples\";
-        let path = r"K:\Programming\GitHub\Esh\codegen\examples\";
+        let name = "ambiguity";
+        let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\codegen\examples\";
+        // let path = r"K:\Programming\GitHub\Esh\codegen\examples\";
 
         let file_bytes = fs::read(format!("{}{}.esh", path, name)).expect("File should read");
         let lexer = Lexer::new(str::from_utf8(&file_bytes).expect("Should encode to utf-8"));
