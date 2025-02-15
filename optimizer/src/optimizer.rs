@@ -1,5 +1,5 @@
 use dfbin::DFBin;
-use crate::{buffer::{self, Buffer}, errors::OptimizerError, optimizer_settings::OptimizerSettings};
+use crate::{buffer::{self, Buffer}, codeline::CodelineBranchLog, errors::OptimizerError, optimizer_settings::OptimizerSettings};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Optimizer {
@@ -20,7 +20,7 @@ impl Optimizer {
 
     /// Flushes the optimizer, returning the finished bin.
     pub fn flush(&mut self) -> DFBin {
-        self.bin.clone()
+        self.buffer.flush()
     }
 
     /// Runs the optimizer with its given settings and bin.

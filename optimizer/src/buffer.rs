@@ -2,6 +2,7 @@ use compiler::Decompiler;
 use dfbin::{Constants::{Actions::Seg, Parents}, DFBin};
 
 use crate::{codeline::Codeline, errors::OptimizerError};
+use dfbin::instruction;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Buffer {
@@ -65,11 +66,24 @@ impl Buffer {
                 codeline_ind,
                 Decompiler::new(codeline.clone().to_bin()).expect("Should decompile").decompile().expect("Should decompile"));
             self.code_branches.push(codeline)
-
         }
         // println!("Branches:\n------------------------------------------------\n\n{:#?}\n\n------------------------------------------------", make.branches);
 
         Ok(())
+    }
+
+    pub fn flush(&mut self) -> DFBin {
+        let mut final_buffer = DFBin::new();
+        final_buffer.push_instruction(instruction!(Seg::Func));
+        final_buffer.append_bin_mut(&mut self.func_buffer);
+        final_buffer.push_instruction(instruction!(Seg::Param));
+        final_buffer.append_bin_mut(&mut self.param_buffer);
+        final_buffer.push_instruction(instruction!(Seg::Code));
+        for branch in &self.code_branches {
+            final_buffer.append_bin(&branch.clone().to_bin());
+        }
+
+        final_buffer
     }
 
 

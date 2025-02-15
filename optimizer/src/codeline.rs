@@ -36,7 +36,6 @@ pub struct Codeline {
 impl Codeline {
     pub fn from_bin(bin: DFBin) -> Result<Self, OptimizerError> {
         let mut instructions = bin.instructions();
-        let bin_instructions = instructions.clone();
         let root_instruction = instructions.remove(0);
         let mut make = Self {
             root_instruction,
