@@ -1,12 +1,14 @@
+use compiler::Decompiler;
 use dfbin::{Constants::{Actions::Seg, Parents}, DFBin};
 
-use crate::errors::OptimizerError;
+use crate::{codeline::Codeline, errors::OptimizerError};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Buffer {
     pub func_buffer: DFBin,
     pub param_buffer: DFBin,
-    pub code_lines: Vec<DFBin>
+    pub code_lines: Vec<DFBin>,
+    pub code_branches: Vec<Codeline>,
 }
 
 #[allow(non_snake_case, non_upper_case_globals)]
@@ -16,8 +18,10 @@ impl Buffer {
             func_buffer: DFBin::new(),
             param_buffer: DFBin::new(),
             code_lines: Vec::new(),
+            code_branches: Vec::new(),
         };
         make.append_bin(bin)?;
+        make.get_code_branches()?;
         return Ok(make);
     }
 
@@ -49,4 +53,24 @@ impl Buffer {
         }
         Ok(())
     }
+
+    pub fn get_code_branches(&mut self) -> Result<(), OptimizerError> {
+        for (codeline_ind, line) in self.code_lines.iter().enumerate() {
+            println!("\n\n\n(ASM) Codeline #{}\n------------------------------------------------\n{}\n------------------------------------------------", 
+                codeline_ind,
+                Decompiler::new(line.clone()).expect("Should decompile").decompile().expect("Should decompile"));
+                let codeline = Codeline::from_bin(line.clone())?;
+            
+            println!("\n\n\n(Branches) Codeline #{}\n------------------------------------------------\n{}\n------------------------------------------------", 
+                codeline_ind,
+                Decompiler::new(codeline.clone().to_bin()).expect("Should decompile").decompile().expect("Should decompile"));
+            self.code_branches.push(codeline)
+
+        }
+        // println!("Branches:\n------------------------------------------------\n\n{:#?}\n\n------------------------------------------------", make.branches);
+
+        Ok(())
+    }
+
+
 }

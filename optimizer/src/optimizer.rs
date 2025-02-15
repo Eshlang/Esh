@@ -1,22 +1,40 @@
 use dfbin::DFBin;
-use crate::{buffer::{self, Buffer}, errors::OptimizerError};
+use crate::{buffer::{self, Buffer}, errors::OptimizerError, optimizer_settings::OptimizerSettings};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Optimizer {
     bin: DFBin,
     buffer: Buffer,
+    pub settings: OptimizerSettings
 }
 
 impl Optimizer {
-    pub fn new(bin: DFBin) -> Result<Self, OptimizerError> {
+    /// Creates a new optimizer instance from a bin and settings.
+    pub fn new(bin: DFBin, settings: OptimizerSettings) -> Result<Self, OptimizerError> {
         Ok(Self {
             bin: bin.clone(),
-            buffer: buffer::Buffer::new(bin)?
+            buffer: buffer::Buffer::new(bin)?,
+            settings,
         })
     }
 
+    /// Flushes the optimizer, returning the finished bin.
     pub fn flush(&mut self) -> DFBin {
         self.bin.clone()
+    }
+
+    /// Runs the optimizer with its given settings and bin.
+    pub fn optimize(&mut self) -> Result<(), OptimizerError> {
+        if self.settings.remove_end_returns {
+            self.remove_end_returns()?;
+        }
+        Ok(())
+    }
+
+    /// Locates returns in functions and truncates everything after them.
+    pub fn remove_end_returns(&mut self) -> Result<(), OptimizerError> {
+        
+        Ok(())
     }
 }
 
@@ -47,7 +65,12 @@ mod tests {
         
         fs::write(format!("{}{}_before.dfa", path, name), decompiled).expect("Decompiled original DFA should write.");
         
-        let mut optimizer = Optimizer::new(bin.clone()).expect("Optimizer should create.");
+        let mut optimizer = Optimizer::new(bin.clone(), OptimizerSettings {
+            remove_end_returns: true
+        }).expect("Optimizer should create.");
+        
+        optimizer.optimize().expect("Optimizer should optimize.");
+
         let optimized_bin = optimizer.flush();
 
         let mut original_decompiler = decompiler::Decompiler::new(optimized_bin.clone()).expect("Decompiler should create optimized");
