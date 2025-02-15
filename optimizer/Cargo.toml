@@ -1,0 +1,10 @@
+[package]
+name = "optimizer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dfbin = { path = "../../dfasm/dfbin"}
+compiler = { path = "../../dfasm/compiler"}
+decompiler = { path = "../../dfasm/decompiler"}
+thiserror = "1.0.65"

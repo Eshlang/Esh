@@ -3,5 +3,6 @@
 members = [
 	"lexer",
 	"esh_parser",
-	"codegen"
+	"codegen",
+	"optimizer"
 ]
