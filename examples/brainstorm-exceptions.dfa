@@ -1,0 +1,32 @@
+seg func
+    df f_main "main"
+    df f_main_catch1 "main_catch1"
+    df f_main_after1 "main_after1"
+seg param
+
+seg code
+    func f_main
+        plac sendmessage "gonna try something dangerous... watch out!!!"
+        ; try block starts
+        varif eq _index 0
+            call f_main_catch1
+            ctrl return
+        endif
+        var getlistvalue _value _myList _index
+        plac sendmessage "omg is that value", _value, "that was dangerous phew"
+        ; try/catch block ends
+        call f_main_after1
+
+    func f_main_catch1
+        ; catch block activated
+        plac sendmessage "wtf.. that was close... Wow..."
+        call f_main_after1
+
+    func f_main_after1
+        plac sendmessage "well now that the dust has settled let's lagslayer the plot"
+        rep forever
+        endrep
+        
+
+
+    
