@@ -98,7 +98,7 @@ impl RealtimeValueType {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PrimitiveType {
-    None, Number, String, Bool, List(Rc<ValueType>), Map(Rc<ValueType>, Rc<ValueType>) // Realtime Types
+    None, Number, String, Bool, List(Rc<ValueType>), Map(Rc<ValueType>, Rc<ValueType>), Vector, Location // Realtime Types
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -161,7 +161,25 @@ impl CodegenTrace {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum CodegenTraceCrumb {
-    IndexDirect(usize), IndexNode(Rc<Node>), EntryNode(Rc<Node>), Index(u32), Entry(u32)
+    Ident(CodegenTraceCrumbIdent), IndexNode(Rc<Node>), EntryNode(Rc<Node>)
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum CodegenTraceCrumbIdent {
+    Index(u32), Entry(u32), // Node based ones
+    IndexDirect(usize), // Direct ones
+    Location(CodegenLocationCoordinate),
+    Vector(CodegenVectorCoordinate),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum CodegenLocationCoordinate {
+    X, Y, Z, Pitch, Yaw
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum CodegenVectorCoordinate {
+    X, Y, Z
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -208,12 +226,6 @@ impl CodegenValue {
 #[derive(Clone, Debug, PartialEq)]
 pub struct CodegenRegisterGroup {
     pub name: String
-}
-
-pub enum CodegenAccessNode {
-    Field(Rc<Node>),
-    Function(Rc<Node>),
-    Index(Rc<Node>)
 }
 
 #[derive(Clone, Debug, PartialEq)]

@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use dfbin::{enums::{Parameter, ParameterValue}, instruction, Constants::{self, Tags::DP::Var::Scope}, DFBin};
+use dfbin::{enums::{Parameter, ParameterValue, Tag}, instruction, Constants::{self, Tags::DP::{Loc::{Pitch, Yaw}, Var::Scope}}, DFBin};
 use Constants::Tags::DP;
 
 use crate::{constants::CodeGenConstants, errors::{CodegenError, ErrorRepr}};
@@ -11,6 +11,7 @@ pub struct CodeGenBuffer {
     pub param_buffer: DFBin,
     ident_count: u32,
     idents_number_hash: HashMap<String, u32>,
+    idents_location_hash: HashMap<String, u32>,
     idents_string_hash: HashMap<String, u32>,
     idents_variable_hash: HashMap<String, u32>,
     idents_param_hash: HashMap<String, u32>,
@@ -34,6 +35,7 @@ impl CodeGenBuffer {
             param_buffer: DFBin::new(),
             ident_count: 0,
             idents_number_hash: HashMap::new(),
+            idents_location_hash: HashMap::new(),
             idents_string_hash: HashMap::new(),
             idents_variable_hash: HashMap::new(),
             idents_param_hash: HashMap::new(),
@@ -53,6 +55,7 @@ impl CodeGenBuffer {
         self.idents_variable_hash.clear();
         self.idents_param_hash.clear();
         self.idents_number_hash.clear();
+        self.idents_location_hash.clear();
         self.idents_function_hash.clear();
         self.idents_return_param_hash.clear();
         self.idents_string_hash.clear();
@@ -130,6 +133,26 @@ impl CodeGenBuffer {
             value: number,
             slot: None
         });
+        self.idents_number_hash.insert(key.to_owned(), param_id);
+        param_id
+    }
+
+    pub fn use_location(&mut self, x: ParameterValue, y: ParameterValue, z: ParameterValue, pitch: ParameterValue, yaw: ParameterValue) -> u32 {
+        let key = format!("{} {} {} {} {}", Self::get_param_key(x.clone()), Self::get_param_key(y.clone()), Self::get_param_key(z.clone()), Self::get_param_key(pitch.clone()), Self::get_param_key(yaw.clone()));
+        if let Some(id) = self.idents_location_hash.get(&key) {
+            return *id;
+        }
+        let param_id = self.ident_count;
+        self.ident_count += 1;
+        self.param_buffer.push_instruction(instruction!(
+            DP::Loc,
+            [(Ident, param_id)]
+        ));
+        self.param_buffer.push_parameter(Parameter::from_value(x));
+        self.param_buffer.push_parameter(Parameter::from_value(y));
+        self.param_buffer.push_parameter(Parameter::from_value(z));
+        self.param_buffer.push_tag(Tag::new_value(Pitch, pitch));
+        self.param_buffer.push_tag(Tag::new_value(Yaw, yaw));
         self.idents_number_hash.insert(key.to_owned(), param_id);
         param_id
     }

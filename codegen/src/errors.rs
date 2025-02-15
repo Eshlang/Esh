@@ -189,4 +189,8 @@ pub enum ErrorRepr {
     CantImplicitlyCast,
     #[error("Expected a list type.")]
     ExpectedListType,
+    #[error("Invalid location coordinate access.")]
+    InvalidLocationAccess,
+    #[error("Invalid vector coordinate access.")]
+    InvalidVectorAccess,
 }

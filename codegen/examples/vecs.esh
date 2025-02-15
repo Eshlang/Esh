@@ -1,0 +1,8 @@
+func main() {
+    vec hello = <1,2,3>;
+    loc what = <1,2,3,4,5>;
+    what = <1,2,3>;
+
+    num hey = what.pitch;
+    hello.y = what.yaw + 100;
+}

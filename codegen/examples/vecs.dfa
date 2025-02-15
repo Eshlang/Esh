@@ -1,0 +1,26 @@
+seg func
+    df _0 "__1#main.main"
+seg param
+    dp var _1 "_c_void" #scope:global
+    dp var _2 "_rvl_hello" #scope:line
+    dp num _3 1
+    dp num _4 2
+    dp num _5 3
+    dp var _6 "_rvl_what" #scope:line
+    dp num _7 4
+    dp num _8 5
+    dp loc _9 0, 0, 0 #pitch:0 #yaw:0
+    dp var _10 "_rvl_hey" #scope:line
+    dp var _11 "_xl0" #scope:line
+    dp var _12 "_xl1" #scope:line
+    dp num _13 100
+seg code
+    func _0
+        var vector _2, _3, _4, _5
+        var setallcoords _6, _3, _4, _5, _7, _8
+        var vector _6, _3, _4, _5
+        var shiftonvector _6, _9, _6
+        var getcoord _10, _6 #coordinate:pitch
+        var getcoord _12, _6 #coordinate:yaw
+        var add _11, _12, _13
+        var setvectorcomp _2, _2, _11 #component:y

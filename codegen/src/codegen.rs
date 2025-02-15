@@ -2,14 +2,14 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::rc::Rc;
 use dfbin::enums::{Instruction, Parameter, ParameterValue};
-use dfbin::instruction;
+use dfbin::{instruction, tag};
 use dfbin::Constants::Tags::DP;
 use lexer::types::{Keyword, Range, Token, TokenType, ValuedKeyword};
 use parser::parser::Node;
 use crate::buffer::CodeGenBuffer;
 use crate::errors::{CodegenError, ErrorRepr};
 use crate::context::{CodeDefinition, CodeScope, Context, ContextType};
-use crate::types::{CodegenAccessNode, CodegenBodyStackMode, CodegenExpressionResult, CodegenExpressionStack, CodegenExpressionType, CodegenTrace, CodegenTraceCrumb, CodegenValue, ComptimeType, IdentifierCategory, Field, FieldDefinition, GenerateExpressionSettings, PrimitiveType, RealtimeValueType, RuntimeVariable, ValueType};
+use crate::types::{CodegenBodyStackMode, CodegenExpressionResult, CodegenExpressionStack, CodegenExpressionType, CodegenLocationCoordinate, CodegenTrace, CodegenTraceCrumb, CodegenTraceCrumbIdent, CodegenValue, CodegenVectorCoordinate, ComptimeType, Field, FieldDefinition, GenerateExpressionSettings, IdentifierCategory, PrimitiveType, RealtimeValueType, RuntimeVariable, ValueType};
 
 pub struct CodeGen {
     pub context_map: HashMap<String, usize>,
@@ -316,6 +316,8 @@ impl CodeGen {
             "num" => Some(PrimitiveType::Number),
             "string" => Some(PrimitiveType::String),
             "bool" => Some(PrimitiveType::Bool),
+            "vec" => Some(PrimitiveType::Vector),
+            "loc" => Some(PrimitiveType::Location),
             _ => None
         }
     }
@@ -606,6 +608,16 @@ impl CodeGen {
                     (Ident, set_ident)
                 ]))
             },
+            ValueType::Primitive(PrimitiveType::Vector) => {
+                self.buffer.code_buffer.push_instruction(instruction!(Var::Vector, [
+                    (Ident, set_ident), (Int, 0), (Int, 0), (Int, 0)
+                ]))
+            },
+            ValueType::Primitive(PrimitiveType::Location) => {
+                self.buffer.code_buffer.push_instruction(instruction!(Var::SetAllCoords, [
+                    (Ident, set_ident), (Int, 0), (Int, 0), (Int, 0), (Int, 0), (Int, 0)
+                ]))
+            },
             ValueType::Comptime(..) => {
                 panic!("The default value of a comptime type shouldn't be scouted for, as a compile-time type (such as Domains, Functions, and Types) doesn't compile to runtime.")
             }
@@ -626,10 +638,6 @@ impl CodeGen {
         &self.context_full_names[context]
     }
 
-    fn flatten_access_nodes(&mut self, node: &Rc<Node>) -> VecDeque<CodegenAccessNode> {
-        todo!()
-    }
-
     fn get_shallow_domain_access(&self, context: usize, access: &Rc<Node>) -> Result<Option<usize>, CodegenError> {
         if let Node::Primary(token) = access.as_ref() {
             if matches!(token.token_type, TokenType::Ident(..)) {
@@ -641,37 +649,6 @@ impl CodeGen {
             }
         }
         return Ok(None);
-    }
-
-    fn get_domain_access(&self, mut context: usize, access: &mut VecDeque<CodegenAccessNode>) -> Result<usize, CodegenError> {
-        let mut cut = 0;
-        'total: for (node_index, node) in access.into_iter().enumerate() {
-            let CodegenAccessNode::Field(node_primary) = node else {
-                break;
-            };
-            if node_index == 0 { // Root node
-                'root_search: loop {
-                    match self.get_shallow_domain_access(context, node_primary)? {
-                        Some(..) => {
-                            break 'root_search;
-                        }
-                        None => {
-                            if context == 0 {
-                                break 'total;
-                            }
-                            context = self.parents[context];
-                        }
-                    }
-                }
-            }
-            let Some(domain_context) = self.get_shallow_domain_access(context, node_primary)? else {
-                break;
-            };
-            cut += 1;
-            context = domain_context;
-        }
-        drop(access.drain(..cut));
-        Ok(context)
     }
 
 
@@ -792,24 +769,26 @@ impl CodeGen {
         }
         let register_group = self.buffer.allocate_line_register_group();
         let trace_ident = trace.root_ident;
+        let mut crumbs = Vec::new();
         for crumb_index in 0..trace.crumbs.len() {
             let crumb = trace.crumbs[crumb_index].clone();
-            trace.crumbs[crumb_index] = self.generate_crumb(context, crumb, register_group)?;
+            crumbs.push(self.generate_crumb(context, crumb, register_group)?);
         }
-        self.set_trace_to_value_inside(Rc::new(trace), trace_ident, value.ident, 0, register_group);
+        self.set_trace_to_value_inside(Rc::new(crumbs), trace_ident, value.ident, 0, register_group);
         self.buffer.free_line_register_group(register_group);
         Ok(())
     }
 
-    fn generate_crumb(&mut self, context: usize, crumb: CodegenTraceCrumb, register_group: u64) -> Result<CodegenTraceCrumb, CodegenError> {
+    fn generate_crumb(&mut self, context: usize, crumb: CodegenTraceCrumb, register_group: u64) -> Result<CodegenTraceCrumbIdent, CodegenError> {
         Ok(match crumb {
+            CodegenTraceCrumb::Ident(ident) => ident,
             CodegenTraceCrumb::IndexNode(node) => {
                 let index = self.generate_expression_inside(context, &node, GenerateExpressionSettings::parameter(register_group), register_group)?.value.clone();
                 let register_index = self.buffer.allocate_grouped_line_register(register_group);
                 self.buffer.code_buffer.push_instruction(instruction!(
                     Var::Add, [ (Ident, register_index), (Ident, index.ident), (Int, 1) ]
                 ));
-                CodegenTraceCrumb::Index(register_index)
+                CodegenTraceCrumbIdent::Index(register_index)
             },
             CodegenTraceCrumb::EntryNode(node) => {
                 let index = self.generate_expression_inside(context, &node, GenerateExpressionSettings::parameter(register_group), register_group)?.value.clone();
@@ -822,50 +801,87 @@ impl CodeGen {
                 } else {
                     index.ident
                 };
-                CodegenTraceCrumb::Entry(register_index)
-            },
-            _ => crumb
+                CodegenTraceCrumbIdent::Entry(register_index)
+            }
         })
     }
 
-    fn set_trace_to_value_inside(&mut self, trace: Rc<CodegenTrace>, set_value_ident: u32, final_value_ident: u32, depth: usize, register_group: u64) {
-        if depth < trace.crumbs.len() - 1 {
+    fn set_trace_to_value_inside(&mut self, trace: Rc<Vec<CodegenTraceCrumbIdent>>, set_value_ident: u32, final_value_ident: u32, depth: usize, register_group: u64) {
+        if depth < trace.len() - 1 {
             let register = self.buffer.allocate_grouped_line_register(register_group);
-            self.get_crumb(trace.crumbs[depth].clone(), register, set_value_ident);
+            self.get_crumb(trace[depth].clone(), register, set_value_ident);
             self.set_trace_to_value_inside(trace.clone(), register, final_value_ident, depth+1, register_group);
-            self.set_crumb(trace.crumbs[depth].clone(), register, set_value_ident);
+            self.set_crumb(trace[depth].clone(), register, set_value_ident);
         } else { //final one, just set
-            self.set_crumb(trace.crumbs[depth].clone(), final_value_ident, set_value_ident);
+            self.set_crumb(trace[depth].clone(), final_value_ident, set_value_ident);
         }
     }
 
-    fn get_crumb(&mut self, crumb: CodegenTraceCrumb, get_value_ident: u32, set_value_ident: u32) {
+    fn get_crumb(&mut self, crumb: CodegenTraceCrumbIdent, value_ident: u32, accesed_ident: u32) {
         self.buffer.code_buffer.push_instruction(match crumb {
-            CodegenTraceCrumb::IndexDirect(index) => instruction!(
-                Var::GetListValue, [(Ident, get_value_ident), (Ident, set_value_ident), (Int, index)]
+            CodegenTraceCrumbIdent::IndexDirect(index) => instruction!(
+                Var::GetListValue, [(Ident, value_ident), (Ident, accesed_ident), (Int, index)]
             ),
-            CodegenTraceCrumb::Index(ident) => instruction!(
-                Var::GetListValue, [(Ident, get_value_ident), (Ident, set_value_ident), (Ident, ident)]
+            CodegenTraceCrumbIdent::Index(ident) => instruction!(
+                Var::GetListValue, [(Ident, value_ident), (Ident, accesed_ident), (Ident, ident)]
             ),
-            CodegenTraceCrumb::Entry(ident) => instruction!(
-                Var::GetDictValue, [(Ident, get_value_ident), (Ident, set_value_ident), (Ident, ident)]
+            CodegenTraceCrumbIdent::Entry(ident) => instruction!(
+                Var::GetDictValue, [(Ident, value_ident), (Ident, accesed_ident), (Ident, ident)]
             ),
-            _ => panic!("Unimplemented trace crumb type")
+            CodegenTraceCrumbIdent::Location(coord) => instruction!(
+                Var::GetCoord, [(Ident, value_ident), (Ident, accesed_ident)], [
+                    match coord {
+                        CodegenLocationCoordinate::X => Tag::new(Tags::Var::GetCoord::Coordinate::X),
+                        CodegenLocationCoordinate::Y => Tag::new(Tags::Var::GetCoord::Coordinate::Y),
+                        CodegenLocationCoordinate::Z => Tag::new(Tags::Var::GetCoord::Coordinate::Z),
+                        CodegenLocationCoordinate::Pitch => Tag::new(Tags::Var::GetCoord::Coordinate::Pitch),
+                        CodegenLocationCoordinate::Yaw => Tag::new(Tags::Var::GetCoord::Coordinate::Yaw),
+                    }
+                ]
+            ),
+            CodegenTraceCrumbIdent::Vector(coord) => instruction!(
+                Var::GetVectorComp, [(Ident, value_ident), (Ident, accesed_ident)], [
+                    match coord {
+                        CodegenVectorCoordinate::X => Tag::new(Tags::Var::GetVectorComp::Component::X),
+                        CodegenVectorCoordinate::Y => Tag::new(Tags::Var::GetVectorComp::Component::Y),
+                        CodegenVectorCoordinate::Z => Tag::new(Tags::Var::GetVectorComp::Component::Z),
+                    }
+                ]
+            ),
         });
     }
 
-    fn set_crumb(&mut self, crumb: CodegenTraceCrumb, get_value_ident: u32, set_value_ident: u32) {
+    fn set_crumb(&mut self, crumb: CodegenTraceCrumbIdent, value_ident: u32, accessed_ident: u32) {
         self.buffer.code_buffer.push_instruction(match crumb {
-            CodegenTraceCrumb::IndexDirect(index) => instruction!(
-                Var::SetListValue, [(Ident, set_value_ident), (Int, index), (Ident, get_value_ident)]
+            CodegenTraceCrumbIdent::IndexDirect(index) => instruction!(
+                Var::SetListValue, [(Ident, accessed_ident), (Int, index), (Ident, value_ident)]
             ),
-            CodegenTraceCrumb::Index(ident) => instruction!(
-                Var::SetListValue, [(Ident, set_value_ident), (Ident, ident), (Ident, get_value_ident)]
+            CodegenTraceCrumbIdent::Index(ident) => instruction!(
+                Var::SetListValue, [(Ident, accessed_ident), (Ident, ident), (Ident, value_ident)]
             ),
-            CodegenTraceCrumb::Entry(ident) => instruction!(
-                Var::SetDictValue, [(Ident, set_value_ident), (Ident, ident), (Ident, get_value_ident)]
+            CodegenTraceCrumbIdent::Entry(ident) => instruction!(
+                Var::SetDictValue, [(Ident, accessed_ident), (Ident, ident), (Ident, value_ident)]
             ),
-            _ => panic!("Unimplemented trace crumb type")
+            CodegenTraceCrumbIdent::Location(coord) => instruction!(
+                Var::SetCoord, [(Ident, accessed_ident), (Ident, accessed_ident), (Ident, value_ident)], [
+                    match coord {
+                        CodegenLocationCoordinate::X => Tag::new(Tags::Var::SetCoord::Coordinate::X),
+                        CodegenLocationCoordinate::Y => Tag::new(Tags::Var::SetCoord::Coordinate::Y),
+                        CodegenLocationCoordinate::Z => Tag::new(Tags::Var::SetCoord::Coordinate::Z),
+                        CodegenLocationCoordinate::Pitch => Tag::new(Tags::Var::SetCoord::Coordinate::Pitch),
+                        CodegenLocationCoordinate::Yaw => Tag::new(Tags::Var::SetCoord::Coordinate::Yaw),
+                    }
+                ]
+            ),
+            CodegenTraceCrumbIdent::Vector(coord) => instruction!(
+                Var::SetVectorComp, [(Ident, accessed_ident), (Ident, accessed_ident), (Ident, value_ident)], [
+                    match coord {
+                        CodegenVectorCoordinate::X => Tag::new(Tags::Var::SetVectorComp::Component::X),
+                        CodegenVectorCoordinate::Y => Tag::new(Tags::Var::SetVectorComp::Component::Y),
+                        CodegenVectorCoordinate::Z => Tag::new(Tags::Var::SetVectorComp::Component::Z),
+                    }
+                ]
+            ),
         });
     }
 
@@ -908,11 +924,20 @@ impl CodeGen {
         if value_type == result.value.value_type {
             return Ok(result);
         }
-        match (&result.value.value_type, &value_type) { //var string 0, 0
+        match (&result.value.value_type, &value_type) { //variable we have vs variable we want (num -> string, vec -> location, etc)
             (ValueType::Primitive(PrimitiveType::Number), ValueType::Primitive(PrimitiveType::String)) => {
                 let register = self.generate_expression_allocate_register(&settings, register_group);
                 self.push_expression_instruction(&settings, instruction!(
                     Var::String, [(Ident, register), (Ident, result.value.ident)]
+                ));
+                result.value.ident = register;
+                result.value.value_type = value_type.clone();
+            }
+            (ValueType::Primitive(PrimitiveType::Vector), ValueType::Primitive(PrimitiveType::Location)) => {
+                let register = self.generate_expression_allocate_register(&settings, register_group);
+                let location = self.buffer.use_location(ParameterValue::Int(0), ParameterValue::Int(0), ParameterValue::Int(0), ParameterValue::Int(0), ParameterValue::Int(0));
+                self.push_expression_instruction(&settings, instruction!(
+                    Var::ShiftOnVector, [(Ident, register), (Ident, location), (Ident, result.value.ident)]
                 ));
                 result.value.ident = register;
                 result.value.value_type = value_type.clone();
@@ -1001,6 +1026,34 @@ impl CodeGen {
                     ))
                 }
             }
+            Node::Vector(xn, yn, zn) => {
+                let register = self.generate_expression_allocate_register(&settings, register_group);
+                let temp_group = self.buffer.allocate_line_register_group();
+                let x = self.generate_expression_inside(context, xn, GenerateExpressionSettings::parameter(temp_group).expect_type(&ValueType::Primitive(PrimitiveType::Number)), register_group)?.value.clone();
+                let y = self.generate_expression_inside(context, yn, GenerateExpressionSettings::parameter(temp_group).expect_type(&ValueType::Primitive(PrimitiveType::Number)), register_group)?.value.clone();
+                let z = self.generate_expression_inside(context, zn, GenerateExpressionSettings::parameter(temp_group).expect_type(&ValueType::Primitive(PrimitiveType::Number)), register_group)?.value.clone();
+                value.ident = register;
+                value.value_type = ValueType::Primitive(PrimitiveType::Vector);
+                self.push_expression_instruction(&settings, instruction!(
+                    Var::Vector, [ (Ident, register), (Ident, x.ident), (Ident, y.ident), (Ident, z.ident) ]
+                ));
+                self.buffer.free_line_register_group(temp_group);
+            }
+            Node::Location(xn, yn, zn, pitchn, yawn) => {
+                let register = self.generate_expression_allocate_register(&settings, register_group);
+                let temp_group = self.buffer.allocate_line_register_group();
+                let x = self.generate_expression_inside(context, xn, GenerateExpressionSettings::parameter(temp_group).expect_type(&ValueType::Primitive(PrimitiveType::Number)), register_group)?.value.clone();
+                let y = self.generate_expression_inside(context, yn, GenerateExpressionSettings::parameter(temp_group).expect_type(&ValueType::Primitive(PrimitiveType::Number)), register_group)?.value.clone();
+                let z = self.generate_expression_inside(context, zn, GenerateExpressionSettings::parameter(temp_group).expect_type(&ValueType::Primitive(PrimitiveType::Number)), register_group)?.value.clone();
+                let pitch = self.generate_expression_inside(context, pitchn, GenerateExpressionSettings::parameter(temp_group).expect_type(&ValueType::Primitive(PrimitiveType::Number)), register_group)?.value.clone();
+                let yaw = self.generate_expression_inside(context, yawn, GenerateExpressionSettings::parameter(temp_group).expect_type(&ValueType::Primitive(PrimitiveType::Number)), register_group)?.value.clone();
+                value.ident = register;
+                value.value_type = ValueType::Primitive(PrimitiveType::Location);
+                self.push_expression_instruction(&settings, instruction!(
+                    Var::SetAllCoords, [ (Ident, register), (Ident, x.ident), (Ident, y.ident), (Ident, z.ident), (Ident, pitch.ident), (Ident, yaw.ident) ]
+                ));
+                self.buffer.free_line_register_group(temp_group);
+            }
             Node::Construct(construct_ident, construct_body) => {
                 let register = self.generate_expression_allocate_register(&settings, register_group);
                 let created_struct = self.create_struct_instance_from_node(context, construct_ident, construct_body, register)?;
@@ -1058,7 +1111,7 @@ impl CodeGen {
                                 Var::GetListValue, [ (Ident, register), (Ident, accessed_value.ident), (Int, field_index) ]
                             ));
                             if let Some(mut trace_add) = accessed_expression.trace {
-                                trace_add.crumbs.push(CodegenTraceCrumb::IndexDirect(field_index));
+                                trace_add.crumbs.push(CodegenTraceCrumb::Ident(CodegenTraceCrumbIdent::IndexDirect(field_index)));
                                 trace = Some(trace_add);
                             }
     
@@ -1068,6 +1121,44 @@ impl CodeGen {
                             return Ok(CodegenExpressionResult::value(CodegenValue::comptime(self.buffer.constant_void(), ComptimeType::SelfFunction(func_id, accessed_value.ident))))
                         } else {
                             panic!("Invalid struct access found which *is* correctly looked up but is neither a field nor a function.");
+                        }
+                    }
+                    ValueType::Primitive(PrimitiveType::Location) => {
+                        let register = self.generate_expression_allocate_register(&settings, register_group);
+                        value.ident = register;
+                        value.value_type = ValueType::Primitive(PrimitiveType::Number);
+                        let crumb = CodegenTraceCrumbIdent::Location(match access_field_ident.as_str() {
+                            "x" => CodegenLocationCoordinate::X,
+                            "y" => CodegenLocationCoordinate::Y,
+                            "z" => CodegenLocationCoordinate::Z,
+                            "pitch" => CodegenLocationCoordinate::Pitch,
+                            "yaw" => CodegenLocationCoordinate::Yaw,
+                            _ => { return CodegenError::err(node.clone(), ErrorRepr::InvalidLocationAccess); }
+                        });
+                        if settings.generate_codeblocks {
+                            self.get_crumb(crumb.clone(), register, accessed_value.ident);
+                        }
+                        if let Some(mut trace_add) = accessed_expression.trace {
+                            trace_add.crumbs.push(CodegenTraceCrumb::Ident(crumb));
+                            trace = Some(trace_add);
+                        }
+                    }
+                    ValueType::Primitive(PrimitiveType::Vector) => {
+                        let register = self.generate_expression_allocate_register(&settings, register_group);
+                        value.ident = register;
+                        value.value_type = ValueType::Primitive(PrimitiveType::Number);
+                        let crumb = CodegenTraceCrumbIdent::Vector(match access_field_ident.as_str() {
+                            "x" => CodegenVectorCoordinate::X,
+                            "y" => CodegenVectorCoordinate::Y,
+                            "z" => CodegenVectorCoordinate::Z,
+                            _ => { return CodegenError::err(node.clone(), ErrorRepr::InvalidVectorAccess); }
+                        });
+                        if settings.generate_codeblocks {
+                            self.get_crumb(crumb.clone(), register, accessed_value.ident);
+                        }
+                        if let Some(mut trace_add) = accessed_expression.trace {
+                            trace_add.crumbs.push(CodegenTraceCrumb::Ident(crumb));
+                            trace = Some(trace_add);
                         }
                     }
                     ValueType::Comptime(ComptimeType::Domain(domain_cid)) => {
@@ -1471,7 +1562,7 @@ mod tests {
 
     #[test]
     pub fn decompile_from_file_test() {
-        let name = "lists";
+        let name = "vecs";
         // let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\codegen\examples\";
         let path = r"K:\Programming\GitHub\Esh\codegen\examples\";
 
