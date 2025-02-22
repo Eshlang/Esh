@@ -1,0 +1,4 @@
+func whatevs() {
+    num[][][][] hey;
+    hey[1][2][3][4] = 1;
+}

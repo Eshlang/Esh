@@ -1,0 +1,33 @@
+seg func
+    df _0 "__1#main.whatevs"
+seg param
+    dp var _1 "_c_void" #scope:global
+    dp var _2 "_rvl_hey" #scope:line
+    dp num _3 1
+    dp var _4 "_xl0" #scope:line
+    dp num _5 2
+    dp var _6 "_xl1" #scope:line
+    dp num _7 3
+    dp var _8 "_xl2" #scope:line
+    dp num _9 4
+    dp var _10 "_xl3" #scope:line
+    dp var _11 "_xl4" #scope:line
+    dp var _12 "_xl5" #scope:line
+    dp var _13 "_xl6" #scope:line
+    dp var _14 "_xl7" #scope:line
+    dp var _15 "_xl8" #scope:line
+    dp var _16 "_xl9" #scope:line
+    dp var _17 "_xl10" #scope:line
+seg code
+    func _0
+        var add _11, _3, 1
+        var add _12, _5, 1
+        var add _13, _7, 1
+        var add _14, _9, 1
+        var getlistvalue _15, _2, _11
+        var getlistvalue _16, _15, _12
+        var getlistvalue _17, _16, _13
+        var setlistvalue _17, _14, _3
+        var setlistvalue _16, _13, _17
+        var setlistvalue _15, _12, _16
+        var setlistvalue _2, _11, _15
