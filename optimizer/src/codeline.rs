@@ -7,14 +7,14 @@ use crate::errors::OptimizerError;
 #[derive(Clone, Debug, PartialEq)]
 pub enum CodelineBranchLog {
     Codeblocks(Vec<Instruction>),
-    Branch(CodelineBranch)
+    Branch(usize)
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct CodelineBranch {
     pub branch_type: CodelineBranchType,
     pub root: Instruction,
-    pub body: Rc<Vec<CodelineBranchLog>>
+    pub body: Vec<CodelineBranchLog>
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -26,7 +26,8 @@ pub enum CodelineBranchType {
 pub struct Codeline {
     pub root_instruction: Instruction,
     pub body_instructions: Vec<Instruction>,
-    pub branches: Rc<Vec<CodelineBranchLog>>,
+    pub branches: Vec<CodelineBranchLog>,
+    pub branch_list: Vec<CodelineBranch>,
 
     buffer: DFBin,
     pointer: usize,
@@ -40,7 +41,8 @@ impl Codeline {
         let mut make = Self {
             root_instruction,
             body_instructions: instructions,
-            branches: Rc::new(Vec::new()),
+            branches: Vec::new(),
+            branch_list: Vec::new(),
 
             buffer: DFBin::new(),
             pointer: 0,
@@ -51,13 +53,14 @@ impl Codeline {
         Ok(make)
     }
 
-    fn evaluate_branch(&mut self) -> Result<Rc<Vec<CodelineBranchLog>>, OptimizerError> {
+    fn evaluate_branch(&mut self) -> Result<Vec<CodelineBranchLog>, OptimizerError> {
         let mut branch_logs = Vec::new();
         let mut instructions = Vec::new();
         loop {
             let Some(instruction) = self.body_instructions.get(self.pointer) else {
                 break;
             };
+            let instruction = instruction.clone();
             self.pointer += 1;
             match (instruction.action.0, self.met_else) {
                 (Parents::EndIf | Parents::EndRep, false) => {
@@ -74,25 +77,28 @@ impl Codeline {
                         branch_logs.push(CodelineBranchLog::Codeblocks(instructions.clone()));
                         instructions.clear();
                     }
-                    branch_logs.push(CodelineBranchLog::Branch(CodelineBranch {
+                    let evaluated_branch = self.evaluate_branch()?;
+                    let branch_index = self.branch_list.len();
+                    self.branch_list.push(CodelineBranch {
                         branch_type: match instruction.action.0 {
                             Parents::Rep => CodelineBranchType::Repeat,
                             _ => CodelineBranchType::If
                         },
-                        root: instruction.clone(),
-                        body: self.evaluate_branch()?
-                    }));
+                        root: instruction,
+                        body: evaluated_branch
+                    });
+                    branch_logs.push(CodelineBranchLog::Branch(branch_index));
                 }
                 _ => {
                     self.met_else = false;
-                    instructions.push(instruction.clone());
+                    instructions.push(instruction);
                 }
             }
         }
         if instructions.len() > 0 {
             branch_logs.push(CodelineBranchLog::Codeblocks(instructions.clone()));
         }
-        return Ok(Rc::new(branch_logs));
+        return Ok(branch_logs);
     }
 
     pub fn to_bin(&mut self) -> DFBin {
@@ -102,16 +108,18 @@ impl Codeline {
         self.buffer.clone()
     }
 
-    fn add_buffer(&mut self, branch_logs: Rc<Vec<CodelineBranchLog>>) {
-        for branch_log in branch_logs.as_ref() {
+    fn add_buffer(&mut self, branch_logs: Vec<CodelineBranchLog>) {
+        for branch_log in branch_logs {
             match branch_log {
-                CodelineBranchLog::Branch(branch) => {
+                CodelineBranchLog::Branch(branch_index) => {
+                    let branch = &self.branch_list[branch_index];
                     if self.buffer.read_instruction_at_index(self.buffer.len() - 1).expect("There should be an instruction here.").action.0 == Parents::EndIf && branch.root.action.0 == Parents::Else {
                         self.buffer.remove_at_index(self.buffer.len() - 1).expect("This instruction should be removed.")
                     }
                     self.buffer.push_instruction_ref(&branch.root);
                     self.add_buffer(branch.body.clone());
-                    match branch.branch_type {
+                    let branch = &self.branch_list[branch_index];
+                    match &branch.branch_type {
                         CodelineBranchType::If => { self.buffer.push_instruction(instruction!(EndIf)); },
                         CodelineBranchType::Repeat =>  { self.buffer.push_instruction(instruction!(EndRep)); }
                     };
