@@ -82,7 +82,6 @@ seg code
         var add _24, _24, _29
         var add _11, _11, _9
         var repeatstring _5, _30, _11
-        ctrl return
     func _1 _8, _10
         var set _11, _31
         var string _11, _11, _7
@@ -124,10 +123,8 @@ seg code
         endrep
         var set _5, _39
         var getlistvalue _5, _5, 3
-        ctrl return
     func _3 _42, _6
         var set _5, _33
-        ctrl return
     func _4 _8, _10
         var set _11, _31
         var string _11, _11, _7

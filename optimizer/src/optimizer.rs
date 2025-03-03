@@ -1,4 +1,4 @@
-use dfbin::DFBin;
+use dfbin::{Constants::Actions, DFBin};
 use crate::{buffer::{self, Buffer}, codeline::CodelineBranchLog, errors::OptimizerError, optimizer_settings::OptimizerSettings};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -33,8 +33,31 @@ impl Optimizer {
 
     /// Locates returns in functions and truncates everything after them.
     pub fn remove_end_returns(&mut self) -> Result<(), OptimizerError> {
-        
+        for codeline in self.buffer.code_branches.iter_mut() {
+            Self::remove_end_returns_from_branch(&mut codeline.root_branch, true);
+            for branch in codeline.branch_list.iter_mut() {
+                Self::remove_end_returns_from_branch(&mut branch.body, false);
+            }
+        }
         Ok(())
+    }
+
+    fn remove_end_returns_from_branch(branch: &mut Vec<CodelineBranchLog>, delete_return: bool) {
+        let mut truncate_ind = branch.len();
+        'branch_loop: for (branch_ind, branch_log) in branch.iter_mut().enumerate() {
+            let CodelineBranchLog::Codeblocks(codeblocks) = branch_log else {
+                continue 'branch_loop;
+            };
+            'codeblock_loop: for (codeblock_ind, codeblock) in codeblocks.iter().enumerate() {
+                if codeblock.action != Actions::Ctrl::Return {
+                    continue 'codeblock_loop;
+                }
+                codeblocks.truncate(codeblock_ind + if delete_return {0} else {1});
+                truncate_ind = branch_ind + 1;
+                break 'branch_loop;
+            }
+        }
+        branch.truncate(truncate_ind);
     }
 }
 
@@ -67,7 +90,7 @@ mod tests {
         
         let mut optimizer = Optimizer::new(bin.clone(), OptimizerSettings {
             remove_end_returns: true
-        }).expect("Optimizer should create.");
+        }).expect("Optimizer should create.");  
         
         optimizer.optimize().expect("Optimizer should optimize.");
 

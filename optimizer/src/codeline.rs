@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use dfbin::{enums::Instruction, instruction, Constants::Parents, DFBin};
 
 use crate::errors::OptimizerError;
@@ -14,7 +12,8 @@ pub enum CodelineBranchLog {
 pub struct CodelineBranch {
     pub branch_type: CodelineBranchType,
     pub root: Instruction,
-    pub body: Vec<CodelineBranchLog>
+    pub body: Vec<CodelineBranchLog>,
+    pub depth: usize,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -26,8 +25,9 @@ pub enum CodelineBranchType {
 pub struct Codeline {
     pub root_instruction: Instruction,
     pub body_instructions: Vec<Instruction>,
-    pub branches: Vec<CodelineBranchLog>,
+    pub root_branch: Vec<CodelineBranchLog>,
     pub branch_list: Vec<CodelineBranch>,
+    pub branches_by_depth: Vec<Vec<usize>>,
 
     buffer: DFBin,
     pointer: usize,
@@ -41,19 +41,20 @@ impl Codeline {
         let mut make = Self {
             root_instruction,
             body_instructions: instructions,
-            branches: Vec::new(),
+            root_branch: Vec::new(),
             branch_list: Vec::new(),
+            branches_by_depth: Vec::new(),
 
             buffer: DFBin::new(),
             pointer: 0,
             met_else: false,
         };
-        make.branches = make.evaluate_branch()?;
+        make.root_branch = make.evaluate_branch(1)?;
 
         Ok(make)
     }
 
-    fn evaluate_branch(&mut self) -> Result<Vec<CodelineBranchLog>, OptimizerError> {
+    fn evaluate_branch(&mut self, depth: usize) -> Result<Vec<CodelineBranchLog>, OptimizerError> {
         let mut branch_logs = Vec::new();
         let mut instructions = Vec::new();
         loop {
@@ -77,7 +78,7 @@ impl Codeline {
                         branch_logs.push(CodelineBranchLog::Codeblocks(instructions.clone()));
                         instructions.clear();
                     }
-                    let evaluated_branch = self.evaluate_branch()?;
+                    let evaluated_branch = self.evaluate_branch(depth+1)?;
                     let branch_index = self.branch_list.len();
                     self.branch_list.push(CodelineBranch {
                         branch_type: match instruction.action.0 {
@@ -85,9 +86,14 @@ impl Codeline {
                             _ => CodelineBranchType::If
                         },
                         root: instruction,
-                        body: evaluated_branch
+                        body: evaluated_branch,
+                        depth
                     });
                     branch_logs.push(CodelineBranchLog::Branch(branch_index));
+                    while self.branches_by_depth.get(depth).is_none() {
+                        self.branches_by_depth.push(Vec::new());
+                    }
+                    self.branches_by_depth[depth].push(branch_index);
                 }
                 _ => {
                     self.met_else = false;
@@ -104,7 +110,7 @@ impl Codeline {
     pub fn to_bin(&mut self) -> DFBin {
         self.buffer = DFBin::new();
         self.buffer.push_instruction_ref(&self.root_instruction);
-        self.add_buffer(self.branches.clone());
+        self.add_buffer(self.root_branch.clone());
         self.buffer.clone()
     }
 
