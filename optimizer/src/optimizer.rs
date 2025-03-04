@@ -1,5 +1,5 @@
-use dfbin::{Constants::Actions, DFBin};
-use crate::{buffer::{self, Buffer}, codeline::CodelineBranchLog, errors::OptimizerError, optimizer_settings::OptimizerSettings};
+use dfbin::{instruction, Constants::Actions, DFBin};
+use crate::{buffer::{self, Buffer}, codeline::{CodelineBranch, CodelineBranchLog}, errors::OptimizerError, optimizer_settings::OptimizerSettings};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Optimizer {
@@ -27,6 +27,9 @@ impl Optimizer {
     pub fn optimize(&mut self) -> Result<(), OptimizerError> {
         if self.settings.remove_end_returns {
             self.remove_end_returns()?;
+        }
+        if let Some(max) = self.settings.max_codeblocks_per_line {
+            self.split_lines(max);
         }
         Ok(())
     }
@@ -59,6 +62,64 @@ impl Optimizer {
         }
         branch.truncate(truncate_ind);
     }
+
+    /// Splits codelines to a maximum codeblock length
+    /// Full Algorithm:
+    /// ```txt
+    /// CB(120), Branch#2(15), CB(30)
+    ///     
+    /// 
+    /// CB(30) > 50? X
+    /// CB(30) + Branch#2(15) > 50? X
+    /// CB(30) + Branch#2(15) + CB(120) > 50? Y
+    /// if reached all elements sum and still X, mark the branch compacted and continue on to the next 
+    /// so
+    /// take the last 50 codeblocks from:
+    /// [CB(120), Branch#2(15), CB(30)]
+    /// 
+    /// [CB(50-15-30-2 = 3), Branch#2(15), CB(30)]
+    /// 
+    /// and put that on a new codeline, as an extender function
+    /// 
+    /// and reset the branch to what's left:
+    /// [CB(120-3 = 117), CB(1)] <- CB(1) is call function overhead
+    /// 
+    /// 
+    /// now retry:
+    /// CB(1) > 50? X
+    /// CB(1) + CB(117) > 50? Y
+    /// 
+    /// last 50 codeblocks from:
+    /// [CB(117), CB(1)]
+    /// are
+    /// [CB(49), CB(1)]
+    /// 
+    /// putting that on a new codeline, remains:
+    /// [CB(117-49 = 68), CB(1)]
+    /// 
+    /// then reset, then one last time it'd turn into
+    /// [CB(19), CB(1)]
+    /// where finally CB(19) + CB(1) < 50, so it marks the branch fully compacted.
+    /// 
+    /// ```
+    pub fn split_lines(&mut self, max_codeblocks: usize) -> Result<(), OptimizerError> {
+        for codeline in self.buffer.code_branches.iter_mut() {
+            Self::split_branch(&mut codeline.root_branch, max_codeblocks, 0);
+            for (depth, branches) in codeline.branches_by_depth.clone().into_iter().enumerate() {
+                for branch_ind in branches {
+                    let branch = codeline.branch_list.get_mut(branch_ind).expect("Should contain branch.");
+                    Self::split_branch(&mut branch.body, max_codeblocks, depth);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// This is used by ``.split_lines()`` - compacts a *branch* down to below the max size.
+    fn split_branch(branch: &mut Vec<CodelineBranchLog>, max_codeblocks: usize, depth: usize) {
+        branch.push(CodelineBranchLog::Codeblocks(vec![instruction!(Enac::FaceLocation, [(Int, depth)])]))
+        
+    }
 }
 
 
@@ -75,8 +136,8 @@ mod tests {
     #[test]
     pub fn optimize_from_file_test() {
         let name = "first";
-        // let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\optimizer\examples\";
-        let path = r"K:\Programming\GitHub\Esh\optimizer\examples\";
+        let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\optimizer\examples\";
+        // let path = r"K:\Programming\GitHub\Esh\optimizer\examples\";
 
         let file_bytes = fs::read(format!("{}{}.dfa", path, name)).expect("File should read");
         let mut compiler = Compiler::new(from_utf8(&file_bytes).expect("File should be valid utf-8"));
@@ -89,7 +150,8 @@ mod tests {
         fs::write(format!("{}{}_before.dfa", path, name), decompiled).expect("Decompiled original DFA should write.");
         
         let mut optimizer = Optimizer::new(bin.clone(), OptimizerSettings {
-            remove_end_returns: true
+            remove_end_returns: true,
+            max_codeblocks_per_line: Some(10),
         }).expect("Optimizer should create.");  
         
         optimizer.optimize().expect("Optimizer should optimize.");

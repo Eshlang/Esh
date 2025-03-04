@@ -1,4 +1,4 @@
-use compiler::Decompiler;
+use decompiler::Decompiler;
 use dfbin::{Constants::{Actions::Seg, Parents}, DFBin};
 
 use crate::{codeline::Codeline, errors::OptimizerError};
