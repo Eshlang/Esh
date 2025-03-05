@@ -53,7 +53,6 @@ pub enum TokenType {
     GTEqual,  // >=
     Or,       // ||
     And,      // &&
-    Arrow,    // ->
 
     Plus,      // +
     Dash,      // -
@@ -76,6 +75,10 @@ pub enum TokenType {
     RAngle,   // >
     LBracket, // [
     RBracket, // ]
+    
+    Arrow,    // ->
+    At,       // @
+    Pound,    // #
 
     Keyword(Keyword),
 }
@@ -85,11 +88,12 @@ pub enum Keyword {
     Func,   // functions
     Struct, // struct definition
     Domain, // domain definition
+    DFASM,  // inline dfasm
 
     If,     // ifs
     Else,   // else
     For,    // for loop
-    While,    // while loop
+    While,  // while loop
 
     Return, // return
     Break,  // break

@@ -1762,4 +1762,216 @@ pub fn struct_test() {
     }
 }
 
-
+#[test]
+pub fn dfasm_test() {
+    // func main() {
+    //    num a = dfasm(x, 3) -> num {
+    //       var add @, %0, %1
+    //    };
+    // }
+    
+    let input = [
+        Rc::new(Token {
+            token_type: TokenType::Keyword(Keyword::Func),
+            range: Range::new((0, 0), (0, 3)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Ident("main".to_string()),
+            range: Range::new((0, 5), (0, 8)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::LParen,
+            range: Range::new((0, 9), (0, 9)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::RParen,
+            range: Range::new((0, 10), (0, 10)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::LBrace,
+            range: Range::new((0, 11), (0, 11)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Ident("num".to_string()),
+            range: Range::new((1, 0), (1, 2)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Ident("a".to_string()),
+            range: Range::new((1, 4), (1, 4)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Assign,
+            range: Range::new((1, 6), (1, 6)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Keyword(Keyword::DFASM),
+            range: Range::new((1, 8), (1, 12)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::LParen,
+            range: Range::new((1, 13), (1, 13)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Ident("x".to_string()),
+            range: Range::new((1, 14), (1, 14)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Comma,
+            range: Range::new((1, 15), (1, 15)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Number(3f64),
+            range: Range::new((1, 17), (1, 17)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::RParen,
+            range: Range::new((1, 18), (1, 18)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Arrow,
+            range: Range::new((1, 20), (1, 21)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Ident("num".to_string()),
+            range: Range::new((1, 23), (1, 25)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::LBrace,
+            range: Range::new((1, 27), (1, 27)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Ident("var".to_string()),
+            range: Range::new((2, 0), (2, 2)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Ident("add".to_string()),
+            range: Range::new((2, 4), (2, 6)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::At,
+            range: Range::new((2, 8), (2, 8)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Comma,
+            range: Range::new((2, 9), (2, 9)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Perc,
+            range: Range::new((2, 11), (2, 11)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Number(0f64),
+            range: Range::new((2, 12), (1, 12)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Comma,
+            range: Range::new((2, 13), (2, 13)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Perc,
+            range: Range::new((2, 15), (2, 15)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Number(1f64),
+            range: Range::new((2, 16), (1, 16)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::RBrace,
+            range: Range::new((3, 0), (3, 0)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::Semicolon,
+            range: Range::new((3, 1), (3, 1)),
+        }),
+        Rc::new(Token {
+            token_type: TokenType::RBrace,
+            range: Range::new((4, 0), (4, 0)),
+        }),
+    ];
+    let expected = Node::Block(vec![
+        Rc::new(Node::Func(
+            Rc::new(Node::Primary(Rc::new(Token {
+                token_type: TokenType::Ident("main".to_string()),
+                range: Range::new((0, 5), (0, 8)),
+            }))),
+            Rc::new(Node::Tuple(vec![])),
+            Rc::new(Node::None),
+            Rc::new(Node::Block(vec![
+                Rc::new(Node::Assignment(
+                    Rc::new(Node::Declaration(
+                        Rc::new(Node::Primary(Rc::new(Token {
+                            token_type: TokenType::Ident("num".to_string()),
+                            range: Range::new((1, 0), (1, 2)),
+                        }))),
+                        Rc::new(Node::Primary(Rc::new(Token {
+                            token_type: TokenType::Ident("a".to_string()),
+                            range: Range::new((1, 4), (1, 4)),
+                        }))),
+                    )),
+                    Rc::new(Node::DFASM(
+                        Rc::new(Node::Tuple(vec![
+                            Rc::new(Node::Primary(Rc::new(Token {
+                                token_type: TokenType::Ident("x".to_string()),
+                                range: Range::new((1, 14), (1, 14)),
+                            }))),
+                            Rc::new(Node::Primary(Rc::new(Token {
+                                token_type: TokenType::Number(3f64),
+                                range: Range::new((1, 17), (1, 17)),
+                            }))),
+                        ])),
+                        Rc::new(Node::Primary(Rc::new(Token {
+                            token_type: TokenType::Ident("num".to_string()),
+                            range: Range::new((1, 23), (1, 25)),
+                        }))),
+                        Rc::new(Node::UnparsedBlock(vec![
+                            Rc::new(Token {
+                                token_type: TokenType::Ident("var".to_string()),
+                                range: Range::new((2, 0), (2, 2)),
+                            }),
+                            Rc::new(Token {
+                                token_type: TokenType::Ident("add".to_string()),
+                                range: Range::new((2, 4), (2, 6)),
+                            }),
+                            Rc::new(Token {
+                                token_type: TokenType::At,
+                                range: Range::new((2, 8), (2, 8)),
+                            }),
+                            Rc::new(Token {
+                                token_type: TokenType::Comma,
+                                range: Range::new((2, 9), (2, 9)),
+                            }),
+                            Rc::new(Token {
+                                token_type: TokenType::Perc,
+                                range: Range::new((2, 11), (2, 11)),
+                            }),
+                            Rc::new(Token {
+                                token_type: TokenType::Number(0f64),
+                                range: Range::new((2, 12), (1, 12)),
+                            }),
+                            Rc::new(Token {
+                                token_type: TokenType::Comma,
+                                range: Range::new((2, 13), (2, 13)),
+                            }),
+                            Rc::new(Token {
+                                token_type: TokenType::Perc,
+                                range: Range::new((2, 15), (2, 15)),
+                            }),
+                            Rc::new(Token {
+                                token_type: TokenType::Number(1f64),
+                                range: Range::new((2, 16), (1, 16)),
+                            }),
+                        ])),
+                    )),
+                )),
+            ])),
+        )),
+    ]);
+    let mut parser = Parser::new(&input);
+    match parser.statement_block() {
+        Ok(output) => assert_eq!(expected, output),
+        Err(e) => {
+            dbg!(e);
+            panic!()
+        }
+    }
+}

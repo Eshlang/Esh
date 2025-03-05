@@ -110,6 +110,7 @@ impl<'a> Lexer<'a> {
             "func" => Some(Keyword::Func),
             "struct" => Some(Keyword::Struct),
             "domain" => Some(Keyword::Domain),
+            "dfasm" => Some(Keyword::DFASM),
 
             "if" => Some(Keyword::If),
             "else" => Some(Keyword::Else),
@@ -287,6 +288,9 @@ impl<'a> Iterator for Lexer<'a> {
             '!' => Some(self.parse_char_lookahead(TokenType::Bang, ('=', TokenType::NotEqual))),
             '|' => Some(self.parse_char_lookahead(TokenType::Bar, ('|', TokenType::Or))),
             '&' => Some(self.parse_char_lookahead(TokenType::Ampersand, ('&', TokenType::And))),
+
+            '@' => Some(Ok(self.type_to_token(TokenType::At))),
+            '#' => Some(Ok(self.type_to_token(TokenType::Pound))),
 
             '\0' => None,
             _ => todo!(),

@@ -7,6 +7,7 @@ pub enum Node {
     None,                                                       // ()
     Primary(Rc<Token>),                                         // 0
     FunctionCall(Rc<Node>, Rc<Node>),                           // ident(tuple/expr)
+    DFASM(Rc<Node>, Rc<Node>, Rc<Node>),                        // dfasm(tuple/expr) -> tuple/ident {block};
     Access(Rc<Node>, Rc<Node>),                                 // ident.ident
     Construct(Rc<Node>, Rc<Node>),                              // ident {block} 
     Not(Rc<Node>),                                              // !expr
@@ -40,6 +41,7 @@ pub enum Node {
     Struct(Rc<Node>, Rc<Node>),                                 // struct ident {block}
     Domain(Rc<Node>, Rc<Node>),                                 // domain ident {block}
     Block(Vec<Rc<Node>>),                                       // stmt; stmt; stmt;
+    UnparsedBlock(Vec<Rc<Token>>),                              // 0 0 0
 }
 
 /// A parser error
@@ -130,6 +132,16 @@ impl<'a> Parser<'a> {
         return Ok(Node::Block(block));
     }
 
+    /// Returns an unparsed list of tokens the current statement block
+    pub(crate) fn unparsed_statement_block(&mut self) -> Result<Node, ParserError> {
+        let mut block = vec![];
+        while !self.is_at_end() && self.curr().token_type != TokenType::RBrace {
+            block.push(self.curr().clone());
+            self.advance();
+        }
+        return Ok(Node::UnparsedBlock(block));
+    }
+
     /// Returns the current statement
     pub(crate) fn statement(&mut self) -> Result<Node, ParserError> {
         match self.curr().token_type {
@@ -165,6 +177,9 @@ impl<'a> Parser<'a> {
                 expect!(self, TokenType::Semicolon);
                 self.advance();
                 Ok(Node::Break)
+            },
+            TokenType::Keyword(Keyword::DFASM) => {
+                self.dfasm()
             },
             _ => Err(ParserError::InvalidStatement(self.curr().clone()))
         }
@@ -587,6 +602,9 @@ impl<'a> Parser<'a> {
             TokenType::Ident(_) | TokenType::Keyword(Keyword::Value(ValuedKeyword::SelfIdentity)) => {
                 self.construct()
             },
+            TokenType::Keyword(Keyword::DFASM) => {
+                self.dfasm()
+            }
             TokenType::Number(_) | TokenType::String(_) | TokenType::Keyword(Keyword::Value(_)) => {
                 self.advance();
                 Ok(Node::Primary(self.prev().clone()))
@@ -656,6 +674,38 @@ impl<'a> Parser<'a> {
                 ),
             _ => ()
         }
+        return Ok(expr);
+    }
+
+    /// Returns the current function declaration statement
+    pub(crate) fn dfasm(&mut self) -> Result<Node, ParserError> {
+        expect!(self, TokenType::Keyword(Keyword::DFASM));
+        self.advance();
+        let expr = Node::DFASM(
+            {  // DFASM parameters
+                expect!(self, TokenType::LParen);
+                Rc::new(self.tuple()?)
+            },
+            {  // Return type
+                match self.curr().token_type {
+                    TokenType::Arrow => {
+                        self.advance();
+                        match self.curr().token_type {
+                            TokenType::Ident(_) | TokenType::Keyword(Keyword::Value(_)) => Rc::new(self.ident()?),
+                            _ => Rc::new(self.primary()?)
+                        }
+                    },
+                    _ => Rc::new(Node::None)
+                }
+            },
+            {  // DFASM body
+                expect!(self, TokenType::LBrace);
+                self.advance();
+                Rc::new(self.unparsed_statement_block()?)
+            },
+        );
+        expect!(self, TokenType::RBrace);
+        self.advance();
         return Ok(expr);
     }
 
