@@ -16,6 +16,38 @@ pub struct CodelineBranch {
     pub depth: usize,
 }
 
+impl CodelineBranch {
+    pub fn add_instructions(&self, branches: &Vec<CodelineBranch>, mut buffer: &mut DFBin) {
+        for branch_log in &self.body {
+            match branch_log {
+                CodelineBranchLog::Branch(branch_index) => {
+                    let branch = &branches[*branch_index];
+                    if buffer.read_instruction_at_index(buffer.len() - 1).expect("There should be an instruction here.").action.0 == Parents::EndIf && branch.root.action.0 == Parents::Else {
+                        buffer.remove_at_index(buffer.len() - 1).expect("This instruction should be removed.")
+                    }
+                buffer.push_instruction_ref(&branch.root);
+                    branch.add_instructions(&branches, &mut buffer);
+                    let branch = &branches[*branch_index];
+                    match branch.branch_type {
+                        CodelineBranchType::If => { buffer.push_instruction(instruction!(EndIf)); },
+                        CodelineBranchType::Repeat =>  { buffer.push_instruction(instruction!(EndRep)); }
+                    };
+                }
+                CodelineBranchLog::Codeblocks(codeblocks) => {
+                    buffer.append_instructions(codeblocks.clone());
+                }
+            }
+        }
+    }
+
+    pub fn instructions(&self, branches: &Vec<CodelineBranch>) -> DFBin {
+        let mut buffer = DFBin::new();
+        self.add_instructions(branches, &mut buffer);
+        buffer
+    }
+}
+
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum CodelineBranchType {
     If, Repeat

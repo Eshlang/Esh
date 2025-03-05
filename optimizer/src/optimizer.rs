@@ -104,11 +104,12 @@ impl Optimizer {
     /// ```
     pub fn split_lines(&mut self, max_codeblocks: usize) -> Result<(), OptimizerError> {
         for codeline in self.buffer.code_branches.iter_mut() {
-            Self::split_branch(&mut codeline.root_branch, max_codeblocks, 0);
+            Self::split_branch(&mut codeline.branch_list, &mut codeline.root_branch, max_codeblocks, 0);
             for (depth, branches) in codeline.branches_by_depth.clone().into_iter().enumerate() {
                 for branch_ind in branches {
-                    let branch = codeline.branch_list.get_mut(branch_ind).expect("Should contain branch.");
-                    Self::split_branch(&mut branch.body, max_codeblocks, depth);
+                    let mut branch = codeline.branch_list.get(branch_ind).expect("Should contain branch.").clone();
+                    Self::split_branch(&mut codeline.branch_list, &mut branch.body, max_codeblocks, depth);
+                    codeline.branch_list[branch_ind] = branch;
                 }
             }
         }
@@ -116,9 +117,20 @@ impl Optimizer {
     }
 
     /// This is used by ``.split_lines()`` - compacts a *branch* down to below the max size.
-    fn split_branch(branch: &mut Vec<CodelineBranchLog>, max_codeblocks: usize, depth: usize) {
-        branch.push(CodelineBranchLog::Codeblocks(vec![instruction!(Enac::FaceLocation, [(Int, depth)])]))
-        
+    fn split_branch(branches: &mut Vec<CodelineBranch>, branch: &mut Vec<CodelineBranchLog>, max_codeblocks: usize, depth: usize) {
+        for log in branch.clone() {
+            match log {
+                CodelineBranchLog::Codeblocks(instructions) => {
+                    branch.push(CodelineBranchLog::Codeblocks(vec![instruction!(Enac::FoxSleeping, [(Int, instructions.len())])]));
+                },
+                CodelineBranchLog::Branch(log_branch_ind) => {
+                    let log_branch = &branches[log_branch_ind];
+                    dbg!(log_branch);
+                    branch.push(CodelineBranchLog::Codeblocks(vec![instruction!(Enac::Tame, [(Int, log_branch_ind), (Int, log_branch.instructions(&branches).len())])]));
+                },
+            }
+        }
+        // for 
     }
 }
 

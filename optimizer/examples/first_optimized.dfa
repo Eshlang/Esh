@@ -53,25 +53,25 @@ seg code
         var add _11, _15, _12
         varif lower _9, _14
             var set _17, 1
-            enac facelocation 1
+            enac foxsleeping 1
         else
             var set _17, 0
-            enac facelocation 1
+            enac foxsleeping 1
         endif
         varif eq _11, _21
             var set _20, 1
-            enac facelocation 1
+            enac foxsleeping 1
         else
             var set _20, 0
-            enac facelocation 1
+            enac foxsleeping 1
         endif
         var bitwise _15, _20, _17 #operator:and
         varif eq _11, _16
             var set _22, 1
-            enac facelocation 1
+            enac foxsleeping 1
         else
             var set _22, 0
-            enac facelocation 1
+            enac foxsleeping 1
         endif
         var bitwise _12, _22, _15 #operator:or
         varif eq _12, 1
@@ -80,17 +80,28 @@ seg code
             var add _24, _24, _25
             var repeatstring _5, _26, _24
             ctrl return
-            enac facelocation 1
+            enac foxsleeping 5
         else
             var mul _12, _9, _27
             var add _11, _11, _12
-            enac facelocation 1
+            enac foxsleeping 2
         endif
         var set _24, _28
         var add _24, _24, _29
         var add _11, _11, _9
         var repeatstring _5, _30, _11
-        enac facelocation 0
+        enac foxsleeping 4
+        enac tame 0, 1
+        enac tame 1, 1
+        enac tame 2, 1
+        enac tame 3, 1
+        enac foxsleeping 1
+        enac tame 4, 1
+        enac tame 5, 1
+        enac foxsleeping 1
+        enac tame 6, 5
+        enac tame 7, 2
+        enac foxsleeping 4
     func _1 _8, _10
         var set _11, _31
         var string _11, _11, _7
@@ -101,7 +112,7 @@ seg code
         var set _17, _36
         call _0 _12, _15, _17
         var string _11, _12, _32
-        enac facelocation 0
+        enac foxsleeping 9
     func _2 _6, _38
         var set _12, _32
         var set _15, _40
@@ -120,27 +131,33 @@ seg code
             var getlistvalue _15, _15, 2
             varif lower _15, _36
                 var set _12, 1
-                enac facelocation 2
+                enac foxsleeping 1
             else
                 var set _12, 0
-                enac facelocation 2
+                enac foxsleeping 1
             endif
             varif eq _12, 1
                 ctrl stoprepeat
-                enac facelocation 2
+                enac foxsleeping 1
             endif
             var set _15, _39
             var getlistvalue _15, _15, 2
             var add _12, _15, _18
             var setlistvalue _39, 2, _12
-            enac facelocation 1
+            enac foxsleeping 2
+            enac tame 0, 1
+            enac tame 1, 1
+            enac tame 2, 1
+            enac foxsleeping 4
         endrep
         var set _5, _39
         var getlistvalue _5, _5, 3
-        enac facelocation 0
+        enac foxsleeping 12
+        enac tame 3, 14
+        enac foxsleeping 2
     func _3 _42, _6
         var set _5, _33
-        enac facelocation 0
+        enac foxsleeping 1
     func _4 _8, _10
         var set _11, _31
         var string _11, _11, _7
@@ -150,4 +167,4 @@ seg code
         var set _12, _33
         var set _15, _21
         call _0 _11, _12, _15
-        enac facelocation 0
+        enac foxsleeping 8
