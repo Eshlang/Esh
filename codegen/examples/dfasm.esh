@@ -1,5 +1,6 @@
 struct Player {
     string uuid;
+
     func sendMessage(string message) {
         dfasm(uuid, message) {
             sel playername @0
@@ -7,7 +8,16 @@ struct Player {
             sel reset
         }
     }
+
+    func getHealth() -> num {
+        return dfasm(uuid) -> num {
+            sel playername @0
+            var set @, <value #target:selection #type:currenthealth>
+            sel reset
+        };
+    }
 }
+
 domain Player {
     func from_name(string name) -> Player {
         return Player {
@@ -16,9 +26,7 @@ domain Player {
     }
 }
 
-domain Game {
-    func hello() {
-        Player looser = Player.from_name("LooserRIP");
-        looser.sendMessage("Hello!!!");
-    }
+func hello() {
+    Player looser = Player.from_name("LooserRIP");
+    looser.sendMessage("Hello!!! you have " + looser.getHealth() + " health!!!!");
 }
