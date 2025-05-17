@@ -1,0 +1,5 @@
+seg func
+    df _0 "__1#main.inlineomg"
+seg param
+seg code
+    func _0

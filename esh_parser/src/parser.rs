@@ -40,6 +40,7 @@ pub enum Node {
     Struct(Rc<Node>, Rc<Node>),                                 // struct ident {block}
     Domain(Rc<Node>, Rc<Node>),                                 // domain ident {block}
     Block(Vec<Rc<Node>>),                                       // stmt; stmt; stmt;
+    DFASM(Rc<Node>, Rc<Node>, Rc<Node>)                         // dfasm(tuple/ident) -> type ident {dfasm block}
 }
 
 /// A parser error
@@ -150,6 +151,10 @@ impl<'a> Parser<'a> {
             },
             TokenType::Keyword(Keyword::If) => {
                 self.if_else_block()
+            },
+            TokenType::Keyword(Keyword::DFASM) => {
+                dbg!("BOOGA FUICK FUCK");
+                self.inline_dfasm_block()
             },
             TokenType::Keyword(Keyword::While) => {
                 self.while_block()
@@ -276,6 +281,49 @@ impl<'a> Parser<'a> {
             expect!(self, TokenType::RBrace);
             self.advance();
         }
+        return Ok(expr);
+    }
+
+    pub(crate) fn inline_dfasm_block(&mut self) -> Result<Node, ParserError> {
+        dbg!("TEST 0");
+        expect!(self, TokenType::Keyword(Keyword::DFASM));
+        let expr = Node::DFASM(
+            {  // DFasm parameters
+                
+                dbg!("TEST 1");
+                self.advance();
+                expect!(self, TokenType::LParen);
+                Rc::new(self.tuple()?)
+            },
+            {  // Return type
+                dbg!("TEST 2");
+                match self.curr().token_type {
+                    TokenType::Arrow => {
+                        self.advance();
+                        match self.curr().token_type {
+                            TokenType::Ident(_) | TokenType::Keyword(Keyword::Value(_)) => Rc::new(self.ident()?),
+                            _ => Rc::new(self.primary()?)
+                        }
+                    },
+                    _ => Rc::new(Node::None)
+                }
+            },
+            {  // Function body
+                dbg!("TEST 3");
+                expect!(self, TokenType::LBrace);
+                self.advance();
+                expect!(self, TokenType::DFASM(..));
+                dbg!(self.curr().clone());
+                Rc::new(Node::Primary(self.curr().clone()))
+            },
+        );
+        dbg!("TEST 4");
+        dbg!(self.curr().clone());
+        self.advance();
+        dbg!(self.curr().clone());
+        expect!(self, TokenType::RBrace);
+        dbg!("TEST 5");
+        self.advance();
         return Ok(expr);
     }
 
@@ -583,6 +631,7 @@ impl<'a> Parser<'a> {
 
     /// Returns the current primary node
     pub(crate) fn primary(&mut self) -> Result<Node, ParserError> {
+        // dbg!("Expecting a primary here! and it's actually ", self.curr(), &self.curr().token_type);
         match self.curr().token_type {
             TokenType::Ident(_) | TokenType::Keyword(Keyword::Value(ValuedKeyword::SelfIdentity)) => {
                 self.construct()
@@ -590,6 +639,10 @@ impl<'a> Parser<'a> {
             TokenType::Number(_) | TokenType::String(_) | TokenType::Keyword(Keyword::Value(_)) => {
                 self.advance();
                 Ok(Node::Primary(self.prev().clone()))
+            },
+            TokenType::Keyword(Keyword::DFASM) => {
+                // dbg!("BOOGA FUICK FUCK 2 ", self.curr());
+                Ok(self.inline_dfasm_block()?)
             },
             TokenType::LParen => {
                 let start = self.current;

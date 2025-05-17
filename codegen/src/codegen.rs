@@ -4,8 +4,9 @@ use std::rc::Rc;
 use dfbin::enums::{Instruction, Parameter, ParameterValue};
 use dfbin::{instruction, tag};
 use dfbin::Constants::Tags::DP;
+use lexer::compiler::Compiler;
 use lexer::types::{Keyword, Range, Token, TokenType, ValuedKeyword};
-use parser::parser::Node;
+use esh_parser::parser::Node;
 use crate::buffer::CodeGenBuffer;
 use crate::errors::{CodegenError, ErrorRepr};
 use crate::context::{CodeDefinition, CodeScope, Context, ContextType};
@@ -1300,6 +1301,38 @@ impl CodeGen {
                     _ => { return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion); }
                 }
             }
+            Node::DFASM(params, return_type, block) => {
+                let dfasm_group = self.buffer.allocate_line_register_group();
+                let register = self.generate_expression_allocate_register(&settings, register_group);
+                value.ident = register;
+                
+                let return_type = if let Node::None = return_type.as_ref() {
+                    settings.expected_type.clone().unwrap_or(ValueType::Primitive(PrimitiveType::None))
+                } else {
+                    self.get_type(return_type, context)?
+                };
+                let Node::Primary(block_token) = block.as_ref() else {
+                    return CodegenError::err(block.clone(), ErrorRepr::ExpectedBlock);
+                };
+                let TokenType::DFASM(dfasm_str) = block_token.as_ref().token_type.clone() else {
+                    return CodegenError::err(block.clone(), ErrorRepr::ExpectedBlock);
+                };
+                let mut compiler = Compiler::new(dfasm_str.as_str());
+                compiler.identifier_count = self.buffer.ident_count;
+                for (param_id, param) in Self::extract_parameter_vec(params)?.iter().enumerate() {
+                    let param_value = self.generate_expression_inside(context, param, settings.pass(), dfasm_group)?.value.clone();
+                    compiler.references.insert(param_id.to_string(), param_value.ident);
+                }
+                compiler.references.insert("".to_owned(), register);
+                let added_identifiers = compiler.identifier_count;
+                compiler.compile_string().map_err(|_| CodegenError::new(block.clone(), ErrorRepr::DFASMError))?;
+                let added_identifiers = compiler.identifier_count - added_identifiers;
+                self.buffer.ident_count += added_identifiers;
+                self.buffer.code_buffer.append_bin_mut(&mut compiler.bin);
+                value.ident = register;
+                value.value_type = return_type;
+                self.buffer.free_line_register_group(dfasm_group);
+            }
             Node::Product(l, r) => {
                 let register = self.generate_expression_allocate_register(&settings, register_group);
                 let l = self.generate_expression_inside(context, l, settings.pass(), register_group)?.value.clone();
@@ -1461,7 +1494,7 @@ impl CodeGen {
             let body_stack_mode = body_get.4.clone();
             let statement = (&body_get.1[body_get.0 - 1]).clone();
             match statement.as_ref() {
-                Node::Declaration(..) | Node::Assignment(..) => {
+                Node::Declaration(..) | Node::Assignment(..) | Node::DFASM(..) => {
                     let void_register = self.buffer.constant_void();
                     self.generate_expression(context, &statement.clone(), GenerateExpressionSettings::void(void_register))?;
                 },
@@ -1555,14 +1588,13 @@ mod tests {
     use core::str;
     use std::fs;
 
-    use parser::parser::*;
+    use esh_parser::parser::*;
     use lexer::{Lexer, types::Token};
     use super::*;
 
-
     #[test]
     pub fn decompile_from_file_test() {
-        let name = "longaccess";
+        let name = "practical_dfasm";
         // let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\codegen\examples\";
         let path = r"K:\Programming\GitHub\Esh\codegen\examples\";
 
@@ -1574,10 +1606,10 @@ mod tests {
         let mut parser = Parser::new(lexer_tokens.as_slice());
         let parser_tree = Rc::new(parser.parse().expect("Parser statement block should unwrap"));
         //##println!("PARSER TREE\n----------------------\n{:#?}\n----------------------", parser_tree);
-
+        
         let mut codegen = CodeGen::new();
         codegen.codegen_from_node(parser_tree.clone()).expect("Codegen should generate");
-        println!("CODEGEN CONTEXTS\n----------------------\n{:#?}\n----------------------", codegen.contexts);
+        // println!("CODEGEN CONTEXTS\n----------------------\n{:#?}\n----------------------", codegen.contexts);
 
         //##println!("CODEGEN CONTEXT NAMES\n----------------------");
         //##for context in 0..codegen.contexts.len() {

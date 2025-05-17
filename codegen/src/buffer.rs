@@ -9,7 +9,7 @@ pub struct CodeGenBuffer {
     pub code_buffer: DFBin,
     pub func_buffer: DFBin,
     pub param_buffer: DFBin,
-    ident_count: u32,
+    pub(crate) ident_count: u32,
     idents_number_hash: HashMap<String, u32>,
     idents_location_hash: HashMap<String, u32>,
     idents_string_hash: HashMap<String, u32>,

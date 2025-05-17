@@ -1,6 +1,6 @@
 use std::{fmt, rc::Rc};
 
-use parser::parser::Node;
+use esh_parser::parser::Node;
 
 #[derive(thiserror::Error, Debug, PartialEq)]
 #[error("Compiler error.")]
@@ -193,4 +193,6 @@ pub enum ErrorRepr {
     InvalidLocationAccess,
     #[error("Invalid vector coordinate access.")]
     InvalidVectorAccess,
+    #[error("DF Assembly Error.")]
+    DFASMError,
 }

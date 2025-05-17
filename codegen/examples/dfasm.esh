@@ -1,0 +1,9 @@
+func inlineomg() {
+    dfasm(16) -> num {
+        var set @, @0
+    }
+    dfasm() { var set @, @0 }
+    dfasm() {
+        var set @, @0
+    }
+}

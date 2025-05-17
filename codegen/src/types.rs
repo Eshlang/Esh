@@ -1,5 +1,5 @@
 use std::rc::Rc;
-use parser::parser::Node;
+use esh_parser::parser::Node;
 use crate::context::CodeScope;
 
 #[derive(Clone, PartialEq, Debug)]

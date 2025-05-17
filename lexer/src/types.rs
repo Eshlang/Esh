@@ -42,6 +42,7 @@ impl Range {
 pub enum TokenType {
     Ident(String),
     String(String),
+    DFASM(String),
     Number(f64),
     // Comments probably don't need to contain what's in the comment, but I'll leave this for now
     Comment(String),
@@ -93,6 +94,8 @@ pub enum Keyword {
 
     Return, // return
     Break,  // break
+
+    DFASM, // dfasm
 
     Value(ValuedKeyword) // keywords with value, ex "true"
 }

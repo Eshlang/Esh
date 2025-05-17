@@ -1,0 +1,29 @@
+seg func
+    df _1 "__1#main.inlineomg"
+    df _8 "__2#main.test"
+seg param
+    dp var _0 "_c_void" #scope:global
+    dp var _2 "_rvl_hey" #scope:line
+    dp num _3 150
+    dp var _4 "_rvl_one" #scope:line
+    dp num _5 50
+    dp var _6 "_rvl_two" #scope:line
+    dp num _7 100
+    dp var _9 "_xl0" #scope:line
+    dp num _10 10
+    dp var _11 "_rvp_hello" #scope:line
+    dp param _12 "_rvp_hello"
+    dp var _13 "_rvp_wtf" #scope:line
+    dp param _14 "_rvp_wtf"
+seg code
+    func _1
+        var set _2, _3
+        var set _4, _5
+        var set _6, _7
+        var average _2, _4, _6
+        var average _9, _4, _6
+        call _8 _9, _10
+        call _8 _9, _10
+        var average _2, _4, _6
+    func _8 _12, _14
+        var add _11, _11, _13
