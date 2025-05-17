@@ -1,4 +1,6 @@
-use dfbin::{enums::Instruction, instruction, Constants::Actions::{self, Plev}, DFBin};
+use std::collections::HashSet;
+
+use dfbin::{enums::{Instruction, ParameterValue}, instruction, Constants::Actions::{self, Plev, DP}, DFBin};
 use crate::{buffer::{self, Buffer}, codeline::{Codeline, CodelineBranch, CodelineBranchLog, CodelineBranchType}, errors::OptimizerError, optimizer_settings::OptimizerSettings};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -106,33 +108,116 @@ impl Optimizer {
         let mut new_codelines = Vec::new();
         let mut id_offset: u32 = (self.buffer.func_buffer.len() + self.buffer.param_buffer.len()).try_into().expect("Amount of ids should be below a u32 limit.");
         id_offset -= 1;
-        let mut id: u32 = id_offset;
-        for codeline in self.buffer.code_branches.iter_mut() {
-            if let Some(c) = Self::split_branch(&mut codeline.branch_list, &mut codeline.root_branch, max_codeblocks, 0, &mut id)? {
-                new_codelines.push(c);
-                let mut func_name = "__e".to_string();
-                func_name.push_str(&(id - id_offset).to_string());
-                self.buffer.func_buffer.push_instruction(instruction!(DF, [
-                    (Ident, id), (String, func_name)
-                ]));
+        let mut id: u32 = 0;
+        let code_branches_len = self.buffer.code_branches.len();
+        for codeline_index in 0..code_branches_len {
+            let pre_codevar_count: u32 = (self.buffer.func_buffer.len() + self.buffer.param_buffer.len()).try_into().expect("Amount of ids should be below a u32 limit.");
+            let codeline_vars = self.get_codeline_vars(codeline_index);
+            let post_codevar_count: u32 = (self.buffer.func_buffer.len() + self.buffer.param_buffer.len()).try_into().expect("Amount of ids should be below a u32 limit.");
+            id_offset += post_codevar_count - pre_codevar_count;
+            let codeline = self.buffer.code_branches.get_mut(codeline_index).expect("Should be within list");
+            'rebreak: loop {
+                if let Some(c) = Self::split_branch(&mut codeline.branch_list, &mut codeline.root_branch, max_codeblocks, 0, id+id_offset+1)? {
+                    id += 1;
+                    new_codelines.push(c);
+                    let mut func_name = "__e".to_string();
+                    func_name.push_str(&id.to_string());
+                    self.buffer.func_buffer.push_instruction(instruction!(DF, [
+                        (Ident, id+id_offset), (String, func_name)
+                    ]));
+                } else {
+                    break 'rebreak;
+                }
             }
             for (depth, branches) in codeline.branches_by_depth.clone().into_iter().enumerate() {
                 for branch_ind in branches {
-                    let mut branch = codeline.branch_list.get(branch_ind).expect("Should contain branch.").clone();
-                    if let Some(c) = Self::split_branch(&mut codeline.branch_list, &mut branch.body, max_codeblocks, depth, &mut id)? {
-                        new_codelines.push(c);
-                        let mut func_name = "__e".to_string();
-                        func_name.push_str(&(id - id_offset).to_string());
-                        self.buffer.func_buffer.push_instruction(instruction!(DF, [
-                            (Ident, id), (String, func_name)
-                        ]));
+                    'rebreak: loop {
+                        let mut branch = codeline.branch_list.get(branch_ind).expect("Should contain branch.").clone();
+                        if let Some(c) = Self::split_branch(&mut codeline.branch_list, &mut branch.body, max_codeblocks, depth, id+id_offset+1)? {
+                            id += 1;
+                            new_codelines.push(c);
+                            let mut func_name = "__e".to_string();
+                            func_name.push_str(&id.to_string());
+                            self.buffer.func_buffer.push_instruction(instruction!(DF, [
+                                (Ident, id+id_offset), (String, func_name)
+                            ]));
+                            codeline.branch_list[branch_ind] = branch;
+                        } else {
+                            break 'rebreak;
+                        }
                     }
-                    codeline.branch_list[branch_ind] = branch;
                 }
             }
         }
         self.buffer.code_branches.append(&mut new_codelines);
         Ok(())
+    }
+
+    /// Gets all the line variables that are used in a branch.
+    fn get_codeline_vars(&mut self, codeline_index: usize) -> Vec<(u32, u32)> {
+        let mut id_offset: u32 = (self.buffer.func_buffer.len() + self.buffer.param_buffer.len()).try_into().expect("Amount of ids should be below a u32 limit.");
+        id_offset -= 1;
+        let mut id = 0;
+        let mut ret = Vec::new();
+        let codeline = self.buffer.code_branches.get(codeline_index).expect("Should be within list");
+        let codeline_instructions = codeline.clone().to_bin().instructions();
+        let mut potential_idents = HashSet::new();
+        let _ = self.buffer.param_buffer.verify_buffer();
+        for instruction in codeline_instructions {
+            for param in instruction.params {
+                if let ParameterValue::Ident(ident) = param.value {
+                    potential_idents.insert(ident);
+                }
+            }
+        }
+        let mut new_instructions = Vec::new();
+        let mut idents = Vec::new();
+        for potential_ident in potential_idents {
+            self.buffer.param_buffer.set_cursor_to_index(0).expect("Should be able to reset the param buffer cursor.");
+            for _param_buffer_id in 0..self.buffer.param_buffer.len() {
+                // Should be able to speed this up with a hashmap, cbf tho
+                let param_instruction = self.buffer.param_buffer.read_instruction().expect("Should have a param instruction.");
+                if !matches!(param_instruction.action, dfbin::Constants::Actions::DP::Var) { continue; }
+                let Some(param) = param_instruction.params.get(0) else { continue; };
+                let ParameterValue::Ident(created_param_ident) = param.value else { continue; };
+                let Some(param) = param_instruction.params.get(1) else { continue; };
+                let ParameterValue::String(created_var_string) = param.value.clone() else { continue; };
+                if potential_ident == created_param_ident {
+                    if matches!(param_instruction.match_tag(dfbin::Constants::Tags::DP::Var::Scope::Global).expect("Var instruction shouldn't have a dynamic scope tag?"), dfbin::Constants::Tags::DP::Var::Scope::Line) {
+                        idents.push((potential_ident, created_var_string));
+                    }
+                    break;
+                }
+            }
+        }
+        for (var_ident, var_name) in idents {
+            let mut param_ident = None;
+            self.buffer.param_buffer.set_cursor_to_index(0).expect("Should be able to reset the param buffer cursor.");
+            for _param_buffer_id in 0..self.buffer.param_buffer.len() {
+                // Should be able to speed this up with a hashmap, cbf tho
+                let param_instruction = self.buffer.param_buffer.read_instruction().expect("Should have a param instruction.");
+                if !matches!(param_instruction.action, dfbin::Constants::Actions::DP::Param) { continue; }
+                let Some(param) = param_instruction.params.get(0) else { continue; };
+                let ParameterValue::Ident(created_param_ident) = param.value else { continue; };
+                let Some(param) = param_instruction.params.get(1) else { continue; };
+                let ParameterValue::String(created_var_string) = param.value.clone() else { continue; };
+                if created_var_string != var_name { continue; }
+                if matches!(param_instruction.match_tag(dfbin::Constants::Tags::DP::Param::Type::Any).expect("Param instruction shouldn't have a dynamic scope tag?"), dfbin::Constants::Tags::DP::Param::Type::Var) {
+                    param_ident = Some(created_param_ident);
+                }
+            }
+            let param_ident = param_ident.unwrap_or_else(|| ({ 
+                id += 1; 
+                new_instructions.push(instruction!(DP::Param, [
+                    (Ident, id+id_offset), (String, var_name)
+                ], { Type: Var }));
+                id
+            }) + id_offset);
+            ret.push((var_ident, param_ident))
+        }
+        self.buffer.param_buffer.append_instructions(new_instructions);
+
+        ret
     }
 
     /// This is used by ``.split_branch()`` to count how many instructions there are in a branch, so that it will know if it needs to compact.
@@ -169,7 +254,7 @@ impl Optimizer {
     // }
 
     /// This is used by ``.split_lines()`` - compacts a *branch* down to below the max size.
-    fn split_branch(branches: &mut Vec<CodelineBranch>, branch: &mut Vec<CodelineBranchLog>, true_max_codeblocks: usize, depth: usize, id: &mut u32) -> Result<Option<Codeline>, OptimizerError> {
+    fn split_branch(branches: &mut Vec<CodelineBranch>, branch: &mut Vec<CodelineBranchLog>, true_max_codeblocks: usize, depth: usize, id: u32) -> Result<Option<Codeline>, OptimizerError> {
         let mut sum = 0;
         let mut new_branch_accumulate = Vec::new();
         let mut old_branch_accumulate = Vec::new();
@@ -228,9 +313,8 @@ impl Optimizer {
                     }
                 }
             }
-            *id += 1;
-            branch.push(CodelineBranchLog::Codeblocks(vec![instruction!(Call, [(Ident, *id)])]));
-            let mut codeline = Codeline::from_bin(DFBin::from_instructions(vec![instruction!(Func, [(Ident, *id)])]))?;
+            branch.push(CodelineBranchLog::Codeblocks(vec![instruction!(Call, [(Ident, id+1)])]));
+            let mut codeline = Codeline::from_bin(DFBin::from_instructions(vec![instruction!(Func, [(Ident, id+1)])]))?;
             codeline.branch_list = branches.clone();
             codeline.root_branch = new_branch_accumulate;
             return Ok(Some(codeline))
