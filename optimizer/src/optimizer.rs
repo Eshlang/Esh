@@ -1,13 +1,14 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet, VecDeque};
 
-use dfbin::{enums::{Instruction, Parameter, ParameterValue}, instruction, Constants::Actions::{self, Plev, DP}, DFBin};
+use dfbin::{enums::{Instruction, Parameter, ParameterValue}, instruction, Constants::{self, Actions::{self, Plev, DP}}, DFBin};
 use crate::{buffer::{self, Buffer}, codeline::{Codeline, CodelineBranch, CodelineBranchLog, CodelineBranchType}, errors::OptimizerError, optimizer_settings::OptimizerSettings};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Optimizer {
     bin: DFBin,
     buffer: Buffer,
-    pub settings: OptimizerSettings
+    pub settings: OptimizerSettings,
+    pub(crate) extension_function_idents: HashMap<u32, usize>
 }
 
 impl Optimizer {
@@ -17,6 +18,7 @@ impl Optimizer {
             bin: bin.clone(),
             buffer: buffer::Buffer::new(bin)?,
             settings,
+            extension_function_idents: HashMap::new()
         })
     }
 
@@ -31,7 +33,7 @@ impl Optimizer {
             self.remove_end_returns()?;
         }
         if let Some(max) = self.settings.max_codeblocks_per_line {
-            self.split_lines(max);
+            self.split_lines(max)?;
         }
         Ok(())
     }
@@ -105,51 +107,84 @@ impl Optimizer {
     /// 
     /// ```
     pub fn split_lines(&mut self, max_codeblocks: usize) -> Result<(), OptimizerError> {
+        let max_codeblocks = max_codeblocks + 1;
         let mut new_codelines = Vec::new();
+        let mut extension_add = VecDeque::new();
         let mut id_offset: u32 = (self.buffer.func_buffer.len() + self.buffer.param_buffer.len()).try_into().expect("Amount of ids should be below a u32 limit.");
         id_offset -= 1;
         let mut id: u32 = 0;
         let code_branches_len = self.buffer.code_branches.len();
         for codeline_index in 0..code_branches_len {
+            dbg!(format!("Codeline {:?}", codeline_index));
             let pre_codevar_count: u32 = (self.buffer.func_buffer.len() + self.buffer.param_buffer.len()).try_into().expect("Amount of ids should be below a u32 limit.");
             let codeline_vars = self.get_codeline_vars(codeline_index);
             let post_codevar_count: u32 = (self.buffer.func_buffer.len() + self.buffer.param_buffer.len()).try_into().expect("Amount of ids should be below a u32 limit.");
             id_offset += post_codevar_count - pre_codevar_count;
             let codeline = self.buffer.code_branches.get_mut(codeline_index).expect("Should be within list");
-            'rebreak: loop {
-                if let Some(c) = Self::split_branch(&mut codeline.branch_list, &mut codeline.root_branch, max_codeblocks, 0, id+id_offset+1, &codeline_vars)? {
-                    id += 1;
-                    new_codelines.push(c);
-                    let mut func_name = "__e".to_string();
-                    func_name.push_str(&id.to_string());
-                    self.buffer.func_buffer.push_instruction(instruction!(DF, [
-                        (Ident, id+id_offset), (String, func_name)
-                    ]));
-                } else {
-                    break 'rebreak;
-                }
-            }
-            for (depth, branches) in codeline.branches_by_depth.clone().into_iter().enumerate() {
+            for (depth, branches) in codeline.branches_by_depth.clone().into_iter().enumerate().rev() {
                 for branch_ind in branches {
+                    let mut test = 0;
                     'rebreak: loop {
                         let mut branch = codeline.branch_list.get(branch_ind).expect("Should contain branch.").clone();
-                        if let Some(c) = Self::split_branch(&mut codeline.branch_list, &mut branch.body, max_codeblocks, depth, id+id_offset+1, &codeline_vars)? {
+                        if let Some((c, mut ca)) = Self::split_branch(&mut codeline.branch_list, &mut branch.body, max_codeblocks, depth, id+id_offset+1, &codeline_vars)? {
                             id += 1;
-                            new_codelines.push(c);
+                            new_codelines.push((c, id+id_offset));
                             let mut func_name = "__e".to_string();
                             func_name.push_str(&id.to_string());
                             self.buffer.func_buffer.push_instruction(instruction!(DF, [
                                 (Ident, id+id_offset), (String, func_name)
                             ]));
+                            extension_add.append(&mut ca);
                             codeline.branch_list[branch_ind] = branch;
                         } else {
                             break 'rebreak;
                         }
+                        test += 1;
+                        if test >= 100 {
+                            break;
+                        }
                     }
                 }
             }
+            let mut test = 0;
+            'rebreak: loop {
+                if let Some((c, mut ca)) = Self::split_branch(&mut codeline.branch_list, &mut codeline.root_branch, max_codeblocks, 0, id+id_offset+1, &codeline_vars)? {
+                    id += 1;
+                    new_codelines.push((c, id+id_offset));
+                    let mut func_name = "__e".to_string();
+                    func_name.push_str(&id.to_string());
+                    self.buffer.func_buffer.push_instruction(instruction!(DF, [
+                        (Ident, id+id_offset), (String, func_name)
+                    ]));
+                    extension_add.append(&mut ca);
+                } else {
+                    break 'rebreak;
+                }
+                test += 1;
+                if test >= 100 {
+                    break;
+                }
+            }
         }
-        self.buffer.code_branches.append(&mut new_codelines);
+        for (new_codeline, new_codeline_key) in new_codelines.into_iter() {
+            self.extension_function_idents.insert(new_codeline_key, self.buffer.code_branches.len());
+            self.buffer.code_branches.push(new_codeline);
+        }
+        loop {
+            let Some(extension_ident) = extension_add.pop_front() else { break; };
+            let Some(extension_ident) = self.extension_function_idents.get(&extension_ident) else { continue; };
+            dbg!(extension_ident);
+            self.buffer.code_branches[*extension_ident].nest_depth += 1;
+            let mut hash_check = HashSet::new();
+            for instruction_check_call in self.buffer.code_branches[*extension_ident].clone().to_bin().instructions() {
+                if instruction_check_call.action != Actions::Call { continue; }
+                let Some(call_ident) = instruction_check_call.params.get(0) else { continue; };
+                let ParameterValue::Ident(call_ident) = call_ident.value else { continue; };
+                if hash_check.contains(&call_ident) { continue; }
+                hash_check.insert(call_ident);
+                extension_add.push_back(call_ident);
+            }
+        }
         Ok(())
     }
 
@@ -254,13 +289,14 @@ impl Optimizer {
     // }
 
     /// This is used by ``.split_lines()`` - compacts a *branch* down to below the max size.
-    fn split_branch(branches: &mut Vec<CodelineBranch>, branch: &mut Vec<CodelineBranchLog>, true_max_codeblocks: usize, depth: usize, id: u32, codeline_vars: &Vec<(u32, u32)>) -> Result<Option<Codeline>, OptimizerError> {
+    fn split_branch(branches: &mut Vec<CodelineBranch>, branch: &mut Vec<CodelineBranchLog>, true_max_codeblocks: usize, depth: usize, id: u32, codeline_vars: &Vec<(u32, u32)>) -> Result<Option<(Codeline, VecDeque<u32>)>, OptimizerError> {
+        dbg!(id, depth);
         let mut sum = 0;
         let mut new_branch_accumulate = Vec::new();
         let mut old_branch_accumulate = Vec::new();
         let padding = 2; // One for call function, one for extra function
         let max_codeblocks = true_max_codeblocks - padding; // Padding 
-        for log in branch.iter().rev() {
+        for (log_ind, log) in branch.iter().enumerate().rev() {
             match &log {
                 CodelineBranchLog::Codeblocks(instructions) => {
                     // branch.push(CodelineBranchLog::Codeblocks(vec![instruction!(Enac::FoxSleeping, [(Int, instructions.len())])]));
@@ -282,9 +318,17 @@ impl Optimizer {
                 },
                 CodelineBranchLog::Branch(log_branch_ind) => {
                     let log_branch = &branches[*log_branch_ind];
-                    let add = log_branch.instructions(&branches).len() + 2;
+                    let mut add = log_branch.instructions(&branches).len() + 2;
+                    let add_amt = add;
+                    if log_branch.root.action == Constants::Actions::Else {
+                        if let Some(CodelineBranchLog::Branch(log_if_branch_ind)) = branch.get(log_ind-1) {
+                            let log_if_branch = &branches[*log_if_branch_ind];
+                            add += log_if_branch.instructions(&branches).len() + 1;
+                        }
+                    }
                     if sum < max_codeblocks {
                         if sum + add >= max_codeblocks { // Transition Period
+                            dbg!("transition period on branch!!", sum+add, sum);
                             old_branch_accumulate.push(log.clone());
                         } else {
                             new_branch_accumulate.push(log.clone());
@@ -292,12 +336,17 @@ impl Optimizer {
                     } else { // Sum > max_codeblocks
                         old_branch_accumulate.push(log.clone());
                     }
-                    sum += add;
-                    // dbg!(log_branch);
+                    sum += add_amt;
                     // branch.push(CodelineBranchLog::Codeblocks(vec![instruction!(Enac::Tame, [(Int, log_branch_ind), (Int, log_branch.instructions(&branches).len())])]));
                 },
             }
         };
+        if depth > 0 && sum < max_codeblocks && sum >= max_codeblocks - padding - (depth * 2) - 2 && sum > 1 {
+            old_branch_accumulate.clear();
+            new_branch_accumulate = branch.clone();
+            new_branch_accumulate.reverse();
+            sum = max_codeblocks;
+        }
         if sum >= max_codeblocks {
             // Awful code ahead:
             old_branch_accumulate.reverse();
@@ -313,8 +362,8 @@ impl Optimizer {
                     }
                 }
             }
-            let mut call_instruction = instruction!(Call, [(Ident, id+1)]);
-            let mut func_instruction = instruction!(Func, [(Ident, id+1)]);
+            let mut call_instruction = instruction!(Call, [(Ident, id)]);
+            let mut func_instruction = instruction!(Func, [(Ident, id)]);
             for codeline_var in codeline_vars {
                 call_instruction.params.push(Parameter::from_ident(codeline_var.0)); // Add the variable
                 func_instruction.params.push(Parameter::from_ident(codeline_var.1)); // Add the param
@@ -324,7 +373,16 @@ impl Optimizer {
             let mut codeline = Codeline::from_bin(DFBin::from_instructions(vec![func_instruction]))?;
             codeline.branch_list = branches.clone();
             codeline.root_branch = new_branch_accumulate;
-            return Ok(Some(codeline))
+            codeline.nest_depth += 1;
+            let mut extension_funcs = VecDeque::new();
+            for instruction_check_call in codeline.clone().to_bin().instructions() {
+                if instruction_check_call.action != Actions::Call { continue; }
+                let Some(call_ident) = instruction_check_call.params.get(0) else { continue; };
+                let ParameterValue::Ident(call_ident) = call_ident.value else { continue; };
+                if extension_funcs.contains(&call_ident) { continue; }
+                extension_funcs.push_back(call_ident);
+            }
+            return Ok(Some((codeline, extension_funcs)))
         }
         Ok(None)
         // branch.push(CodelineBranchLog::Codeblocks(vec![instruction!(Enac::FoxSleeping, [(Int, sum)])]));
@@ -345,7 +403,7 @@ mod tests {
 
     #[test]
     pub fn optimize_from_file_test() {
-        let name = "test";
+        let name = "first";
         // let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\optimizer\examples\";
         let path = r"K:\Programming\GitHub\Esh\optimizer\examples\";
 
@@ -361,7 +419,7 @@ mod tests {
         
         let mut optimizer = Optimizer::new(bin.clone(), OptimizerSettings {
             remove_end_returns: true,
-            max_codeblocks_per_line: Some(10),
+            max_codeblocks_per_line: Some(9),
         }).expect("Optimizer should create.");  
         
         optimizer.optimize().expect("Optimizer should optimize.");

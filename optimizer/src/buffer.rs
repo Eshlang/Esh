@@ -65,8 +65,14 @@ impl Buffer {
             println!("\n\n\n(Branches) Codeline #{}\n------------------------------------------------\n{}\n------------------------------------------------", 
                 codeline_ind,
                 Decompiler::new(codeline.clone().to_bin()).expect("Should decompile").decompile().expect("Should decompile"));
+            for (codeline_branch_ind, codeline_branch) in codeline.clone().branch_list.iter().enumerate() {
+                println!("\n\n\n(Branches) Codeline #{}, Branch #{}, ({:#?})\n------------------------------------------------\n{}\n------------------------------------------------", 
+                    codeline_ind, codeline_branch_ind, codeline_branch,
+                    Decompiler::new(codeline_branch.clone().instructions(&codeline.branch_list)).expect("Should decompile").decompile().expect("Should decompile"));
+            }
             self.code_branches.push(codeline)
         }
+        
         // println!("Branches:\n------------------------------------------------\n\n{:#?}\n\n------------------------------------------------", make.branches);
 
         Ok(())

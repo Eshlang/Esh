@@ -1,4 +1,4 @@
-use dfbin::{enums::Instruction, instruction, Constants::Parents, DFBin};
+use dfbin::{enums::{Instruction, Parameter, ParameterValue}, instruction, Constants::{Actions, Parents}, DFBin};
 
 use crate::errors::OptimizerError;
 
@@ -60,7 +60,8 @@ pub struct Codeline {
     pub root_branch: Vec<CodelineBranchLog>,
     pub branch_list: Vec<CodelineBranch>,
     pub branches_by_depth: Vec<Vec<usize>>,
-
+    pub nest_depth: usize,
+    
     buffer: DFBin,
     pointer: usize,
     met_else: bool,
@@ -76,6 +77,7 @@ impl Codeline {
             root_branch: Vec::new(),
             branch_list: Vec::new(),
             branches_by_depth: Vec::new(),
+            nest_depth: 0,
 
             buffer: DFBin::new(),
             pointer: 0,
@@ -163,7 +165,22 @@ impl Codeline {
                     };
                 }
                 CodelineBranchLog::Codeblocks(codeblocks) => {
-                    self.buffer.append_instructions(codeblocks.clone());
+                    if self.nest_depth > 0 {
+                        for mut instruction in codeblocks.clone() {
+                            let return_value: i64 = (match instruction.action {
+                                Actions::Ctrl::Return => 1+self.nest_depth,
+                                Actions::Ctrl::ReturnNTimes => (instruction.params.get(0).unwrap_or(&Parameter::from_value(ParameterValue::Int(1))).value.as_int().unwrap_or(1) as usize)+self.nest_depth,
+                                _ => 0
+                            }).try_into().expect("Should fit within confines of i64");
+                            if return_value > 0 {
+                                instruction.action = Actions::Ctrl::ReturnNTimes;
+                                instruction.params = vec![Parameter::from_value(ParameterValue::Int(return_value))];
+                            }
+                            self.buffer.push_instruction(instruction);
+                        }
+                    } else {
+                        self.buffer.append_instructions(codeblocks.clone());
+                    }
                 }
             }
         }
