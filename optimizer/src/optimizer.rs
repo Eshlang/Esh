@@ -1,5 +1,5 @@
-use dfbin::{instruction, Constants::Actions, DFBin};
-use crate::{buffer::{self, Buffer}, codeline::{CodelineBranch, CodelineBranchLog}, errors::OptimizerError, optimizer_settings::OptimizerSettings};
+use dfbin::{enums::Instruction, instruction, Constants::Actions::{self, Plev}, DFBin};
+use crate::{buffer::{self, Buffer}, codeline::{Codeline, CodelineBranch, CodelineBranchLog, CodelineBranchType}, errors::OptimizerError, optimizer_settings::OptimizerSettings};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Optimizer {
@@ -103,33 +103,119 @@ impl Optimizer {
     /// 
     /// ```
     pub fn split_lines(&mut self, max_codeblocks: usize) -> Result<(), OptimizerError> {
+        let mut new_codelines = Vec::new();
+        let mut id = 0;
         for codeline in self.buffer.code_branches.iter_mut() {
-            Self::split_branch(&mut codeline.branch_list, &mut codeline.root_branch, max_codeblocks, 0);
+            Self::split_branch(&mut codeline.branch_list, &mut new_codelines, &mut codeline.root_branch, max_codeblocks, 0, &mut id)?;
             for (depth, branches) in codeline.branches_by_depth.clone().into_iter().enumerate() {
                 for branch_ind in branches {
                     let mut branch = codeline.branch_list.get(branch_ind).expect("Should contain branch.").clone();
-                    Self::split_branch(&mut codeline.branch_list, &mut branch.body, max_codeblocks, depth);
+                    Self::split_branch(&mut codeline.branch_list, &mut new_codelines, &mut branch.body, max_codeblocks, depth, &mut id)?;
                     codeline.branch_list[branch_ind] = branch;
                 }
             }
         }
+        self.buffer.code_branches.append(&mut new_codelines);
         Ok(())
     }
 
+    /// This is used by ``.split_branch()`` to count how many instructions there are in a branch, so that it will know if it needs to compact.
+    // fn count_branch(branches: &mut Vec<CodelineBranch>, branch: &Vec<CodelineBranchLog>) -> usize {
+    //     let mut sum = 0;
+    //     for log in branch.clone() {
+    //         match &log {
+    //             CodelineBranchLog::Codeblocks(instructions) => {
+    //                 // branch.push(CodelineBranchLog::Codeblocks(vec![instruction!(Enac::FoxSleeping, [(Int, instructions.len())])]));
+    //                 let add = instructions.len();
+    //                 if sum + add < max_codeblocks {
+    //                     branch_accumulate.push(log.clone());
+    //                 }
+    //                 sum += add;
+    //             },
+    //             CodelineBranchLog::Branch(log_branch_ind) => {
+    //                 let log_branch = &branches[*log_branch_ind];
+    //                 let add = log_branch.instructions(&branches).len() + 2;
+    //                 if sum + add < max_codeblocks {
+    //                     branch_accumulate.push(log);
+    //                 }
+    //                 sum += add;
+    //                 // dbg!(log_branch);
+    //                 // branch.push(CodelineBranchLog::Codeblocks(vec![instruction!(Enac::Tame, [(Int, log_branch_ind), (Int, log_branch.instructions(&branches).len())])]));
+    //             },
+    //         }
+    //         if sum >= max_codeblocks {
+    //             break;
+    //         }
+    //     };
+    //     if sum >= max_codeblocks {
+            
+    //     }
+    // }
+
     /// This is used by ``.split_lines()`` - compacts a *branch* down to below the max size.
-    fn split_branch(branches: &mut Vec<CodelineBranch>, branch: &mut Vec<CodelineBranchLog>, max_codeblocks: usize, depth: usize) {
+    fn split_branch(branches: &mut Vec<CodelineBranch>, buffer: &mut Vec<Codeline>, branch: &mut Vec<CodelineBranchLog>, true_max_codeblocks: usize, depth: usize, id: &mut usize) -> Result<(), OptimizerError> {
+        let mut sum = 0;
+        let mut new_branch_accumulate = Vec::new();
+        let mut old_branch_accumulate = Vec::new();
+        let padding = 2; // One for call function, one for extra function
+        let max_codeblocks = true_max_codeblocks - padding; // Padding 
         for log in branch.clone() {
-            match log {
+            match &log {
                 CodelineBranchLog::Codeblocks(instructions) => {
-                    branch.push(CodelineBranchLog::Codeblocks(vec![instruction!(Enac::FoxSleeping, [(Int, instructions.len())])]));
+                    // branch.push(CodelineBranchLog::Codeblocks(vec![instruction!(Enac::FoxSleeping, [(Int, instructions.len())])]));
+                    let add = instructions.len();
+                    if sum < max_codeblocks {
+                        if sum + add >= max_codeblocks { // Transition Period
+                            let mut new_instructions = instructions.clone();
+                            let old_instructions = new_instructions.split_off(instructions.len() - max_codeblocks);
+                            old_branch_accumulate.push(CodelineBranchLog::Codeblocks(old_instructions));
+                            new_branch_accumulate.push(CodelineBranchLog::Codeblocks(new_instructions));
+                        } else {
+                            old_branch_accumulate.push(log.clone());
+                        }
+                    } else {
+                        new_branch_accumulate.push(log.clone());
+                    }
+
+                    sum += add;
                 },
                 CodelineBranchLog::Branch(log_branch_ind) => {
-                    let log_branch = &branches[log_branch_ind];
-                    dbg!(log_branch);
-                    branch.push(CodelineBranchLog::Codeblocks(vec![instruction!(Enac::Tame, [(Int, log_branch_ind), (Int, log_branch.instructions(&branches).len())])]));
+                    let log_branch = &branches[*log_branch_ind];
+                    let add = log_branch.instructions(&branches).len() + 2;
+                    if sum < max_codeblocks {
+                        if sum + add >= max_codeblocks { // Transition Period
+                            new_branch_accumulate.push(log.clone());
+                        } else {
+                            old_branch_accumulate.push(log.clone());
+                        }
+                    } else {
+                        new_branch_accumulate.push(log.clone());
+                    }
+                    sum += add;
+                    // dbg!(log_branch);
+                    // branch.push(CodelineBranchLog::Codeblocks(vec![instruction!(Enac::Tame, [(Int, log_branch_ind), (Int, log_branch.instructions(&branches).len())])]));
                 },
             }
+            if sum >= max_codeblocks {
+                break;
+            }
+        };
+        if sum >= max_codeblocks {
+            // Awful code ahead:
+            branch.clear();
+            for b in old_branch_accumulate {
+                branch.push(b)
+            }
+            *id += 1;
+            branch.push(CodelineBranchLog::Codeblocks(vec![instruction!(Plac::ResourcePack, [(Int, *id)])]));
+            let mut codeline = Codeline::from_bin(DFBin::from_instructions(vec![instruction!(Plev::PackDecline, [(Int, *id)])]))?;
+            codeline.branch_list = branches.clone();
+            codeline.root_branch = new_branch_accumulate;
+            buffer.push(codeline);
+            
         }
+        Ok(())
+        // branch.push(CodelineBranchLog::Codeblocks(vec![instruction!(Enac::FoxSleeping, [(Int, sum)])]));
         // for 
     }
 }
@@ -148,8 +234,8 @@ mod tests {
     #[test]
     pub fn optimize_from_file_test() {
         let name = "first";
-        let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\optimizer\examples\";
-        // let path = r"K:\Programming\GitHub\Esh\optimizer\examples\";
+        // let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\optimizer\examples\";
+        let path = r"K:\Programming\GitHub\Esh\optimizer\examples\";
 
         let file_bytes = fs::read(format!("{}{}.dfa", path, name)).expect("File should read");
         let mut compiler = Compiler::new(from_utf8(&file_bytes).expect("File should be valid utf-8"));
