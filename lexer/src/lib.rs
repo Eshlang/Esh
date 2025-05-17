@@ -1,10 +1,11 @@
 use std::{iter::Peekable, str::Chars};
 
 use errors::{LexerError, LexerErrorKind};
-use types::{Keyword, Position, Range, Token, TokenType};
+use types::{Keyword, Position, Range, Token, TokenType, ValuedKeyword};
 
 mod errors;
 pub mod types;
+pub use compiler;
 
 #[derive(Debug)]
 pub struct Lexer<'a> {
@@ -17,6 +18,12 @@ pub struct Lexer<'a> {
     /// [Self.position.line](Position::line) right away. This way, we can have the position start
     /// at 0 and not 1
     started_line: bool,
+
+    /// Used to check if the dfasm keyword has been met.
+    dfasm_keyword_met: bool,
+    
+    /// Used to denote whether the lexer is currently inside inline dfasm.
+    inline_dfasm: bool,
 }
 
 impl<'a> Lexer<'a> {
@@ -28,6 +35,8 @@ impl<'a> Lexer<'a> {
             // matter
             current_char: '\0',
             started_line: true,
+            dfasm_keyword_met: false,
+            inline_dfasm: false,
         }
     }
 
@@ -99,6 +108,10 @@ impl<'a> Lexer<'a> {
                 end: self.position.clone(),
             },
             token_type: match Self::keyword_from_ident(&ident) {
+                Some(Keyword::DFASM) => {
+                    self.dfasm_keyword_met = true;
+                    TokenType::Keyword(Keyword::DFASM)
+                }
                 Some(keyword) => TokenType::Keyword(keyword),
                 None => TokenType::Ident(ident),
             },
@@ -108,16 +121,22 @@ impl<'a> Lexer<'a> {
     fn keyword_from_ident(input: &str) -> Option<Keyword> {
         match input {
             "func" => Some(Keyword::Func),
-            "if" => Some(Keyword::If),
-            "else" => Some(Keyword::Else),
-            "return" => Some(Keyword::Return),
-            "break" => Some(Keyword::Break),
-            "true" => Some(Keyword::True),
-            "false" => Some(Keyword::False),
             "struct" => Some(Keyword::Struct),
             "domain" => Some(Keyword::Domain),
+
+            "if" => Some(Keyword::If),
+            "else" => Some(Keyword::Else),
             "for" => Some(Keyword::For),
             "while" => Some(Keyword::While),
+            
+            "return" => Some(Keyword::Return),
+            "break" => Some(Keyword::Break),
+
+            "dfasm" => Some(Keyword::DFASM),
+
+            "true" => Some(Keyword::Value(ValuedKeyword::True)),
+            "self" => Some(Keyword::Value(ValuedKeyword::SelfIdentity)),
+            "false" => Some(Keyword::Value(ValuedKeyword::False)),
 
             _ => None,
         }
@@ -243,12 +262,41 @@ impl<'a> Lexer<'a> {
             })
         }
     }
+
+    fn inline_dfasm(&mut self) -> Token {
+        let mut input_string = String::new();
+        let start_pos = self.position.clone();
+        input_string += &self.input.clone().into_iter().collect::<String>();
+        let mut parser = compiler::parser::Parser::new(&input_string);
+        loop {
+            let compiler::parser::parser::ParsedLine::Parsed(tokens, errors) = parser.parse_line() else {
+                break;
+            };
+        }
+        let mut dfasm_string = String::new();
+        for _i in 2..parser.total_traverse {
+            dfasm_string.push(self.next_char().unwrap());
+        };
+        let mut input_string = String::new();
+        input_string += &self.input.clone().into_iter().collect::<String>();
+        Token {
+            token_type: TokenType::DFASM(dfasm_string),
+            range: Range {
+                start: start_pos,
+                end: self.position.clone(),
+            },
+        }
+    }
 }
 
 impl<'a> Iterator for Lexer<'a> {
     type Item = Result<Token, LexerError>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if self.inline_dfasm {
+            self.inline_dfasm = false;
+            return Some(Ok(self.inline_dfasm()))
+        }
         self.skip_whitespace();
 
         let char = self.next_char()?;
@@ -260,10 +308,16 @@ impl<'a> Iterator for Lexer<'a> {
             // Single character tokens
             '(' => Some(Ok(self.type_to_token(TokenType::LParen))),
             ')' => Some(Ok(self.type_to_token(TokenType::RParen))),
-            '{' => Some(Ok(self.type_to_token(TokenType::LBrace))),
+            '{' => {
+                if self.dfasm_keyword_met {
+                    self.inline_dfasm = true;
+                    self.dfasm_keyword_met = false;
+                }
+                Some(Ok(self.type_to_token(TokenType::LBrace)))
+            },
             '}' => Some(Ok(self.type_to_token(TokenType::RBrace))),
-            '[' => Some(Ok(self.type_to_token(TokenType::RBracket))),
-            ']' => Some(Ok(self.type_to_token(TokenType::LBracket))),
+            '[' => Some(Ok(self.type_to_token(TokenType::LBracket))),
+            ']' => Some(Ok(self.type_to_token(TokenType::RBracket))),
             '.' => Some(Ok(self.type_to_token(TokenType::Dot))),
             ',' => Some(Ok(self.type_to_token(TokenType::Comma))),
             ';' => Some(Ok(self.type_to_token(TokenType::Semicolon))),

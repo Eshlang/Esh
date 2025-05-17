@@ -1,0 +1,33 @@
+seg func
+    df _0 "__main.hello"
+    df _15 "__main.hello2"
+seg param
+    dp var _1 "_rvp_hell" #scope:line
+    dp param _2 "_rvp_hell"
+    dp var _3 "_rvp_add" #scope:line
+    dp param _4 "_rvp_add"
+    dp var _5 "_rvl_wowvar" #scope:line
+    dp var _6 "_xl1" #scope:line
+    dp num _7 6
+    dp num _8 3
+    dp var _9 "_xl2" #scope:line
+    dp num _10 4
+    dp var _11 "_xl3" #scope:line
+    dp num _12 1
+    dp num _13 2
+    dp var _14 "_xl0" #scope:line
+    dp str _16 "_wow"
+    dp str _17 "g"
+    dp str _18 "b"
+seg code
+    func _0 _2, _4
+        var add _6, _8, _7
+        var add _11, _13, _12
+        var mul _9, _11, _10
+        var add _5, _9, _6
+        var add _5, _5, _3
+    func _15 _2, _4
+        var string _9, _18, _17
+        var repeatString _6, _9, _10
+        var string _5, _6, _16
+        var string _5, _5, _3

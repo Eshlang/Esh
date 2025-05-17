@@ -1,0 +1,30 @@
+seg func
+    df _2 "__2#main.Player.sendMessage"
+    df _7 "__4#main.Player.from_name"
+    df _12 "__6#main.Game.hello"
+seg param
+    dp var _0 "_c_void" #scope:global
+    dp var _1 "self" #scope:line
+    dp param _3 "self" #type:var
+    dp var _4 "_rvp_message" #scope:line
+    dp param _5 "_rvp_message"
+    dp var _6 "_xl0" #scope:line
+    dp var _8 "fr" #scope:line
+    dp param _9 "fr" #type:var
+    dp var _10 "_rvp_name" #scope:line
+    dp param _11 "_rvp_name"
+    dp var _13 "_rvl_looser" #scope:line
+    dp str _14 "LooserRIP"
+    dp str _15 "Hello!!!"
+seg code
+    func _2 _3, _5
+        var getlistvalue _6, _1, 1
+        sel playername _6
+        plac sendmessage _4
+        sel reset
+    func _7 _9, _11
+        var createlist _8, _10
+        ctrl return
+    func _12
+        call _7 _13, _14
+        call _2 _13, _15

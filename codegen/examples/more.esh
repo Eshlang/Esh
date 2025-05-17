@@ -1,0 +1,91 @@
+
+domain yo {
+    func hello(string hell, num add) -> string {
+        num wowvar;
+        wowvar = ((2 + 1) * 4) + (3 + 6);
+        if (wowvar == 4 || (wowvar == 5 && add < 3)) {
+            add = 123;
+            num testvar = 5;
+            testvar = testvar + 999;
+            return "aa" * testvar;
+        } else {
+            wowvar = wowvar + (add * 152);
+        }
+        num testvar = 17;
+        testvar = testvar + 888;
+        wowvar = wowvar + add;
+        return "g" * wowvar;
+    }
+    domain hey {
+        func blablabla(string hell, string add) {
+            string wowvar = "wow";
+            wowvar = wowvar + hell;
+            wowvar = hello("hey" + hello("whaaat" + "hey", 15), 10) + "hello";
+        }
+    }
+    func wtf(Player pl) -> Inventory {
+        Player hey = Player {
+            uuid = "hello";
+            hp = 0;
+            inv = Inventory {
+                item_amount = 0;
+            };
+        };
+        hey.inv.item_amount = pl.inv.item_amount + 10;
+        while (hey.hp < 10) {
+            hey.hp = hey.hp + 1;
+        }
+        return hey.inv;
+    }
+    struct Player {
+        string uuid;
+        num hp;
+        Inventory inv;
+
+        func hello() -> string {
+            return "hey";
+        }
+    }
+    struct Inventory {
+        num item_amount;
+    }
+}
+
+func randomfunc(string hell, string add) {
+    string wowvar = "wow";
+    wowvar = wowvar + hell;
+    yo.hey.blablabla("wowwww", "hey");
+    wowvar = yo.hello("hey", 5);
+}
+
+struct Player {
+    public string uuid;
+
+    public int hp -> {
+        get() -> int {
+            int result = 0;
+            dfasm(uuid, result) {
+                sel playername %uuid%
+                dp gval _playerhp #type:hp #target:selection
+                set %result%, _playerhp
+                sel reset
+            }
+            return result;
+        }
+        set(int value) {
+            dfasm(uuid, value) {
+                sel playername %uuid%
+                plac sethp %value%
+                sel reset
+            }
+        }
+    }
+
+    public func SendMessage(string message) {
+        dfasm(uuid, message) {
+            sel playername %uuid%
+            plac sendmessage %message%
+            sel reset
+        }
+    }
+}

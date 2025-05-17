@@ -1,0 +1,11 @@
+[package]
+name = "codegen"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+esh_parser = { path = "../esh_parser" }
+lexer = { path = "../lexer" }
+dfbin = { path = "../../dfasm/dfbin"}
+decompiler = { path = "../../dfasm/decompiler"}
+thiserror = "1.0.65"

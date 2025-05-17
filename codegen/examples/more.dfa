@@ -1,0 +1,139 @@
+seg func
+    df _0 "__2#main.yo.hello"
+    df _27 "__4#main.yo.hey.blablabla"
+    df _34 "__5#main.yo.wtf"
+    df _39 "__7#main.yo.Player.hello"
+    df _42 "__9#main.randomfunc"
+seg param
+    dp var _1 "fr" #scope:line
+    dp param _2 "fr" #type:var
+    dp var _3 "_rvp_hell" #scope:line
+    dp param _4 "_rvp_hell"
+    dp var _5 "_rvp_add" #scope:line
+    dp param _6 "_rvp_add"
+    dp var _7 "_rvl_wowvar" #scope:line
+    dp var _8 "_xl0" #scope:line
+    dp num _9 6
+    dp num _10 3
+    dp var _11 "_xl1" #scope:line
+    dp num _12 4
+    dp var _13 "_xl2" #scope:line
+    dp num _14 1
+    dp num _15 2
+    dp var _16 "_xl3" #scope:line
+    dp num _17 5
+    dp var _18 "_xl4" #scope:line
+    dp num _19 123
+    dp var _20 "_rvl_testvar" #scope:line
+    dp num _21 999
+    dp str _22 "aa"
+    dp num _23 152
+    dp num _24 17
+    dp num _25 888
+    dp str _26 "g"
+    dp str _28 "wow"
+    dp str _29 "hello"
+    dp str _30 "hey"
+    dp str _31 "whaaat"
+    dp num _32 15
+    dp num _33 10
+    dp var _35 "_rvp_pl" #scope:line
+    dp param _36 "_rvp_pl"
+    dp var _37 "_rvl_hey" #scope:line
+    dp num _38 0
+    dp var _40 "self_struct" #scope:line
+    dp param _41 "self_struct" #type:var
+    dp var _43 "_c_void" #scope:global
+    dp str _44 "wowwww"
+seg code
+    func _0 _2, _4, _6
+        var add _8, _10, _9
+        var add _13, _15, _14
+        var mul _11, _13, _12
+        var add _7, _11, _8
+        varif lower _5, _10
+            var set _13, 1
+        else
+            var set _13, 0
+        endif
+        varif eq _7, _17
+            var set _16, 1
+        else
+            var set _16, 0
+        endif
+        var bitwise _11, _16, _13 #operator:and
+        varif eq _7, _12
+            var set _18, 1
+        else
+            var set _18, 0
+        endif
+        var bitwise _8, _18, _11 #operator:or
+        varif eq _8, 1
+            var set _5, _19
+            var set _20, _17
+            var add _20, _20, _21
+            var repeatstring _1, _22, _20
+            ctrl return
+        else
+            var mul _8, _5, _23
+            var add _7, _7, _8
+        endif
+        var set _20, _24
+        var add _20, _20, _25
+        var add _7, _7, _5
+        var repeatstring _1, _26, _7
+        ctrl return
+    func _27 _4, _6
+        var set _7, _28
+        var string _7, _7, _3
+        var string _16, _31, _30
+        var set _18, _32
+        call _0 _13, _16, _18
+        var string _11, _30, _13
+        var set _13, _33
+        call _0 _8, _11, _13
+        var string _7, _8, _29
+    func _34 _2, _36
+        var set _8, _29
+        var set _11, _38
+        var set _16, _38
+        var createlist _13, _16
+        var createlist _37, _8, _11, _13
+        var set _11, _35
+        var getlistvalue _11, _11, 3
+        var getlistvalue _11, _11, 1
+        var add _8, _11, _33
+        var getlistvalue _11, _37, 3
+        var setlistvalue _11, 1, _8
+        var setlistvalue _37, 3, _11
+        rep forever
+            var set _11, _37
+            var getlistvalue _11, _11, 2
+            varif lower _11, _33
+                var set _8, 1
+            else
+                var set _8, 0
+            endif
+            varif eq _8, 1
+                ctrl stoprepeat
+            endif
+            var set _11, _37
+            var getlistvalue _11, _11, 2
+            var add _8, _11, _14
+            var setlistvalue _37, 2, _8
+        endrep
+        var set _1, _37
+        var getlistvalue _1, _1, 3
+        ctrl return
+    func _39 _41, _2
+        var set _1, _30
+        ctrl return
+    func _42 _4, _6
+        var set _7, _28
+        var string _7, _7, _3
+        var set _8, _44
+        var set _11, _30
+        call _27 _8, _11
+        var set _8, _30
+        var set _11, _17
+        call _0 _7, _8, _11

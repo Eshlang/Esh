@@ -1,0 +1,19 @@
+seg func
+    df _0 "__1#main.main"
+seg param
+    dp var _1 "_c_void" #scope:global
+    dp var _2 "_rvl_hello" #scope:line
+    dp num _3 150
+    dp num _4 200
+    dp num _5 100
+    dp var _6 "_rvl_hey" #scope:line
+    dp num _7 10
+    dp num _8 5
+seg code
+    func _0
+        var set _2, _3
+        var add _2, _4, _5
+        var add _6, _2, _7
+        var string _6, _6
+        var set _6, _8
+        var string _6, _8

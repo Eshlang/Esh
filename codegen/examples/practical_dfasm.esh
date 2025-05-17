@@ -1,0 +1,19 @@
+func inlineomg() {
+    num hey = 150;
+    num one = 50;
+    num two = 100;
+    
+    hey = dfasm(one, two) -> num {
+        var average @, @0, @1
+    };
+    test( dfasm(one, two) -> num {var average @, @0, @1}, 10);
+    test( dfasm(one, two) {}, 10);
+
+    dfasm(hey, one, two) -> num {
+        var average @0, @1, @2
+    }
+}
+
+func test(num hello, num wtf) {
+    hello = hello + wtf;
+}

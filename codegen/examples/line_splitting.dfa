@@ -1,0 +1,6 @@
+seg param
+    dp var myVar "myVar" #scope:line
+    dp var _0 "_0" #scope:line
+    dp var _1 "_1" #scope:line
+seg code
+    var createlist 

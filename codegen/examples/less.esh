@@ -1,0 +1,15 @@
+
+func wtf(Player pl) -> bool {
+    Player hey = Player {
+        uuid = "hello";
+        hp = 0;
+    };
+    while (hey.hp < 10 && true) {
+        hey.hp = hey.hp + 1;
+    }
+    return hey.hp < 10;
+}
+struct Player {
+    string uuid;
+    num hp;
+}

@@ -1,0 +1,38 @@
+seg func
+    df _3 "__1#main.hello2"
+    df _8 "__3#main.Grass.hey"
+seg param
+    dp var _0 "_dvg_0#main.total_crazy" #scope:global
+    dp var _1 "_dvg_2#main.Grass.endersaltz" #scope:global
+    dp var _2 "_c_void" #scope:global
+    dp var _4 "fr" #scope:line
+    dp param _5 "fr" #type:var
+    dp var _6 "_rvl_hello" #scope:line
+    dp var _7 "_xl0" #scope:line
+    dp str _9 "wow"
+    dp var _10 "_xl1" #scope:line
+    dp num _11 127
+    dp var _12 "_rvl_test" #scope:line
+    dp num _13 500
+    dp num _14 800
+    dp num _15 999
+    dp str _16 "hello"
+    dp str _17 "yeah"
+    dp num _18 5
+seg code
+    func _3 _5
+        call _8 _7
+        var createlist _10, _11
+        var createlist _6, _7, _9, _10
+        var set _12, _13
+        var getlistvalue _10, _6, 3
+        var setlistvalue _10, 1, _14
+        var setlistvalue _6, 3, _10
+        var set _1, _15
+        var set _0, _16
+        var getlistvalue _4, _6, 2
+        ctrl return
+    func _8 _5
+        var set _0, _17
+        var set _4, _18
+        ctrl return

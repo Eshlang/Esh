@@ -1,0 +1,20 @@
+seg func
+    df _2 "__2#main.Player.new"
+    df _7 "__4#main.main"
+seg param
+    dp var _0 "_dvg_1#main.Player.score" #scope:global
+    dp var _1 "_c_void" #scope:global
+    dp var _3 "fr" #scope:line
+    dp param _4 "fr" #type:var
+    dp str _5 "wow"
+    dp num _6 100
+    dp var _8 "_rvl_myPlayer" #scope:line
+    dp var _9 "_xl0" #scope:line
+seg code
+    func _2 _4
+        var createlist _3, _5, _6
+        ctrl return
+    func _7
+        call _2 _8
+        var getlistvalue _9, _8, 2
+        var add _0, _9, _6

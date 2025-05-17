@@ -1,0 +1,20 @@
+domain Player {
+    num score;
+
+    func new() -> Player {
+        return Player {
+            uuid = "wow";
+            score = 100;
+        };
+    }
+}
+
+struct Player {
+    string uuid;
+    num score;
+}
+
+func main() {
+    Player myPlayer = Player.new();
+    Player.score = myPlayer.score + 100;
+}

@@ -1,0 +1,24 @@
+struct Player {
+    string uuid;
+    func sendMessage(string message) {
+        dfasm(uuid, message) {
+            sel playername @0
+            plac sendmessage @1
+            sel reset
+        }
+    }
+}
+domain Player {
+    func from_name(string name) -> Player {
+        return Player {
+            uuid = name;
+        };
+    }
+}
+
+domain Game {
+    func hello() {
+        Player looser = Player.from_name("LooserRIP");
+        looser.sendMessage("Hello!!!");
+    }
+}

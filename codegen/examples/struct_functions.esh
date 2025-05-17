@@ -1,0 +1,29 @@
+num myTest;
+
+func test() {
+    Player myPlayer = Player {uuid = "LooserRIP"; hp = 200;};
+    myPlayer.hp = myPlayer.hp + 20;
+    myTest = myPlayer.kill();
+}
+
+struct Player {
+    string uuid;
+    num hp;
+
+    func kill() -> num {
+        hp = 0;
+        hp = hp + test();
+        return hp;
+    }
+
+    func test() -> num {
+        self.uuid = "hello";
+        return 10;
+    }
+
+    func ghostVersion() -> Player {
+        Player ghost = self;
+        ghost.kill();
+        return ghost;
+    }
+}

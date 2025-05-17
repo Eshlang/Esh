@@ -1,44 +1,46 @@
 use std::rc::Rc;
-use lexer::types::{Keyword, Token, TokenType};
+use lexer::types::{Keyword, Token, TokenType, ValuedKeyword};
 
 /// A syntactical node
 #[derive(Debug, PartialEq)]
 pub enum Node {
-    None,                                           // ()
-    Primary(Rc<Token>),                             // prim
-    ListDefinition(Rc<Node>),                       // ident[]
-    FunctionCall(Rc<Node>, Rc<Node>),               // ident(tuple/expr)
-    Access(Vec<Rc<Node>>),                          // ident.ident
-    Construct(Rc<Node>, Rc<Node>),                  // ident {block} 
-    Not(Rc<Node>),                                  // !expr
-    Negative(Rc<Node>),                             // -expr
-    Product(Rc<Node>, Rc<Node>),                    // expr * expr
-    Quotient(Rc<Node>, Rc<Node>),                   // expr / expr
-    Modulo(Rc<Node>, Rc<Node>),                     // expr % expr
-    Sum(Rc<Node>, Rc<Node>),                        // expr + expr
-    Difference(Rc<Node>, Rc<Node>),                 // expr - expr
-    LessThan(Rc<Node>, Rc<Node>),                   // expr < expr
-    GreaterThan(Rc<Node>, Rc<Node>),                // expr > expr
-    LessThanOrEqualTo(Rc<Node>, Rc<Node>),          // expr <= expr
-    GreaterThanOrEqualTo(Rc<Node>, Rc<Node>),       // expr >= expr
-    Tuple(Vec<Rc<Node>>),                           // (decl/expr, decl/expr, decl/expr)
-    Equal(Rc<Node>, Rc<Node>),                      // expr == expr
-    NotEqual(Rc<Node>, Rc<Node>),                   // expr != expr
-    And(Rc<Node>, Rc<Node>),                        // expr && expr
-    Or(Rc<Node>, Rc<Node>),                         // expr || expr
-    List(Vec<Rc<Node>>),                            // [expr, expr, expr]
-    Index(Rc<Node>, Rc<Node>),                      // ident[expr]
-    Declaration(Rc<Node>, Rc<Node>),                // ident ident
-    Break,                                          // break;
-    Return(Rc<Node>),                               // return expr;
-    Assignment(Rc<Node>, Rc<Node>),                 // decl/ident = expr;
-    If(Rc<Node>, Rc<Node>),                         // if cond {block}
-    Else(Rc<Node>, Rc<Node>),                       // stmt else {block}
-    While(Rc<Node>, Rc<Node>),                      // while cond {block}
-    Func(Rc<Node>, Rc<Node>, Rc<Node>, Rc<Node>),   // func ident (tuple/decl) -> tuple/ident {block}
-    Struct(Rc<Node>, Rc<Node>),                     // struct ident {block}
-    Domain(Rc<Node>, Rc<Node>),                     // domain ident {block}
-    Block(Vec<Rc<Node>>),                           // stmt; stmt; stmt;
+    None,                                                       // ()
+    Primary(Rc<Token>),                                         // 0
+    FunctionCall(Rc<Node>, Rc<Node>),                           // ident(tuple/expr)
+    Access(Rc<Node>, Rc<Node>),                                 // ident.ident
+    Construct(Rc<Node>, Rc<Node>),                              // ident {block} 
+    Not(Rc<Node>),                                              // !expr
+    Negative(Rc<Node>),                                         // -expr
+    Product(Rc<Node>, Rc<Node>),                                // expr * expr
+    Quotient(Rc<Node>, Rc<Node>),                               // expr / expr
+    Modulo(Rc<Node>, Rc<Node>),                                 // expr % expr
+    Sum(Rc<Node>, Rc<Node>),                                    // expr + expr
+    Difference(Rc<Node>, Rc<Node>),                             // expr - expr
+    LessThan(Rc<Node>, Rc<Node>),                               // expr < expr
+    GreaterThan(Rc<Node>, Rc<Node>),                            // expr > expr
+    LessThanOrEqualTo(Rc<Node>, Rc<Node>),                      // expr <= expr
+    GreaterThanOrEqualTo(Rc<Node>, Rc<Node>),                   // expr >= expr
+    Tuple(Vec<Rc<Node>>),                                       // (decl/expr, decl/expr, decl/expr)
+    Equal(Rc<Node>, Rc<Node>),                                  // expr == expr
+    NotEqual(Rc<Node>, Rc<Node>),                               // expr != expr
+    And(Rc<Node>, Rc<Node>),                                    // expr && expr
+    Or(Rc<Node>, Rc<Node>),                                     // expr || expr
+    ListCall(Rc<Node>, Rc<Node>),                               // ident[expr]
+    List(Vec<Rc<Node>>),                                        // [expr, expr, expr]
+    Vector(Rc<Node>, Rc<Node>, Rc<Node>),                       // <expr, expr, expr>
+    Location(Rc<Node>, Rc<Node>, Rc<Node>, Rc<Node>, Rc<Node>), // <expr, expr, expr, expr, expr>
+    Declaration(Rc<Node>, Rc<Node>),                            // ident ident
+    Break,                                                      // break;
+    Return(Rc<Node>),                                           // return expr;
+    Assignment(Rc<Node>, Rc<Node>),                             // decl/ident = expr;
+    If(Rc<Node>, Rc<Node>),                                     // if cond {block}
+    Else(Rc<Node>, Rc<Node>),                                   // stmt else {block}
+    While(Rc<Node>, Rc<Node>),                                  // while cond {block}
+    Func(Rc<Node>, Rc<Node>, Rc<Node>, Rc<Node>),               // func ident (tuple/decl) -> tuple/ident {block}
+    Struct(Rc<Node>, Rc<Node>),                                 // struct ident {block}
+    Domain(Rc<Node>, Rc<Node>),                                 // domain ident {block}
+    Block(Vec<Rc<Node>>),                                       // stmt; stmt; stmt;
+    DFASM(Rc<Node>, Rc<Node>, Rc<Node>)                         // dfasm(tuple/ident) -> type ident {dfasm block}
 }
 
 /// A parser error
@@ -51,6 +53,7 @@ pub enum ParserError {
     MissingParenthesis(Rc<Token>),  // Expected opening/closing parenthesis
     MissingBracket(Rc<Token>),      // Expected opening/closing bracket
     MissingBrace(Rc<Token>),        // Expected opening/closing brace
+    MissingAngleBracket(Rc<Token>), // Expected opening/closing angle bracket
 }
 
 /// Returns a [ParserError] if [self.curr()](Parser::curr()) does not match the input.
@@ -131,7 +134,7 @@ impl<'a> Parser<'a> {
     /// Returns the current statement
     pub(crate) fn statement(&mut self) -> Result<Node, ParserError> {
         match self.curr().token_type {
-            TokenType::Ident(_) => {
+            TokenType::Ident(_) | TokenType::Keyword(Keyword::Value(_)) => {
                 let expr = self.assignment();
                 expect!(self, TokenType::Semicolon);
                 self.advance();
@@ -148,6 +151,9 @@ impl<'a> Parser<'a> {
             },
             TokenType::Keyword(Keyword::If) => {
                 self.if_else_block()
+            },
+            TokenType::Keyword(Keyword::DFASM) => {
+                self.inline_dfasm_block()
             },
             TokenType::Keyword(Keyword::While) => {
                 self.while_block()
@@ -174,7 +180,7 @@ impl<'a> Parser<'a> {
         let expr = Node::Struct(
             {  // Struct name
                 self.advance();
-                expect!(self, TokenType::Ident(_));
+                expect!(self, TokenType::Ident(_) | TokenType::Keyword(Keyword::Value(_)));
                 Rc::new(self.ident()?)
             },
             {  // Struct body
@@ -194,7 +200,7 @@ impl<'a> Parser<'a> {
         let expr = Node::Domain(
             {  // Domain name
                 self.advance();
-                expect!(self, TokenType::Ident(_));
+                expect!(self, TokenType::Ident(_) | TokenType::Keyword(Keyword::Value(_)));
                 Rc::new(self.ident()?)
             },
             {  // Domain body
@@ -214,7 +220,7 @@ impl<'a> Parser<'a> {
         let expr = Node::Func(
             {  // Function name
                 self.advance();
-                expect!(self, TokenType::Ident(_));
+                expect!(self, TokenType::Ident(_) | TokenType::Keyword(Keyword::Value(_)));
                 Rc::new(self.ident()?)
             },
             {  // Function parameters
@@ -226,7 +232,7 @@ impl<'a> Parser<'a> {
                     TokenType::Arrow => {
                         self.advance();
                         match self.curr().token_type {
-                            TokenType::Ident(_) => Rc::new(self.ident()?),
+                            TokenType::Ident(_) | TokenType::Keyword(Keyword::Value(_)) => Rc::new(self.ident()?),
                             _ => Rc::new(self.primary()?)
                         }
                     },
@@ -277,6 +283,39 @@ impl<'a> Parser<'a> {
         return Ok(expr);
     }
 
+    pub(crate) fn inline_dfasm_block(&mut self) -> Result<Node, ParserError> {
+        expect!(self, TokenType::Keyword(Keyword::DFASM));
+        let expr = Node::DFASM(
+            {  // DFasm parameters
+                self.advance();
+                expect!(self, TokenType::LParen);
+                Rc::new(self.tuple()?)
+            },
+            {  // Return type
+                match self.curr().token_type {
+                    TokenType::Arrow => {
+                        self.advance();
+                        match self.curr().token_type {
+                            TokenType::Ident(_) | TokenType::Keyword(Keyword::Value(_)) => Rc::new(self.ident()?),
+                            _ => Rc::new(self.primary()?)
+                        }
+                    },
+                    _ => Rc::new(Node::None)
+                }
+            },
+            {  // Function body
+                expect!(self, TokenType::LBrace);
+                self.advance();
+                expect!(self, TokenType::DFASM(..));
+                Rc::new(Node::Primary(self.curr().clone()))
+            },
+        );
+        self.advance();
+        expect!(self, TokenType::RBrace);
+        self.advance();
+        return Ok(expr);
+    }
+
     /// Returns the current if statement
     pub(crate) fn if_block(&mut self) -> Result<Node, ParserError> {
         expect!(self, TokenType::Keyword(Keyword::If));
@@ -317,27 +356,27 @@ impl<'a> Parser<'a> {
 
     /// Returns the current assignment statement
     pub(crate) fn assignment(&mut self) -> Result<Node, ParserError> {
-        let mut expr = self.declaration()?;
-        if !self.is_at_end() && self.curr().token_type == TokenType::Assign {
-            self.advance();
-            expr = Node::Assignment(
-                Rc::new(expr),
-                Rc::new(self.expression()?),
-            );
+        let expr = self.declaration()?;
+        if self.is_at_end() || self.curr().token_type != TokenType::Assign {
+            return Ok(expr);
         }
-        return Ok(expr);
+        self.advance();
+        return Ok(Node::Assignment(
+            Rc::new(expr),
+            Rc::new(self.expression()?),
+        ));
     }
 
     /// Returns the current variable declaration
     pub(crate) fn declaration(&mut self) -> Result<Node, ParserError> {
         let start = self.current;
         match self.curr().token_type {
-            TokenType::Ident(_) => (),
-            _ => return self.expression()
+            TokenType::Ident(_) | TokenType::Keyword(Keyword::Value(_)) => (),
+            _ => return self.expression(),
         }
-        let expr = self.list_definition()?;
+        let expr = self.list_call()?;
         match self.curr().token_type {
-            TokenType::Ident(_) => return Ok(Node::Declaration(
+            TokenType::Ident(_) | TokenType::Keyword(Keyword::Value(_)) => return Ok(Node::Declaration(
                 Rc::new(expr),
                 Rc::new(self.ident()?),
             )),
@@ -346,39 +385,6 @@ impl<'a> Parser<'a> {
                 return self.expression();
             }
         }
-    }
-
-    /// Returns the current list definition
-    pub(crate) fn list_definition(&mut self) -> Result<Node, ParserError> {
-        let start = self.current;
-        let mut expr = self.ident()?;
-        if self.is_at_end() {
-            return Ok(expr)
-        }
-        match self.curr().token_type {
-            TokenType::Ident(_) => return Ok(expr),
-            TokenType::LBracket => (),
-            _ => {
-                self.current = start;
-                return self.expression();
-            }
-        }
-        while !self.is_at_end() {
-            match self.curr().token_type {
-                TokenType::LBracket => {
-                    self.advance();
-                    if let TokenType::RBracket = self.curr().token_type {
-                        expr = Node::ListDefinition(Rc::new(expr));
-                        self.advance();
-                    } else {
-                        self.current = start;
-                        return self.expression();
-                    }
-                },
-                _ => break
-            }
-        }
-        return Ok(expr);
     }
 
     /// Returns the current return statement
@@ -459,10 +465,16 @@ impl<'a> Parser<'a> {
                 },
                 TokenType::RAngle => {
                     self.advance();
-                    expr = Node::GreaterThan(
-                        Rc::new(expr), 
-                        Rc::new(self.term()?),
-                    )
+                    match self.curr().token_type {
+                        TokenType::Ident(_) | TokenType::Number(_) | TokenType::Dash | TokenType::Keyword(Keyword::Value(_)) => expr = Node::GreaterThan(
+                            Rc::new(expr), 
+                            Rc::new(self.term()?),
+                        ),
+                        _ => {
+                            self.current -= 1;
+                            break;
+                        }
+                    }
                 },
                 TokenType::LTEqual => {
                     self.advance();
@@ -552,25 +564,78 @@ impl<'a> Parser<'a> {
                 self.advance();
                 Ok(Node::Negative(Rc::new(self.unary()?)))
             },
-            _ => self.primary(),
+            _ => self.list_call(),
         }
+    }
+
+    /// Returns the current list call
+    pub(crate) fn list_call(&mut self) -> Result<Node, ParserError> {
+        match self.curr().token_type {
+            TokenType::Ident(_) => (),
+            _ => return self.primary(),
+        }
+        let start = self.current;
+        let mut expr = self.ident()?;
+        if self.is_at_end() {
+            return Ok(expr)
+        }
+        match self.curr().token_type {
+            TokenType::Ident(_) => return Ok(expr),
+            TokenType::LBracket => (),
+            _ => {
+                self.current = start;
+                return self.primary();
+            }
+        }
+        while !self.is_at_end() {
+            match &self.curr().token_type {
+                TokenType::LBracket => {
+                    self.advance();
+                    match self.curr().token_type {
+                        TokenType::RBracket => {
+                            expr = Node::ListCall(
+                                Rc::new(expr), 
+                                Rc::new(Node::None)
+                            );
+                            self.advance();
+                        }
+                        _ => {
+                            expr = Node::ListCall(
+                                Rc::new(expr), 
+                                Rc::new(self.expression()?)
+                            );
+                            if let TokenType::RBracket = self.curr().token_type {
+                                self.advance();
+                            } else {
+                                return Err(ParserError::MissingBracket(self.curr().clone()))
+                            }
+                        }
+                    }
+                },
+                _ => break
+            }
+        }
+        return Ok(expr);
     }
 
     /// Returns the current primary node
     pub(crate) fn primary(&mut self) -> Result<Node, ParserError> {
         match self.curr().token_type {
-            TokenType::Ident(_) => {
+            TokenType::Ident(_) | TokenType::Keyword(Keyword::Value(ValuedKeyword::SelfIdentity)) => {
                 self.construct()
             },
-            TokenType::Number(_) | TokenType::String(_) | TokenType::Keyword(Keyword::True) | TokenType::Keyword(Keyword::False) => {
+            TokenType::Number(_) | TokenType::String(_) | TokenType::Keyword(Keyword::Value(_)) => {
                 self.advance();
                 Ok(Node::Primary(self.prev().clone()))
+            },
+            TokenType::Keyword(Keyword::DFASM) => {
+                Ok(self.inline_dfasm_block()?)
             },
             TokenType::LParen => {
                 let start = self.current;
                 self.advance();
                 let expr = match self.curr().token_type {
-                    TokenType::Ident(_) => self.declaration()?,
+                    TokenType::Ident(_) | TokenType::Keyword(Keyword::Value(_)) => self.declaration()?,
                     TokenType::RParen => {
                         self.advance();
                         return Ok(Node::None)
@@ -591,7 +656,10 @@ impl<'a> Parser<'a> {
             },
             TokenType::LBracket => {
                 self.list()
-            }
+            },
+            TokenType::LAngle => {
+                self.vector()
+            },
             _ => {
                 Err(ParserError::InvalidToken(self.curr().clone()))
             }
@@ -600,7 +668,7 @@ impl<'a> Parser<'a> {
 
     /// Returns the current construct expression
     pub(crate) fn construct(&mut self) -> Result<Node, ParserError> {
-        let mut expr = self.index()?;
+        let mut expr = self.function_call()?;
         match self.curr().token_type {
             TokenType::LBrace => {
                 expr = Node::Construct(
@@ -618,74 +686,33 @@ impl<'a> Parser<'a> {
         return Ok(expr);
     }
 
-    /// Returns the current indexing operation
-    pub(crate) fn index(&mut self) -> Result<Node, ParserError> {
-        let mut expr = self.access()?;
-        while !self.is_at_end() {
-            match self.curr().token_type {
-                TokenType::LBracket => {
-                    self.advance();
-                    expr = Node::Index(
-                        Rc::new(expr),
-                        Rc::new(self.expression()?),
-                    );
-                    expect!(self, TokenType::RBracket);
-                    self.advance();
-                },
-                _ => break
-            }
-        }
-        return Ok(expr);
-    }
-
-    /// Returns the current access chain
-    pub(crate) fn access(&mut self) -> Result<Node, ParserError> {
-        let mut expr = self.function_call()?;
-        match self.curr().token_type {
-            TokenType::Dot => self.advance(),
-            _ => return Ok(expr),
-        }
-        let mut access = vec![Rc::new(expr)];
-        while !self.is_at_end() {
-            access.push(Rc::new(self.ident()?));
-            if self.is_at_end() {
-                break;
-            }
-            match self.curr().token_type {
-                TokenType::Dot => {
-                    self.advance();
-                },
-                TokenType::LParen => {
-                    expr = Node::FunctionCall(
-                        Rc::new(Node::Access(access)),
-                        Rc::new(self.tuple()?),
-                    );
-                    if self.is_at_end() {
-                        return Ok(expr)
-                    }
-                    match self.curr().token_type {
-                        TokenType::Dot => {
-                            access = vec![Rc::new(expr)];
-                            self.advance();
-                        },
-                        _ => return Ok(expr)
-                    }
-                },
-                _ => break
-            }
-        }
-        return Ok(Node::Access(access));
-    }
-
     /// Returns the current function call
     pub(crate) fn function_call(&mut self) -> Result<Node, ParserError> {
-        let mut expr = self.ident()?;
+        let mut expr = self.access()?;
         match self.curr().token_type {
             TokenType::LParen => expr = Node::FunctionCall(
                     Rc::new(expr),
                     Rc::new(self.tuple()?),
                 ),
             _ => ()
+        }
+        return Ok(expr);
+    }
+
+    /// Returns the current access chain
+    pub(crate) fn access(&mut self) -> Result<Node, ParserError> {
+        let mut expr = self.ident()?;
+        while !self.is_at_end() {
+            match self.curr().token_type {
+                TokenType::Dot => {
+                    self.advance();
+                    expr = Node::Access(
+                        Rc::new(expr), 
+                        Rc::new(self.ident()?),
+                    )
+                },
+                _ => break
+            }
         }
         return Ok(expr);
     }
@@ -738,9 +765,48 @@ impl<'a> Parser<'a> {
         return Ok(Node::List(block));
     }
 
+    /// Returns the current vector or location
+    pub(crate) fn vector(&mut self) -> Result<Node, ParserError> {
+        expect!(self, TokenType::LAngle);
+        self.advance();
+        let expr1 = self.expression()?;
+        expect!(self, TokenType::Comma);
+        self.advance();
+        let expr2 = self.expression()?;
+        expect!(self, TokenType::Comma);
+        self.advance();
+        let expr3 = self.expression()?;
+        match self.curr().token_type {
+            TokenType::RAngle =>  {
+                self.advance();
+                return Ok(Node::Vector(
+                    Rc::new(expr1), 
+                    Rc::new(expr2), 
+                    Rc::new(expr3),
+                ));
+            },
+            TokenType::Comma => (),
+            _ => return Err(ParserError::MissingAngleBracket(self.curr().clone()))
+        }
+        self.advance();
+        let expr4 = self.expression()?;
+        expect!(self, TokenType::Comma);
+        self.advance();
+        let expr5 = self.expression()?;
+        expect!(self, TokenType::RAngle);
+        self.advance();
+        return Ok(Node::Location(
+            Rc::new(expr1), 
+            Rc::new(expr2), 
+            Rc::new(expr3),
+            Rc::new(expr4), 
+            Rc::new(expr5),
+        ));
+    }
+
     /// Returns the current identifier
     pub(crate) fn ident(&mut self) -> Result<Node, ParserError> {
-        expect!(self, TokenType::Ident(_));
+        expect!(self, TokenType::Ident(_) | TokenType::Keyword(Keyword::Value(_)));
         self.advance();
         Ok(Node::Primary(self.prev().clone()))
     }

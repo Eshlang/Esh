@@ -1,0 +1,36 @@
+string total_crazy;
+
+func hello2() -> (string) {
+    Grass.Player hello = Grass.Player {
+        hey = Grass.hey();
+        wow = "wow";
+        inventory = Grass.Inventory {
+            items = 127;
+        };
+    };
+
+    num test = 500;
+    hello.inventory.items = 800;
+    Grass.endersaltz = 999;
+    total_crazy = "hello";
+
+    return hello.wow;
+}
+
+
+domain Grass {
+    num endersaltz;
+
+    func hey() -> num {
+        total_crazy = "yeah";
+        return 5;
+    }
+    struct Player {
+        num hey;
+        string wow;
+        Inventory inventory;
+    }
+    struct Inventory {
+        num items;
+    }
+}

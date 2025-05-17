@@ -42,6 +42,7 @@ impl Range {
 pub enum TokenType {
     Ident(String),
     String(String),
+    DFASM(String),
     Number(f64),
     // Comments probably don't need to contain what's in the comment, but I'll leave this for now
     Comment(String),
@@ -83,16 +84,27 @@ pub enum TokenType {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Keyword {
     Func,   // functions
+    Struct, // struct definition
+    Domain, // domain definition
+
     If,     // ifs
     Else,   // else
-    Return, // return
-    Break,  // break
-    True,   // true (boolean)
-    False,  // false (boolean)
-    Struct, // struct definition
     For,    // for loop
     While,    // while loop
-    Domain, // domain definition
+
+    Return, // return
+    Break,  // break
+
+    DFASM, // dfasm
+
+    Value(ValuedKeyword) // keywords with value, ex "true"
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ValuedKeyword {
+    True,   // true (boolean)
+    False,  // false (boolean)
+    SelfIdentity, // "self" identity
 }
 
 #[derive(Clone, Debug, PartialEq)]

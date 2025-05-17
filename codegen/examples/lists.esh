@@ -1,0 +1,29 @@
+num[] myList;
+string[Player] myMap;
+
+func test() {
+    myList = [1,2,3];
+    num hello = 15;
+    hello = myList[4 + 2];
+
+    myList[10] = hello;
+    Player myPlayer = Player {
+        uuid = "hello";
+        hp = 200;
+    };
+    myMap[myPlayer] = "wow";
+    hello = 100000;
+
+    myPlayer.uuid = myMap[myPlayer];
+}
+
+func new() {
+    string[] testList = [];
+    testList = [1,2,3];
+    testList = ["aa","bb","cc","dd",5,"ee"];
+}
+
+struct Player {
+    string uuid;
+    num hp;
+}
