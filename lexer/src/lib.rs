@@ -267,22 +267,18 @@ impl<'a> Lexer<'a> {
         let mut input_string = String::new();
         let start_pos = self.position.clone();
         input_string += &self.input.clone().into_iter().collect::<String>();
-        dbg!(&input_string);
         let mut parser = compiler::parser::Parser::new(&input_string);
         loop {
             let compiler::parser::parser::ParsedLine::Parsed(tokens, errors) = parser.parse_line() else {
                 break;
             };
         }
-        dbg!(&parser.total_traverse);
         let mut dfasm_string = String::new();
         for _i in 2..parser.total_traverse {
             dfasm_string.push(self.next_char().unwrap());
-            dbg!(_i, &dfasm_string);
         };
         let mut input_string = String::new();
         input_string += &self.input.clone().into_iter().collect::<String>();
-        dbg!(&input_string);
         Token {
             token_type: TokenType::DFASM(dfasm_string),
             range: Range {

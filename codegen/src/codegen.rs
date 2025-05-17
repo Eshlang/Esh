@@ -1594,7 +1594,7 @@ mod tests {
 
     #[test]
     pub fn decompile_from_file_test() {
-        let name = "practical_dfasm";
+        let name = "dfasm";
         // let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\codegen\examples\";
         let path = r"K:\Programming\GitHub\Esh\codegen\examples\";
 
