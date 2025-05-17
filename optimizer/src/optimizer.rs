@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use dfbin::{enums::{Instruction, ParameterValue}, instruction, Constants::Actions::{self, Plev, DP}, DFBin};
+use dfbin::{enums::{Instruction, Parameter, ParameterValue}, instruction, Constants::Actions::{self, Plev, DP}, DFBin};
 use crate::{buffer::{self, Buffer}, codeline::{Codeline, CodelineBranch, CodelineBranchLog, CodelineBranchType}, errors::OptimizerError, optimizer_settings::OptimizerSettings};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -117,7 +117,7 @@ impl Optimizer {
             id_offset += post_codevar_count - pre_codevar_count;
             let codeline = self.buffer.code_branches.get_mut(codeline_index).expect("Should be within list");
             'rebreak: loop {
-                if let Some(c) = Self::split_branch(&mut codeline.branch_list, &mut codeline.root_branch, max_codeblocks, 0, id+id_offset+1)? {
+                if let Some(c) = Self::split_branch(&mut codeline.branch_list, &mut codeline.root_branch, max_codeblocks, 0, id+id_offset+1, &codeline_vars)? {
                     id += 1;
                     new_codelines.push(c);
                     let mut func_name = "__e".to_string();
@@ -133,7 +133,7 @@ impl Optimizer {
                 for branch_ind in branches {
                     'rebreak: loop {
                         let mut branch = codeline.branch_list.get(branch_ind).expect("Should contain branch.").clone();
-                        if let Some(c) = Self::split_branch(&mut codeline.branch_list, &mut branch.body, max_codeblocks, depth, id+id_offset+1)? {
+                        if let Some(c) = Self::split_branch(&mut codeline.branch_list, &mut branch.body, max_codeblocks, depth, id+id_offset+1, &codeline_vars)? {
                             id += 1;
                             new_codelines.push(c);
                             let mut func_name = "__e".to_string();
@@ -254,7 +254,7 @@ impl Optimizer {
     // }
 
     /// This is used by ``.split_lines()`` - compacts a *branch* down to below the max size.
-    fn split_branch(branches: &mut Vec<CodelineBranch>, branch: &mut Vec<CodelineBranchLog>, true_max_codeblocks: usize, depth: usize, id: u32) -> Result<Option<Codeline>, OptimizerError> {
+    fn split_branch(branches: &mut Vec<CodelineBranch>, branch: &mut Vec<CodelineBranchLog>, true_max_codeblocks: usize, depth: usize, id: u32, codeline_vars: &Vec<(u32, u32)>) -> Result<Option<Codeline>, OptimizerError> {
         let mut sum = 0;
         let mut new_branch_accumulate = Vec::new();
         let mut old_branch_accumulate = Vec::new();
@@ -313,8 +313,15 @@ impl Optimizer {
                     }
                 }
             }
-            branch.push(CodelineBranchLog::Codeblocks(vec![instruction!(Call, [(Ident, id+1)])]));
-            let mut codeline = Codeline::from_bin(DFBin::from_instructions(vec![instruction!(Func, [(Ident, id+1)])]))?;
+            let mut call_instruction = instruction!(Call, [(Ident, id+1)]);
+            let mut func_instruction = instruction!(Func, [(Ident, id+1)]);
+            for codeline_var in codeline_vars {
+                call_instruction.params.push(Parameter::from_ident(codeline_var.0)); // Add the variable
+                func_instruction.params.push(Parameter::from_ident(codeline_var.1)); // Add the param
+            }
+
+            branch.push(CodelineBranchLog::Codeblocks(vec![call_instruction]));
+            let mut codeline = Codeline::from_bin(DFBin::from_instructions(vec![func_instruction]))?;
             codeline.branch_list = branches.clone();
             codeline.root_branch = new_branch_accumulate;
             return Ok(Some(codeline))

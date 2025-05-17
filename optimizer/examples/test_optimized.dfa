@@ -13,8 +13,8 @@ seg code
             var set _1, 1.2
             var set _1, 1.3
         endif
-        call _6
-    func _4
+        call _6 _1
+    func _4 _2
         var set _1, 9
         var set _1, 10
         var set _1, 11
@@ -23,18 +23,18 @@ seg code
         var set _1, 14
         var set _1, 15
         var set _1, 16
-    func _5
+    func _5 _2
         var set _1, 3
         var set _1, 4
         var set _1, 5
         var set _1, 6
         var set _1, 7
         var set _1, 8
-        call _4
-    func _6
+        call _4 _1
+    func _6 _2
         var set _1, 2
         varif eq _1, 2.1
             var set _1, 2.2
             var set _1, 2.3
         endif
-        call _5
+        call _5 _1
