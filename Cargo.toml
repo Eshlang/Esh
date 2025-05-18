@@ -4,5 +4,6 @@ members = [
 	"lexer",
 	"esh_parser",
 	"codegen",
-	"optimizer"
+	"optimizer",
+	"esh"
 ]

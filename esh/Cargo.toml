@@ -1,0 +1,20 @@
+[package]
+name = "esh"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+codegen = { path = "../codegen" }
+lexer = { path = "../lexer" }
+esh_parser = { path = "../esh_parser" }
+decompiler = { path = "../../dfasm/decompiler" }
+templater = { path = "../../dfasm/templater" }
+detemplater = { path = "../../dfasm/detemplater" }
+dfbin = { path = "../../dfasm/dfbin" }
+websocket = "0.27.1"
+clap = "4.5.38"
+
+[[bin]]
+name = "esh"
+test = false
+bench = false

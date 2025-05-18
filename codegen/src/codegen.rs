@@ -18,7 +18,7 @@ pub struct CodeGen {
     pub contexts: Vec<Rc<RefCell<Context>>>,
 
     current_id: usize,
-    buffer: CodeGenBuffer,
+    pub buffer: CodeGenBuffer,
     parents: Vec<usize>,
     runtime_vars: Vec<HashMap<String, RuntimeVariable>>,
     domain_vars: Vec<Vec<RuntimeVariable>>,
