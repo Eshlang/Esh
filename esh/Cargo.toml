@@ -7,6 +7,7 @@ edition = "2021"
 codegen = { path = "../codegen" }
 lexer = { path = "../lexer" }
 esh_parser = { path = "../esh_parser" }
+optimizer = { path = "../optimizer" }
 decompiler = { path = "../../dfasm/decompiler" }
 templater = { path = "../../dfasm/templater" }
 detemplater = { path = "../../dfasm/detemplater" }

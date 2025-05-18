@@ -1,0 +1,12 @@
+seg code
+    plev join
+        gmac setblock
+        gmac setregion
+        var setitemname
+        dp value _0 #type:eventblocklocation
+        gmac cancelevent
+        plev playertakedmg
+        plac giveitems
+        sel allplayers
+        
+        sel reset

@@ -115,7 +115,7 @@ impl Optimizer {
         let mut id: u32 = 0;
         let code_branches_len = self.buffer.code_branches.len();
         for codeline_index in 0..code_branches_len {
-            dbg!(format!("Codeline {:?}", codeline_index));
+            // dbg!(format!("Codeline {:?}", codeline_index));
             let pre_codevar_count: u32 = (self.buffer.func_buffer.len() + self.buffer.param_buffer.len()).try_into().expect("Amount of ids should be below a u32 limit.");
             let codeline_vars = self.get_codeline_vars(codeline_index);
             let post_codevar_count: u32 = (self.buffer.func_buffer.len() + self.buffer.param_buffer.len()).try_into().expect("Amount of ids should be below a u32 limit.");
@@ -173,7 +173,7 @@ impl Optimizer {
         loop {
             let Some(extension_ident) = extension_add.pop_front() else { break; };
             let Some(extension_ident) = self.extension_function_idents.get(&extension_ident) else { continue; };
-            dbg!(extension_ident);
+            // dbg!(extension_ident);
             self.buffer.code_branches[*extension_ident].nest_depth += 1;
             let mut hash_check = HashSet::new();
             for instruction_check_call in self.buffer.code_branches[*extension_ident].clone().to_bin().instructions() {
@@ -290,7 +290,7 @@ impl Optimizer {
 
     /// This is used by ``.split_lines()`` - compacts a *branch* down to below the max size.
     fn split_branch(branches: &mut Vec<CodelineBranch>, branch: &mut Vec<CodelineBranchLog>, true_max_codeblocks: usize, depth: usize, id: u32, codeline_vars: &Vec<(u32, u32)>) -> Result<Option<(Codeline, VecDeque<u32>)>, OptimizerError> {
-        dbg!(id, depth);
+        // dbg!(id, depth);
         let mut sum = 0;
         let mut new_branch_accumulate = Vec::new();
         let mut old_branch_accumulate = Vec::new();
@@ -328,7 +328,7 @@ impl Optimizer {
                     }
                     if sum < max_codeblocks {
                         if sum + add >= max_codeblocks { // Transition Period
-                            dbg!("transition period on branch!!", sum+add, sum);
+                            // dbg!("transition period on branch!!", sum+add, sum);
                             old_branch_accumulate.push(log.clone());
                         } else {
                             new_branch_accumulate.push(log.clone());

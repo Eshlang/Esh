@@ -57,19 +57,19 @@ impl Buffer {
 
     pub fn get_code_branches(&mut self) -> Result<(), OptimizerError> {
         for (codeline_ind, line) in self.code_lines.iter().enumerate() {
-            println!("\n\n\n(ASM) Codeline #{}\n------------------------------------------------\n{}\n------------------------------------------------", 
-                codeline_ind,
-                Decompiler::new(line.clone()).expect("Should decompile").decompile().expect("Should decompile"));
-                let codeline = Codeline::from_bin(line.clone())?;
+            // println!("\n\n\n(ASM) Codeline #{}\n------------------------------------------------\n{}\n------------------------------------------------", 
+            //     codeline_ind,
+            //     Decompiler::new(line.clone()).expect("Should decompile").decompile().expect("Should decompile"));
+            let codeline = Codeline::from_bin(line.clone())?;
             
-            println!("\n\n\n(Branches) Codeline #{}\n------------------------------------------------\n{}\n------------------------------------------------", 
-                codeline_ind,
-                Decompiler::new(codeline.clone().to_bin()).expect("Should decompile").decompile().expect("Should decompile"));
-            for (codeline_branch_ind, codeline_branch) in codeline.clone().branch_list.iter().enumerate() {
-                println!("\n\n\n(Branches) Codeline #{}, Branch #{}, ({:#?})\n------------------------------------------------\n{}\n------------------------------------------------", 
-                    codeline_ind, codeline_branch_ind, codeline_branch,
-                    Decompiler::new(codeline_branch.clone().instructions(&codeline.branch_list)).expect("Should decompile").decompile().expect("Should decompile"));
-            }
+            // println!("\n\n\n(Branches) Codeline #{}\n------------------------------------------------\n{}\n------------------------------------------------", 
+            //     codeline_ind,
+            //     Decompiler::new(codeline.clone().to_bin()).expect("Should decompile").decompile().expect("Should decompile"));
+            // for (codeline_branch_ind, codeline_branch) in codeline.clone().branch_list.iter().enumerate() {
+            //     // println!("\n\n\n(Branches) Codeline #{}, Branch #{}, ({:#?})\n------------------------------------------------\n{}\n------------------------------------------------", 
+            //     //     codeline_ind, codeline_branch_ind, codeline_branch,
+            //     //     Decompiler::new(codeline_branch.clone().instructions(&codeline.branch_list)).expect("Should decompile").decompile().expect("Should decompile"));
+            // }
             self.code_branches.push(codeline)
         }
         

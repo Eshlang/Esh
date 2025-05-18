@@ -1028,8 +1028,8 @@ impl CodeGen {
         });
     }
 
-    // Used internally by the ``generate_expression`` and ``generate_expression_inside`` functions, to generate the FINAL register in which
-    // the resulting calculation of *that* branch (not the overall expression) is stored.
+    /// Used internally by the ``generate_expression`` and ``generate_expression_inside`` functions, to generate the FINAL register in which
+    /// the resulting calculation of *that* branch (not the overall expression) is stored.
     fn generate_expression_allocate_register(&mut self, settings: &GenerateExpressionSettings, register_group: u64) -> u32 {
         if settings.generate_codeblocks == false {
             return self.buffer.constant_void();
@@ -1159,7 +1159,6 @@ impl CodeGen {
                                 )
                             }
                             ValuedKeyword::Event => {
-                                dbg!("WTF EVENT KEYWORD");
                                 let Some(event_context) = self.context_listening.get(&context) else {
                                     return CodegenError::err(node.clone(), ErrorRepr::EventInNonListenerCode);
                                 };
@@ -1172,7 +1171,6 @@ impl CodeGen {
                                 };
                                 let event_variable = self.buffer.use_variable("event", DP::Var::Scope::Line);
                                 trace = Some(CodegenTrace::root(event_variable));
-                                dbg!(event_struct_id, trace.clone(), event_variable);
                                 CodegenValue::new(
                                     event_variable,
                                     ValueType::Struct(event_struct_id)
@@ -1253,7 +1251,6 @@ impl CodeGen {
             Node::Access(accessed, access_field) => {
                 let s = settings.pass();
                 let accessed_expression: CodegenExpressionResult = self.generate_expression_inside(context, accessed, s.clone(), register_group)?.clone();
-                dbg!("@@@@@@@@@@@@@@@@@@@@@@@@@@", accessed.clone(), accessed_expression.clone(), s.clone());
                 let accessed_value = accessed_expression.value;
                 let access_field_ident = Self::get_primary_as_ident(access_field, ErrorRepr::ExpectedAccessableIdentifier)?;
 
@@ -1284,7 +1281,6 @@ impl CodeGen {
                             value.value_type = field_type;
                         } else if let Ok(func_id) = self.extract_definition_function(definition) {
                             drop(struct_context);
-                            dbg!("#####################", accessed_value.clone());
                             return Ok(CodegenExpressionResult::value(CodegenValue::comptime(self.buffer.constant_void(), ComptimeType::SelfFunction(func_id, accessed_value.ident))))
                         } else {
                             panic!("Invalid struct access found which *is* correctly looked up but is neither a field nor a function.");
@@ -1446,27 +1442,6 @@ impl CodeGen {
                     self.push_expression_parameter(&settings, Parameter::from_ident(value.ident));
                 }
             }
-            Node::Sum(l, r) => {
-                let register = self.generate_expression_allocate_register(&settings, register_group);
-                let l = self.generate_expression_inside(context, l, settings.pass(), register_group)?.value.clone();
-                let r = self.generate_expression_inside(context, r, settings.pass(), register_group)?.value.clone();
-                value.ident = register;
-                match (l.value_type, r.value_type) {
-                    (ValueType::Primitive(PrimitiveType::Number), ValueType::Primitive(PrimitiveType::Number)) => {
-                        self.push_expression_instruction(&settings, instruction!(
-                            Var::Add, [ (Ident, register), (Ident, l.ident), (Ident, r.ident) ]
-                        ));
-                        value.value_type = ValueType::Primitive(PrimitiveType::Number);
-                    }
-                    (ValueType::Primitive(PrimitiveType::String), ValueType::Primitive(PrimitiveType::String) | ValueType::Primitive(PrimitiveType::Number)) => {
-                        self.push_expression_instruction(&settings, instruction!(
-                            Var::String, [ (Ident, register), (Ident, l.ident), (Ident, r.ident) ]
-                        ));
-                        value.value_type = ValueType::Primitive(PrimitiveType::String);
-                    }
-                    _ => { return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion); }
-                }
-            }
             Node::DFASM(params, return_type, block) => {
                 let dfasm_group = self.buffer.allocate_line_register_group();
                 let register = self.generate_expression_allocate_register(&settings, register_group);
@@ -1499,6 +1474,66 @@ impl CodeGen {
                 value.value_type = return_type;
                 self.buffer.free_line_register_group(dfasm_group);
             }
+            Node::Sum(l, r) => {
+                let register = self.generate_expression_allocate_register(&settings, register_group);
+                let l = self.generate_expression_inside(context, l, settings.pass(), register_group)?.value.clone();
+                let r = self.generate_expression_inside(context, r, settings.pass(), register_group)?.value.clone();
+                value.ident = register;
+                match (l.value_type, r.value_type) {
+                    (ValueType::Primitive(PrimitiveType::Number), ValueType::Primitive(PrimitiveType::Number)) => {
+                        self.push_expression_instruction(&settings, instruction!(
+                            Var::Add, [ (Ident, register), (Ident, l.ident), (Ident, r.ident) ] ));
+                        value.value_type = ValueType::Primitive(PrimitiveType::Number);
+                    }
+                    (ValueType::Primitive(PrimitiveType::String), ValueType::Primitive(PrimitiveType::String) | ValueType::Primitive(PrimitiveType::Number)) => {
+                        self.push_expression_instruction(&settings, instruction!(
+                            Var::String, [ (Ident, register), (Ident, l.ident), (Ident, r.ident) ] ));
+                        value.value_type = ValueType::Primitive(PrimitiveType::String);
+                    }
+                    (ValueType::Primitive(PrimitiveType::Number), ValueType::Primitive(PrimitiveType::String)) => {
+                        self.push_expression_instruction(&settings, instruction!(
+                            Var::String, [ (Ident, register), (Ident, l.ident), (Ident, r.ident) ] ));
+                        value.value_type = ValueType::Primitive(PrimitiveType::String);
+                    }
+                    (ValueType::Primitive(PrimitiveType::Vector), ValueType::Primitive(PrimitiveType::Vector)) => {
+                        self.push_expression_instruction(&settings, instruction!(
+                            Var::AddVectors, [ (Ident, register), (Ident, l.ident), (Ident, r.ident) ] ));
+                        value.value_type = ValueType::Primitive(PrimitiveType::Vector);
+                    }
+                    (ValueType::Primitive(PrimitiveType::Location), ValueType::Primitive(PrimitiveType::Vector)) => {
+                        self.push_expression_instruction(&settings, instruction!(
+                            Var::ShiftOnVector, [ (Ident, register), (Ident, l.ident), (Ident, r.ident) ] ));
+                        value.value_type = ValueType::Primitive(PrimitiveType::Vector);
+                    }
+                    _ => { return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion); }
+                }
+            }
+            Node::Difference(l, r) => {
+                let register = self.generate_expression_allocate_register(&settings, register_group);
+                let l = self.generate_expression_inside(context, l, settings.pass(), register_group)?.value.clone();
+                let r = self.generate_expression_inside(context, r, settings.pass(), register_group)?.value.clone();
+                value.ident = register;
+                match (l.value_type, r.value_type) {
+                    (ValueType::Primitive(PrimitiveType::Number), ValueType::Primitive(PrimitiveType::Number)) => {
+                        self.push_expression_instruction(&settings, instruction!(
+                            Var::Sub, [ (Ident, register), (Ident, l.ident), (Ident, r.ident) ] ));
+                        value.value_type = ValueType::Primitive(PrimitiveType::Number);
+                    }
+                    (ValueType::Primitive(PrimitiveType::Vector), ValueType::Primitive(PrimitiveType::Vector)) => {
+                        self.push_expression_instruction(&settings, instruction!(
+                            Var::SubtractVectors, [ (Ident, register), (Ident, l.ident), (Ident, r.ident) ] ));
+                        value.value_type = ValueType::Primitive(PrimitiveType::Vector);
+                    }
+                    (ValueType::Primitive(PrimitiveType::Location), ValueType::Primitive(PrimitiveType::Vector)) => {
+                        self.push_expression_instruction(&settings, instruction!(
+                            Var::MultiplyVector, [ (Ident, register), (Ident, r.ident), (Int, -1) ] ));
+                        self.push_expression_instruction(&settings, instruction!(
+                            Var::ShiftOnVector, [ (Ident, register), (Ident, l.ident), (Ident, register) ] ));
+                        value.value_type = ValueType::Primitive(PrimitiveType::Vector);
+                    }
+                    _ => { return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion); }
+                }
+            }
             Node::Product(l, r) => {
                 let register = self.generate_expression_allocate_register(&settings, register_group);
                 let l = self.generate_expression_inside(context, l, settings.pass(), register_group)?.value.clone();
@@ -1507,15 +1542,184 @@ impl CodeGen {
                 match (l.value_type, r.value_type) {
                     (ValueType::Primitive(PrimitiveType::Number), ValueType::Primitive(PrimitiveType::Number)) => {
                         self.push_expression_instruction(&settings, instruction!(
-                            Var::Mul, [ (Ident, register), (Ident, l.ident), (Ident, r.ident) ]
-                        ));
+                            Var::Mul, [ (Ident, register), (Ident, l.ident), (Ident, r.ident) ] ));
                         value.value_type = ValueType::Primitive(PrimitiveType::Number);
                     }
                     (ValueType::Primitive(PrimitiveType::String), ValueType::Primitive(PrimitiveType::Number)) => {
                         self.push_expression_instruction(&settings, instruction!(
-                            Var::RepeatString, [ (Ident, register), (Ident, l.ident), (Ident, r.ident) ]
-                        ));
+                            Var::RepeatString, [ (Ident, register), (Ident, l.ident), (Ident, r.ident) ] ));
                         value.value_type = ValueType::Primitive(PrimitiveType::String);
+                    }
+                    (ValueType::Primitive(PrimitiveType::Vector), ValueType::Primitive(PrimitiveType::Number)) => {
+                        self.push_expression_instruction(&settings, instruction!(
+                            Var::MultiplyVector, [ (Ident, register), (Ident, l.ident), (Ident, r.ident) ] ));
+                        value.value_type = ValueType::Primitive(PrimitiveType::String);
+                    }
+                    _ => { return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion); }
+                }
+            }
+            Node::And(l, r) => {
+                let register = self.generate_expression_allocate_register(&settings, register_group);
+                let (l, r) = (self.generate_expression_inside(context, l, settings.pass(), register_group)?.value.clone(), self.generate_expression_inside(context, r, settings.pass(), register_group)?.value.clone());
+                value.ident = register;
+                match (l.value_type, r.value_type) {
+                    (ValueType::Primitive(PrimitiveType::Bool), ValueType::Primitive(PrimitiveType::Bool)) => {
+                        self.push_expression_instruction(&settings, instruction!(
+                            Var::Bitwise, [ (Ident, register), (Ident, l.ident), (Ident, r.ident) ], { Operator: AND } ));
+                        value.value_type = ValueType::Primitive(PrimitiveType::Bool);
+                    }
+                    _ => { return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion); }
+                }
+            }
+            Node::Or(l, r) => {
+                let register = self.generate_expression_allocate_register(&settings, register_group);
+                let (l, r) = (self.generate_expression_inside(context, l, settings.pass(), register_group)?.value.clone(), self.generate_expression_inside(context, r, settings.pass(), register_group)?.value.clone());
+                value.ident = register;
+                match (l.value_type, r.value_type) {
+                    (ValueType::Primitive(PrimitiveType::Bool), ValueType::Primitive(PrimitiveType::Bool)) => {
+                        self.push_expression_instruction(&settings, instruction!(
+                            Var::Bitwise, [ (Ident, register), (Ident, l.ident), (Ident, r.ident) ], { Operator: OR } ));
+                        value.value_type = ValueType::Primitive(PrimitiveType::Bool);
+                    }
+                    _ => { return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion); }
+                }
+            }
+            Node::Not(n) => {
+                let register = self.generate_expression_allocate_register(&settings, register_group);
+                let n = self.generate_expression_inside(context, n, settings.pass(), register_group)?.value.clone();
+                value.ident = register;
+                match n.value_type {
+                    ValueType::Primitive(PrimitiveType::Bool) => {
+                        self.push_expression_instruction(&settings, instruction!(
+                            Var::Dec, [ (Ident, register), (Int, 1), (Ident, n.ident) ]));
+                        value.value_type = ValueType::Primitive(PrimitiveType::Bool);
+                    }
+                    _ => { return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion); }
+                }
+            }
+            Node::Negative(n) => {
+                let register = self.generate_expression_allocate_register(&settings, register_group);
+                let n = self.generate_expression_inside(context, n, settings.pass(), register_group)?.value.clone();
+                value.ident = register;
+                match n.value_type {
+                    ValueType::Primitive(PrimitiveType::Number) => {
+                        self.push_expression_instruction(&settings, instruction!(
+                            Var::Sub, [ (Ident, register), (Int, 0), (Ident, n.ident) ]));
+                        value.value_type = ValueType::Primitive(PrimitiveType::Number);
+                    }
+                    ValueType::Primitive(PrimitiveType::Vector) => {
+                        self.push_expression_instruction(&settings, instruction!(
+                            Var::MultiplyVector, [ (Ident, register), (Ident, n.ident), (Int, -1) ]));
+                        value.value_type = ValueType::Primitive(PrimitiveType::Number);
+                    }
+                    _ => { return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion); }
+                }
+            }
+            Node::Equal(l, r) => {
+                let register = self.generate_expression_allocate_register(&settings, register_group);
+                let (l, r) = (self.generate_expression_inside(context, l, settings.pass(), register_group)?.value.clone(), self.generate_expression_inside(context, r, settings.pass(), register_group)?.value.clone());
+                value.ident = register;
+                if l.value_type != r.value_type {
+                    return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion);
+                }
+                self.push_expression_instruction(&settings, instruction!(
+                    Var::Set, [ (Ident, register), (Ident, 0) ] ));
+                self.push_expression_instruction(&settings, instruction!(
+                    Varif::Eq, [ (Ident, l.ident), (Ident, r.ident) ] ));
+                self.push_expression_instruction(&settings, instruction!(
+                    Var::Set, [ (Ident, register), (Ident, 1) ] ));
+                self.push_expression_instruction(&settings, instruction!(EndIf));
+                value.value_type = ValueType::Primitive(PrimitiveType::Bool);
+            }
+            Node::NotEqual(l, r) => {
+                let register = self.generate_expression_allocate_register(&settings, register_group);
+                let (l, r) = (self.generate_expression_inside(context, l, settings.pass(), register_group)?.value.clone(), self.generate_expression_inside(context, r, settings.pass(), register_group)?.value.clone());
+                value.ident = register;
+                if l.value_type != r.value_type {
+                    return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion);
+                }
+                self.push_expression_instruction(&settings, instruction!(
+                    Var::Set, [ (Ident, register), (Ident, 1) ] ));
+                self.push_expression_instruction(&settings, instruction!(
+                    Varif::Eq, [ (Ident, l.ident), (Ident, r.ident) ]));
+                self.push_expression_instruction(&settings, instruction!(
+                    Var::Set, [ (Ident, register), (Ident, 0) ] ));
+                self.push_expression_instruction(&settings, instruction!(EndIf));
+                value.value_type = ValueType::Primitive(PrimitiveType::Bool);
+            }
+            Node::LessThan(l, r) => {
+                let register = self.generate_expression_allocate_register(&settings, register_group);
+                let (l, r) = (self.generate_expression_inside(context, l, settings.pass(), register_group)?.value.clone(), self.generate_expression_inside(context, r, settings.pass(), register_group)?.value.clone());
+                value.ident = register;
+                if !matches!((l.value_type, r.value_type), (ValueType::Primitive(PrimitiveType::Number), ValueType::Primitive(PrimitiveType::Number))) {
+                    return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion);
+                }
+                self.push_expression_instruction(&settings, instruction!(
+                    Var::Set, [ (Ident, register), (Ident, 0) ] ));
+                self.push_expression_instruction(&settings, instruction!(
+                    Varif::Lower, [ (Ident, l.ident), (Ident, r.ident) ]));
+                self.push_expression_instruction(&settings, instruction!(
+                    Var::Set, [ (Ident, register), (Ident, 1) ] ));
+                self.push_expression_instruction(&settings, instruction!(EndIf));
+                value.value_type = ValueType::Primitive(PrimitiveType::Bool);
+            }
+            Node::GreaterThan(l, r) => {
+                let register = self.generate_expression_allocate_register(&settings, register_group);
+                let (l, r) = (self.generate_expression_inside(context, l, settings.pass(), register_group)?.value.clone(), self.generate_expression_inside(context, r, settings.pass(), register_group)?.value.clone());
+                value.ident = register;
+                if !matches!((l.value_type, r.value_type), (ValueType::Primitive(PrimitiveType::Number), ValueType::Primitive(PrimitiveType::Number))) {
+                    return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion);
+                }
+                self.push_expression_instruction(&settings, instruction!(
+                    Var::Set, [ (Ident, register), (Ident, 0) ] ));
+                self.push_expression_instruction(&settings, instruction!(
+                    Varif::Greater, [ (Ident, l.ident), (Ident, r.ident) ]));
+                self.push_expression_instruction(&settings, instruction!(
+                    Var::Set, [ (Ident, register), (Ident, 1) ] ));
+                self.push_expression_instruction(&settings, instruction!(EndIf));
+                value.value_type = ValueType::Primitive(PrimitiveType::Bool);
+            }
+            Node::LessThanOrEqualTo(l, r) => {
+                let register = self.generate_expression_allocate_register(&settings, register_group);
+                let (l, r) = (self.generate_expression_inside(context, l, settings.pass(), register_group)?.value.clone(), self.generate_expression_inside(context, r, settings.pass(), register_group)?.value.clone());
+                value.ident = register;
+                if !matches!((l.value_type, r.value_type), (ValueType::Primitive(PrimitiveType::Number), ValueType::Primitive(PrimitiveType::Number))) {
+                    return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion);
+                }
+                self.push_expression_instruction(&settings, instruction!(
+                    Var::Set, [ (Ident, register), (Ident, 0) ] ));
+                self.push_expression_instruction(&settings, instruction!(
+                    Varif::LowerEq, [ (Ident, l.ident), (Ident, r.ident) ]));
+                self.push_expression_instruction(&settings, instruction!(
+                    Var::Set, [ (Ident, register), (Ident, 1) ] ));
+                self.push_expression_instruction(&settings, instruction!(EndIf));
+                value.value_type = ValueType::Primitive(PrimitiveType::Bool);
+            }
+            Node::GreaterThanOrEqualTo(l, r) => {
+                let register = self.generate_expression_allocate_register(&settings, register_group);
+                let (l, r) = (self.generate_expression_inside(context, l, settings.pass(), register_group)?.value.clone(), self.generate_expression_inside(context, r, settings.pass(), register_group)?.value.clone());
+                value.ident = register;
+                if !matches!((l.value_type, r.value_type), (ValueType::Primitive(PrimitiveType::Number), ValueType::Primitive(PrimitiveType::Number))) {
+                    return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion);
+                }
+                self.push_expression_instruction(&settings, instruction!(
+                    Var::Set, [ (Ident, register), (Ident, 0) ] ));
+                self.push_expression_instruction(&settings, instruction!(
+                    Varif::GreaterEq, [ (Ident, l.ident), (Ident, r.ident) ]));
+                self.push_expression_instruction(&settings, instruction!(
+                    Var::Set, [ (Ident, register), (Ident, 1) ] ));
+                self.push_expression_instruction(&settings, instruction!(EndIf));
+                value.value_type = ValueType::Primitive(PrimitiveType::Bool);
+            }
+            Node::Quotient(l, r) => {
+                let register = self.generate_expression_allocate_register(&settings, register_group);
+                let (l, r) = (self.generate_expression_inside(context, l, settings.pass(), register_group)?.value.clone(), self.generate_expression_inside(context, r, settings.pass(), register_group)?.value.clone());
+                value.ident = register;
+                match (l.value_type, r.value_type) {
+                    (ValueType::Primitive(PrimitiveType::Number), ValueType::Primitive(PrimitiveType::Number)) => {
+                        self.push_expression_instruction(&settings, instruction!(
+                            Var::Div, [ (Ident, register), (Ident, l.ident), (Ident, r.ident) ] ));
+                        value.value_type = ValueType::Primitive(PrimitiveType::Number);
                     }
                     _ => { return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion); }
                 }
@@ -1582,7 +1786,6 @@ impl CodeGen {
                 return CodegenError::err(function_ident.clone(), ErrorRepr::CannotCallEventListener)
             },
         };
-        dbg!("66666666666666666666", struct_func_ident, return_ident, function_ident);
         if let Some(struct_func_ident) = struct_func_ident {
             call_instruction.params.push(Parameter::from_ident(struct_func_ident));
         }
@@ -1598,9 +1801,7 @@ impl CodeGen {
             return CodegenError::err(function_params.clone(), ErrorRepr::ExpectedFunctionParameter)
         }
         for (param, param_field) in params.into_iter().zip(func_fields) {
-            dbg!(param.clone(), param_field.clone());
             let param_expression = self.generate_expression(context, &param, GenerateExpressionSettings::parameter(call_func_reg_group).expect_type(&param_field.field_type))?;
-            dbg!(param_expression.clone());
             call_instruction.params.push(Parameter::from_ident(param_expression.value.ident));
         }
         self.buffer.code_buffer.push_instruction(call_instruction);
@@ -1827,7 +2028,7 @@ mod tests {
         //##println!("LEXER TOKENS\n----------------------\n{:#?}\n----------------------", lexer_tokens);
         let mut parser = Parser::new(lexer_tokens.as_slice());
         let parser_tree = Rc::new(parser.parse().expect("Parser statement block should unwrap"));
-        println!("PARSER TREE\n----------------------\n{:#?}\n----------------------", parser_tree);
+        // println!("PARSER TREE\n----------------------\n{:#?}\n----------------------", parser_tree);
         
         let mut codegen = CodeGen::new();
         codegen.codegen_from_node(parser_tree.clone()).expect("Codegen should generate");
