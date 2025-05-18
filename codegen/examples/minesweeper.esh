@@ -251,18 +251,19 @@ domain Minesweeper {
             tileLoc.y = 50.5;
             Block flagBlock = Plot.World.getBlock(tileLoc);
             if (flagBlock.material == "red_carpet") {
-                event.player.sendMessage("Set to air");
                 Plot.World.setBlock(Block.new("air"), tileLoc);
             } else {
-                event.player.sendMessage("Set to carpet");
                 Plot.World.setBlock(Block.new("red_carpet"), tileLoc);
             }
         }
     }
 
     func generateBoard() {
+        Plot.World.setRegion(Block.new("smooth_stone"), <0.5, 48.5, 0.5>, <Settings.size-0.5, 48.5, Settings.size-0.5>);
+        Plot.World.setRegion(Block.new("smooth_stone"), <0.5, 49.5, 0.5>, <Settings.size-0.5, 49.5, Settings.size-0.5>);
+        Plot.World.setRegion(Block.new("air"), <0.5, 50.5, 0.5>, <Settings.size-0.5, 50.5, Settings.size-0.5>);
         num b = 0;
-        while(b < Settings.size * Settings.size * Settings.mine_percentage) {
+        while(b < (Settings.size * Settings.size * Settings.mine_percentage)) {
             Plot.World.setBlock(Block.new("tnt"), <Math.RandomWhole(0, Settings.size-1)+0.5, 48.5, Math.RandomWhole(0, Settings.size-1)+0.5>);
             b = b + 1;
         }
@@ -271,8 +272,6 @@ domain Minesweeper {
         while(x < Settings.size) {
             z = 0;
             while(z < Settings.size) {
-                Plot.World.setBlock(Block.new("smooth_stone"), <x+0.5, 49.5, z+0.5>);
-                Plot.World.setBlock(Block.new("air"), <x+0.5, 50.5, z+0.5>);
                 loc examine = <x+0.5, 48.5, z+0.5>;
                 Block examineBlock = Plot.World.getBlock(examine);
                 if (examineBlock.material != "tnt") {
