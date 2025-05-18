@@ -8,5 +8,6 @@ seg code
         plev playertakedmg
         plac giveitems
         sel allplayers
-        
+        dp value _0 #type:selectiontargetuuids
         sel reset
+        var joinstring

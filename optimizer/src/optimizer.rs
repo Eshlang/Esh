@@ -241,6 +241,7 @@ impl Optimizer {
                     param_ident = Some(created_param_ident);
                 }
             }
+            //TODO: thisd codeline probably bugged
             let param_ident = param_ident.unwrap_or_else(|| ({ 
                 id += 1; 
                 new_instructions.push(instruction!(DP::Param, [

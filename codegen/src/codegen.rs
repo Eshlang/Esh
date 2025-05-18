@@ -1503,7 +1503,7 @@ impl CodeGen {
                     (ValueType::Primitive(PrimitiveType::Location), ValueType::Primitive(PrimitiveType::Vector)) => {
                         self.push_expression_instruction(&settings, instruction!(
                             Var::ShiftOnVector, [ (Ident, register), (Ident, l.ident), (Ident, r.ident) ] ));
-                        value.value_type = ValueType::Primitive(PrimitiveType::Vector);
+                        value.value_type = ValueType::Primitive(PrimitiveType::Location);
                     }
                     _ => { return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion); }
                 }
@@ -1623,11 +1623,11 @@ impl CodeGen {
                     return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion);
                 }
                 self.push_expression_instruction(&settings, instruction!(
-                    Var::Set, [ (Ident, register), (Ident, 0) ] ));
+                    Var::Set, [ (Ident, register), (Int, 0) ] ));
                 self.push_expression_instruction(&settings, instruction!(
                     Varif::Eq, [ (Ident, l.ident), (Ident, r.ident) ] ));
                 self.push_expression_instruction(&settings, instruction!(
-                    Var::Set, [ (Ident, register), (Ident, 1) ] ));
+                    Var::Set, [ (Ident, register), (Int, 1) ] ));
                 self.push_expression_instruction(&settings, instruction!(EndIf));
                 value.value_type = ValueType::Primitive(PrimitiveType::Bool);
             }
@@ -1639,11 +1639,11 @@ impl CodeGen {
                     return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion);
                 }
                 self.push_expression_instruction(&settings, instruction!(
-                    Var::Set, [ (Ident, register), (Ident, 1) ] ));
+                    Var::Set, [ (Ident, register), (Int, 1) ] ));
                 self.push_expression_instruction(&settings, instruction!(
                     Varif::Eq, [ (Ident, l.ident), (Ident, r.ident) ]));
                 self.push_expression_instruction(&settings, instruction!(
-                    Var::Set, [ (Ident, register), (Ident, 0) ] ));
+                    Var::Set, [ (Ident, register), (Int, 0) ] ));
                 self.push_expression_instruction(&settings, instruction!(EndIf));
                 value.value_type = ValueType::Primitive(PrimitiveType::Bool);
             }
@@ -1655,11 +1655,11 @@ impl CodeGen {
                     return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion);
                 }
                 self.push_expression_instruction(&settings, instruction!(
-                    Var::Set, [ (Ident, register), (Ident, 0) ] ));
+                    Var::Set, [ (Ident, register), (Int, 0) ] ));
                 self.push_expression_instruction(&settings, instruction!(
                     Varif::Lower, [ (Ident, l.ident), (Ident, r.ident) ]));
                 self.push_expression_instruction(&settings, instruction!(
-                    Var::Set, [ (Ident, register), (Ident, 1) ] ));
+                    Var::Set, [ (Ident, register), (Int, 1) ] ));
                 self.push_expression_instruction(&settings, instruction!(EndIf));
                 value.value_type = ValueType::Primitive(PrimitiveType::Bool);
             }
@@ -1671,11 +1671,11 @@ impl CodeGen {
                     return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion);
                 }
                 self.push_expression_instruction(&settings, instruction!(
-                    Var::Set, [ (Ident, register), (Ident, 0) ] ));
+                    Var::Set, [ (Ident, register), (Int, 0) ] ));
                 self.push_expression_instruction(&settings, instruction!(
                     Varif::Greater, [ (Ident, l.ident), (Ident, r.ident) ]));
                 self.push_expression_instruction(&settings, instruction!(
-                    Var::Set, [ (Ident, register), (Ident, 1) ] ));
+                    Var::Set, [ (Ident, register), (Int, 1) ] ));
                 self.push_expression_instruction(&settings, instruction!(EndIf));
                 value.value_type = ValueType::Primitive(PrimitiveType::Bool);
             }
@@ -1687,11 +1687,11 @@ impl CodeGen {
                     return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion);
                 }
                 self.push_expression_instruction(&settings, instruction!(
-                    Var::Set, [ (Ident, register), (Ident, 0) ] ));
+                    Var::Set, [ (Ident, register), (Int, 0) ] ));
                 self.push_expression_instruction(&settings, instruction!(
                     Varif::LowerEq, [ (Ident, l.ident), (Ident, r.ident) ]));
                 self.push_expression_instruction(&settings, instruction!(
-                    Var::Set, [ (Ident, register), (Ident, 1) ] ));
+                    Var::Set, [ (Ident, register), (Int, 1) ] ));
                 self.push_expression_instruction(&settings, instruction!(EndIf));
                 value.value_type = ValueType::Primitive(PrimitiveType::Bool);
             }
@@ -1703,11 +1703,11 @@ impl CodeGen {
                     return CodegenError::err(node.clone(), ErrorRepr::InvalidExpressionTypeConversion);
                 }
                 self.push_expression_instruction(&settings, instruction!(
-                    Var::Set, [ (Ident, register), (Ident, 0) ] ));
+                    Var::Set, [ (Ident, register), (Int, 0) ] ));
                 self.push_expression_instruction(&settings, instruction!(
                     Varif::GreaterEq, [ (Ident, l.ident), (Ident, r.ident) ]));
                 self.push_expression_instruction(&settings, instruction!(
-                    Var::Set, [ (Ident, register), (Ident, 1) ] ));
+                    Var::Set, [ (Ident, register), (Int, 1) ] ));
                 self.push_expression_instruction(&settings, instruction!(EndIf));
                 value.value_type = ValueType::Primitive(PrimitiveType::Bool);
             }
@@ -1944,7 +1944,7 @@ impl CodeGen {
                     self.buffer.code_buffer.push_instruction(instruction!(
                         Varif::Eq, [
                             (Ident, expr_id.value.ident),
-                            (Int, 1)
+                            (Int, 0)
                         ]
                     ));
                     self.buffer.code_buffer.push_instruction(instruction!(Ctrl::StopRepeat));

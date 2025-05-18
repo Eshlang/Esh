@@ -1,0 +1,318 @@
+struct Player {
+    string uuid;
+
+    func sendMessage(string message) {
+        dfasm(uuid, message) {
+            sel playername @0
+            plac sendmessage @1
+            sel reset
+        }
+    }
+
+    func giveItem(item item_give) {
+        dfasm(uuid, item_give) {
+            sel playername @0
+            plac giveitems @1
+            sel reset
+        }
+    }
+
+    func adventureMode() {
+        dfasm(uuid) {
+            sel playername @0
+            plac adventuremode
+            sel reset
+        }
+    }
+
+    func launchToward(loc location, num strength) {
+        dfasm(uuid, location, strength) {
+            sel playername @0
+            plac launchtoward @1 @2
+            sel reset
+        }
+    }
+
+    func getHealth() -> num {
+        return dfasm(uuid) -> num {
+            sel playername @0
+            var set @, <value #target:selection #type:currenthealth>
+            sel reset
+        };
+    }
+}
+
+domain Player {
+    func new(string UUID) -> Player {
+        return Player {
+            uuid = UUID;
+        };
+    }
+    event Join(Player player);
+    event LeftClick(Player player, loc location);
+    event RightClick(Player player, loc location);
+    struct TakeDamage {
+        Player player;
+        func cancel() {
+            dfasm() {
+                gmac cancelevent
+            }
+        }
+    }
+    event TakeDamage(TakeDamage);
+
+    func _() {
+
+    dfasm() { plev join }
+        Join(Player.new(dfasm() -> string {
+                var set @, <value #type:uuid #target:default>
+            })
+        );
+
+    dfasm() { plev leftclick }
+        LeftClick(
+            Player.new(dfasm() -> string {
+                var set @, <value #type:uuid #target:default>
+            }),
+            dfasm() -> loc {
+                var set @, <value #type:eventblocklocation #target:default>
+            }
+        );
+
+    dfasm() { plev rightclick }
+        RightClick(
+            Player.new(dfasm() -> string {
+                var set @, <value #type:uuid #target:default>
+            }),
+            dfasm() -> loc {
+                var set @, <value #type:eventblocklocation #target:default>
+            }
+        );
+
+    dfasm() { plev playertakedmg }
+        TakeDamage(TakeDamage {
+            player = Player.new(dfasm() -> string {
+                var set @, <value #type:uuid #target:default>
+            }
+            );
+        });
+    }
+}
+
+domain Plot {
+    domain World {
+        func setBlock(Block block, loc location) {
+            dfasm(block.getItem(), location) {
+                gmac setblock @0, @1
+            }
+        }
+        func getBlock(loc location) -> Block {
+            return Block.new(dfasm(location) -> string {
+                var getblocktype @, @0
+            }
+            );
+        }
+        func setRegion(Block block, loc corner1, loc corner2) {
+            dfasm(block.getItem(), corner1, corner2) {
+                gmac setregion @0, @1, @2
+            }
+        }
+    }
+    event Awake();
+    event Player.Join {
+        if (dfasm() -> num { var set @, <value #type:playercount> } == 1) {
+            Awake();
+        }
+    }
+    func getPlayers() -> string {
+        return dfasm() -> string {
+            sel allplayers
+            var joinstring @, <value #type:selectiontargetuuids>, ","
+            sel reset
+        };
+    }
+}
+
+struct Block {
+    string material;
+    func getItem() -> item {
+        return Item.new_material(self.material);
+    }
+}
+domain Block {
+    func new(string material_set) -> Block {
+        return Block {
+            material = material_set;
+        };
+    }
+}
+
+domain Item {
+    func new_material(string material) -> item {
+        return dfasm(material) -> item {
+            var setitemtype @, @0
+        };
+    }
+    func new(string material, string name) -> item {
+        return dfasm(material, name) -> item {
+            var setitemtype @, @0
+            var setitemname @, @, @1
+        };
+    }
+}
+
+domain Math {
+    func RandomWhole(num min, num max) -> num {
+        return dfasm(min, max) -> num {
+            var randomnumber @, @0, @1, #roundingmode:wholenumber
+        };
+    }
+    func Random(num min, num max) -> num {
+        return dfasm(min, max) -> num {
+            var randomnumber @, @0, @1, #roundingmode:decimalnumber
+        };
+    }
+}
+domain Utils {
+    func vecArrayLength(vec[] g) -> num {
+        return dfasm(g) {
+            var listlength @, @0
+        };
+    }
+}
+
+
+
+domain Minesweeper {
+    domain Settings {
+        num size;
+        num mine_percentage;
+        vec[] offsets;
+        string[] blocks;
+        num offset_count;
+
+        func initialize() {
+            size = 100;
+            mine_percentage = 0.05;
+            offsets = [<-1, 0, -1>, <-1, 0, 0>, <-1, 0, 1>, <0, 0, -1>, <0, 0, 1>, <1, 0, -1>, <1, 0, 0>, <1, 0, 1>];
+            offset_count = Utils.vecArrayLength(offsets);
+            blocks = [
+                "white_concrete_powder",
+                "light_blue_concrete_powder",
+                "lime_concrete_powder",
+                "red_concrete_powder",
+                "blue_concrete_powder",
+                "brown_concrete_powder",
+                "cyan_concrete_powder",
+                "light_gray_concrete_powder",
+                "gray_concrete_powder"
+            ];
+        }
+    }
+
+
+    event Player.Join {
+        event.player.giveItem(Item.new_material("iron_shovel"));
+        event.player.adventureMode();
+    }
+    event Plot.Awake {
+        Settings.initialize();
+        generateBoard();
+    }
+    event Player.LeftClick {
+        if (event.location.y == 49.5) {
+            loc tileLoc = event.location;
+            tileLoc.y = 50.5;
+            Block flagBlock = Plot.World.getBlock(tileLoc);
+            if (flagBlock.material == "red_carpet") {
+                return;
+            }
+            tileLoc.y = 49.5;
+            Block topBlock = Plot.World.getBlock(tileLoc);
+            if (topBlock.material != "smooth_stone") {
+                return;
+            }
+            tileLoc.y = 48.5;
+            exposeTile(tileLoc);
+            Block tileBlock = Plot.World.getBlock(tileLoc);
+            if (tileBlock.material == "tnt") {
+                event.player.launchToward(event.location, -30);
+            }
+        }
+    }
+    event Player.RightClick {
+        if (event.location.y == 49.5 || event.location.y == 50.5) {
+            loc tileLoc = event.location;
+            tileLoc.y = 49.5;
+            Block tileBlock = Plot.World.getBlock(tileLoc);
+            if (tileBlock.material != "smooth_stone") {
+                return;
+            }
+            tileLoc.y = 50.5;
+            Block flagBlock = Plot.World.getBlock(tileLoc);
+            if (flagBlock.material == "red_carpet") {
+                event.player.sendMessage("Set to air");
+                Plot.World.setBlock(Block.new("air"), tileLoc);
+            } else {
+                event.player.sendMessage("Set to carpet");
+                Plot.World.setBlock(Block.new("red_carpet"), tileLoc);
+            }
+        }
+    }
+
+    func generateBoard() {
+        num b = 0;
+        while(b < Settings.size * Settings.size * Settings.mine_percentage) {
+            Plot.World.setBlock(Block.new("tnt"), <Math.RandomWhole(0, Settings.size-1)+0.5, 48.5, Math.RandomWhole(0, Settings.size-1)+0.5>);
+            b = b + 1;
+        }
+        num x = 0;
+        num z = 0;
+        while(x < Settings.size) {
+            z = 0;
+            while(z < Settings.size) {
+                Plot.World.setBlock(Block.new("smooth_stone"), <x+0.5, 49.5, z+0.5>);
+                Plot.World.setBlock(Block.new("air"), <x+0.5, 50.5, z+0.5>);
+                loc examine = <x+0.5, 48.5, z+0.5>;
+                Block examineBlock = Plot.World.getBlock(examine);
+                if (examineBlock.material != "tnt") {
+                    num tileValue = 0;
+                    num i = 0;
+                    while(i < Settings.offset_count) {
+                        vec[] offsetList = Settings.offsets;
+                        Block valueBlock = Plot.World.getBlock(examine + offsetList[i]);
+                        if (valueBlock.material == "tnt") {
+                            tileValue = tileValue + 1;
+                        }
+                        i = i + 1;
+                    }
+                    string[] blockList = Settings.blocks;
+                    Plot.World.setBlock(Block.new(blockList[tileValue]), examine);
+                }
+                z = z + 1;
+            }
+            x = x + 1;
+        }
+    }
+
+    func exposeTile(loc tile) {
+        loc upPos = tile;
+        upPos.y = 49.5;
+        Plot.World.setBlock(Plot.World.getBlock(tile), upPos);
+        Block examineBlock = Plot.World.getBlock(tile);
+        if (examineBlock.material == "white_concrete_powder") {
+            num i = 0;
+            while(i < Settings.offset_count) {
+                vec[] offsetList = Settings.offsets;
+                loc offsetLoc = tile + offsetList[i];
+                offsetLoc.y = 49.5;
+                Block valueBlock = Plot.World.getBlock(offsetLoc);
+                if (valueBlock.material == "smooth_stone") {
+                    offsetLoc.y = 48.5;
+                    exposeTile(offsetLoc);
+                }
+                i = i + 1;
+            }
+        }
+    }
+}
