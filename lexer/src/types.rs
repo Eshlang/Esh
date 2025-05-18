@@ -105,6 +105,7 @@ pub enum ValuedKeyword {
     True,   // true (boolean)
     False,  // false (boolean)
     SelfIdentity, // "self" identity
+    Event, // event keyword / definition
 }
 
 #[derive(Clone, Debug, PartialEq)]

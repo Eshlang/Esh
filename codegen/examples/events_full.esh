@@ -1,0 +1,11 @@
+domain Player {
+    event TakeDamage(string name, num hp);
+    func test() {
+        TakeDamage("hello", 2);
+    }
+}
+
+event Player.TakeDamage {
+    num wtf = event.hp;
+    string wow = event.name;
+}

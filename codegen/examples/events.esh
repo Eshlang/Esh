@@ -1,0 +1,40 @@
+struct Player {
+    string uuid;
+
+    func sendMessage(string message) {
+        dfasm(uuid, message) {
+            sel playername @0
+            plac sendmessage @1
+            sel reset
+        }
+    }
+
+    func getHealth() -> num {
+        return dfasm(uuid) -> num {
+            sel playername @0
+            var set @, <value #target:selection #type:currenthealth>
+            sel reset
+        };
+    }
+}
+
+domain Player {
+    func fromName(string name) -> Player {
+        return Player {
+            uuid = name;
+        };
+    }
+    event Join(Player player);
+    func _() {
+        dfasm() { plev join }
+        Join(Player {
+            uuid = dfasm() -> string {
+                var set @, <value #type:uuid #target:default>
+            };
+        });
+    }
+}
+
+event Player.Join {
+    event.player.sendMessage("Hello!!! you have " + event.player.getHealth() + " health!!!!");
+}

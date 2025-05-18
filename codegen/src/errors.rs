@@ -195,4 +195,12 @@ pub enum ErrorRepr {
     InvalidVectorAccess,
     #[error("DF Assembly Error.")]
     DFASMError,
+    #[error("Expected event identifier.")]
+    ExpectedEventIdentifier,
+    #[error("Cannot call event listener. (how'd you even get this???)")]
+    CannotCallEventListener,
+    #[error("Unexpected event parameter.")]
+    UnexpectedEventParameter,
+    #[error("Event keyword used in non-event-listener code.")]
+    EventInNonListenerCode,
 }

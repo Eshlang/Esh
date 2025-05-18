@@ -13,14 +13,27 @@ pub enum CodeDefinition {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ContextType {
     Struct,
-    Function(ValueType),
+    Function(FunctionType),
     Domain,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum FunctionType {
+    Func(ValueType),
+    Event(EventStructType),
+    EventListener(Rc<Node>)
 }
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum CodeScope {
     Public,
     Private
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub enum EventStructType {
+    Struct(usize, bool),
+    Undecided(Rc<Node>)
 }
 
 #[derive(Debug)]

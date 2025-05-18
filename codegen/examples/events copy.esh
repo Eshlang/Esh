@@ -1,0 +1,18 @@
+domain Plot {
+    struct WOW {
+        num Kaka;
+        num Baba;
+    }
+    event Hello(WOW);
+    func test() {
+        WOW thing = WOW {
+            Kaka = 100;
+            Baba = 200;
+        };
+        Hello(thing);
+    }
+}
+
+event Plot.Hello {
+    num hey = event.Kaka;
+}

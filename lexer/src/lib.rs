@@ -136,6 +136,7 @@ impl<'a> Lexer<'a> {
 
             "true" => Some(Keyword::Value(ValuedKeyword::True)),
             "self" => Some(Keyword::Value(ValuedKeyword::SelfIdentity)),
+            "event" => Some(Keyword::Value(ValuedKeyword::Event)),
             "false" => Some(Keyword::Value(ValuedKeyword::False)),
 
             _ => None,

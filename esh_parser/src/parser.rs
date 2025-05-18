@@ -40,7 +40,9 @@ pub enum Node {
     Struct(Rc<Node>, Rc<Node>),                                 // struct ident {block}
     Domain(Rc<Node>, Rc<Node>),                                 // domain ident {block}
     Block(Vec<Rc<Node>>),                                       // stmt; stmt; stmt;
-    DFASM(Rc<Node>, Rc<Node>, Rc<Node>)                         // dfasm(tuple/ident) -> type ident {dfasm block}
+    DFASM(Rc<Node>, Rc<Node>, Rc<Node>),                        // dfasm(tuple/ident) -> type ident {dfasm block}
+    EventDecl(Rc<Node>, Rc<Node>),                              // event ident(tuple/decl OR type);
+    Event(Rc<Node>, Rc<Node>)                                   // event ident { block }
 }
 
 /// A parser error
@@ -134,6 +136,9 @@ impl<'a> Parser<'a> {
     /// Returns the current statement
     pub(crate) fn statement(&mut self) -> Result<Node, ParserError> {
         match self.curr().token_type {
+            TokenType::Keyword(Keyword::Value(ValuedKeyword::Event)) => {
+                self.event()
+            },
             TokenType::Ident(_) | TokenType::Keyword(Keyword::Value(_)) => {
                 let expr = self.assignment();
                 expect!(self, TokenType::Semicolon);
@@ -246,6 +251,52 @@ impl<'a> Parser<'a> {
             },
         );
         expect!(self, TokenType::RBrace);
+        self.advance();
+        return Ok(expr);
+    }
+
+    /// Returns the current event declaration/listening statement
+    pub(crate) fn event(&mut self) -> Result<Node, ParserError> {
+        let current_save = self.current;
+        expect!(self, TokenType::Keyword(Keyword::Value(ValuedKeyword::Event)));
+        self.advance();
+        let Ok(event_ident) = self.access() else { // Regular ol' event keyword
+            self.current = current_save;
+            let expr = self.assignment();
+            expect!(self, TokenType::Semicolon);
+            self.advance();
+            return expr;
+        };
+        let expr = match self.curr().token_type {
+            TokenType::LParen => { // Event declaration
+                let ret = Node::EventDecl( // event ident(things)
+                    Rc::new(event_ident),
+                    Rc::new(self.tuple()?),
+                );
+                expect!(self, TokenType::Semicolon);
+                ret
+            },
+            TokenType::LBrace => { // Event listening
+                let ret = Node::Event(
+                    {  // Event listening ident
+                        Rc::new(event_ident)
+                    },
+                    {  // Event listening body
+                        self.advance();
+                        Rc::new(self.statement_block()?)
+                    },
+                );
+                expect!(self, TokenType::RBrace);
+                ret
+            },
+            _ => { // Regular ol' event keyword
+                self.current = current_save;
+                let expr = self.assignment();
+                expect!(self, TokenType::Semicolon);
+                self.advance();
+                return expr;
+            }
+        };
         self.advance();
         return Ok(expr);
     }
@@ -621,7 +672,7 @@ impl<'a> Parser<'a> {
     /// Returns the current primary node
     pub(crate) fn primary(&mut self) -> Result<Node, ParserError> {
         match self.curr().token_type {
-            TokenType::Ident(_) | TokenType::Keyword(Keyword::Value(ValuedKeyword::SelfIdentity)) => {
+            TokenType::Ident(_) | TokenType::Keyword(Keyword::Value(ValuedKeyword::SelfIdentity)) | TokenType::Keyword(Keyword::Value(ValuedKeyword::Event)) => {
                 self.construct()
             },
             TokenType::Number(_) | TokenType::String(_) | TokenType::Keyword(Keyword::Value(_)) => {

@@ -5,11 +5,11 @@ use dfbin::enums::{Instruction, Parameter, ParameterValue};
 use dfbin::{instruction, tag};
 use dfbin::Constants::Tags::DP;
 use lexer::compiler::Compiler;
-use lexer::types::{Keyword, Range, Token, TokenType, ValuedKeyword};
+use lexer::types::{Keyword, Position, Range, Token, TokenType, ValuedKeyword};
 use esh_parser::parser::Node;
 use crate::buffer::CodeGenBuffer;
 use crate::errors::{CodegenError, ErrorRepr};
-use crate::context::{CodeDefinition, CodeScope, Context, ContextType};
+use crate::context::{CodeDefinition, CodeScope, Context, ContextType, EventStructType, FunctionType};
 use crate::types::{CodegenBodyStackMode, CodegenExpressionResult, CodegenExpressionStack, CodegenExpressionType, CodegenLocationCoordinate, CodegenTrace, CodegenTraceCrumb, CodegenTraceCrumbIdent, CodegenValue, CodegenVectorCoordinate, ComptimeType, Field, FieldDefinition, GenerateExpressionSettings, IdentifierCategory, PrimitiveType, RealtimeValueType, RuntimeVariable, ValueType};
 
 pub struct CodeGen {
@@ -27,6 +27,8 @@ pub struct CodeGen {
     context_names: Vec<String>,
     context_full_names: Vec<String>,
     block_runtime_vars_add: Vec<String>,
+    context_listeners: HashMap<usize, Vec<usize>>,
+    context_listening: HashMap<usize, usize>,
     run: usize,
 }
 
@@ -47,6 +49,8 @@ impl CodeGen {
             context_names: Vec::new(),
             context_full_names: Vec::new(),
             block_runtime_vars_add: Vec::new(),
+            context_listeners: HashMap::new(),
+            context_listening: HashMap::new(),
             run: 0
         }
     }
@@ -91,10 +95,11 @@ impl CodeGen {
         let mut body = Vec::new();
         for node in node_block {
             match (node.as_ref(), &context_type) {
-                (Node::Struct(..) | Node::Func(..) | Node::Domain(..), ContextType::Function(..)) => {
+                (Node::Struct(..) | Node::Func(..) | Node::Event(..) | Node::Domain(..), ContextType::Function(..)) => {
                     return CodegenError::err(node.clone(), match node.as_ref() {
                         Node::Struct(..) => ErrorRepr::StructNestedInFunction,
                         Node::Func(..) => ErrorRepr::FunctionNestedInFunction,
+                        Node::Event(..) => ErrorRepr::FunctionNestedInFunction,
                         Node::Domain(..) => ErrorRepr::DomainNestedInFunction,
                         _ => ErrorRepr::Generic
                     });
@@ -111,7 +116,7 @@ impl CodeGen {
                         res
                     };
                     let ident_string = Self::get_primary_as_ident(ident, ErrorRepr::ExpectedFunctionIdentifier)?;
-                    let child_id = self.scan_block_outline(body.clone(), ContextType::Function(return_type_field), depth, current_id, CodeScope::Public, func_fields_base, ident_string.clone())?;
+                    let child_id = self.scan_block_outline(body.clone(), ContextType::Function(FunctionType::Func(return_type_field)), depth, current_id, CodeScope::Public, func_fields_base, ident_string.clone())?;
                     let mut child_modify = self.context_borrow_mut(child_id)?;
                     for (param_type, param_name) in params {
                         let param_name_ident = Self::get_primary_as_ident(param_name, ErrorRepr::ExpectedFunctionParamIdent)?;
@@ -124,6 +129,76 @@ impl CodeGen {
                     }
                     drop(child_modify);
                     Self::add_definition(&mut current_context, ident_string.clone(), CodeDefinition::Context(child_id))?;
+                    current_context.children.push(child_id);
+                },
+                (Node::EventDecl(ident, params_node), ContextType::Domain) => {
+                    let mut params_node = params_node.clone();
+                    // let empty_string_node_str = Rc::new(Node::Primary(Rc::new(Token{token_type: TokenType::String("".to_owned()), range: Range{start: Position{char: 0, line: 0}, end: Position{line: 0, char: 0}}})));
+                    let empty_string_node = Rc::new(Node::None);
+                    let Node::Tuple(params_tuple_node) = params_node.as_ref() else {
+                        return CodegenError::err(params_node.clone(), ErrorRepr::UnexpectedEventParameter);
+                    };
+                    let params_tuple_node = params_tuple_node.clone();
+                    let mut first_param_non_decl = false;
+                    if let Some(g) = params_tuple_node.get(0) {
+                        if !matches!(g.as_ref(), Node::Declaration(..)) {
+                            first_param_non_decl = true;
+                            params_node = g.clone();
+                        }
+                    }
+                    let (params, autobuilt_struct) = if params_tuple_node.len() == 1 && first_param_non_decl {
+                        (vec![(&params_node, &empty_string_node)], false)
+                    } else {
+                        (Self::extract_declaration_vec(&params_node)?, true)
+                    };
+                    let func_fields_base = {
+                        let mut res = Vec::new();
+                        for (_param_type, param_name) in params.iter() {
+                            if matches!(param_name.as_ref(), Node::None) {
+                                res.push("event_data".to_owned());
+                                continue;
+                            }
+                            let param_name_ident = Self::get_primary_as_ident(param_name, ErrorRepr::ExpectedFunctionParamIdent)?;
+                            res.push(param_name_ident.clone());
+                        }
+                        res
+                    };
+                    let ident_string = Self::get_primary_as_ident(ident, ErrorRepr::ExpectedFunctionIdentifier)?;
+                    
+                    let event_struct_id = if autobuilt_struct {
+                        let mut generated_struct_block_node = Vec::new();
+                        for (param_type, param_name) in params.clone() {
+                            generated_struct_block_node.push(Rc::new(Node::Declaration(param_type.clone(), param_name.clone())));
+                        }
+                        let struct_child_id = self.scan_block_outline(Rc::new(Node::Block(generated_struct_block_node)), ContextType::Struct, depth, current_id, CodeScope::Public, Vec::new(), ident_string.clone())?;
+                        Self::add_definition(&mut current_context, ident_string.clone(), CodeDefinition::Context(struct_child_id))?;
+                        current_context.children.push(struct_child_id);
+                        EventStructType::Struct(struct_child_id, true)
+                    } else {
+                        EventStructType::Undecided(params_node.clone())
+                    };
+                    
+                    let child_id = self.scan_block_outline(Rc::new(Node::Block(Vec::new())), ContextType::Function(FunctionType::Event(event_struct_id)), depth, current_id, CodeScope::Public, func_fields_base, ident_string.clone())?;
+                    let mut child_modify = self.context_borrow_mut(child_id)?;
+                    for (param_type, param_name) in params {
+                        let field_id = child_modify.fields.len();
+                        child_modify.fields.push(Field {
+                            field_type: ValueType::Ident(param_type.clone()),
+                            scope: CodeScope::Public,
+                        });
+                        if matches!(param_name.as_ref(), Node::None) {
+                            continue;
+                        }
+                        let param_name_ident = Self::get_primary_as_ident(param_name, ErrorRepr::ExpectedFunctionParamIdent)?;
+                        Self::add_definition(&mut child_modify, param_name_ident.clone(), CodeDefinition::Field(field_id))?;
+                    }
+                    drop(child_modify);
+                    Self::add_definition(&mut current_context, ident_string.clone(), CodeDefinition::Context(child_id))?;
+                    current_context.children.push(child_id);
+                },
+                (Node::Event(ident, body), ContextType::Domain) => {
+                    let child_id = self.scan_block_outline(body.clone(), ContextType::Function(FunctionType::EventListener(ident.clone())), depth, current_id, CodeScope::Public, Vec::new(), "L:".to_owned())?;
+                    // Self::add_definition(&mut current_context, ident_string.clone(), CodeDefinition::Context(child_id))?;
                     current_context.children.push(child_id);
                 },
                 (Node::Struct(ident, body), _) => {
@@ -254,16 +329,53 @@ impl CodeGen {
             drop(context_get);
 
             if let ContextType::Function(func_return_type) = context_type {
-                if let ValueType::Ident(func_return_type_node) = func_return_type {
-                    let return_type_set = if !matches!(func_return_type_node.as_ref(), Node::None) {
-                        self.get_type(&func_return_type_node, context_id)?
-                    } else { // No return type
-                        ValueType::Primitive(PrimitiveType::None)
-                    };
-                    let mut context_get_mut = self.context_borrow_mut(context_id)?;
-                    context_get_mut.context_type = ContextType::Function(return_type_set);
-                    drop(context_get_mut);
-                };
+                match func_return_type {
+                    FunctionType::Func(ValueType::Ident(func_return_type_node)) => {
+                        let return_type_set = if !matches!(func_return_type_node.as_ref(), Node::None) {
+                            self.get_type(&func_return_type_node, context_id)?
+                        } else { // No return type
+                            ValueType::Primitive(PrimitiveType::None)
+                        };
+                        let mut context_get_mut = self.context_borrow_mut(context_id)?;
+                        context_get_mut.context_type = ContextType::Function(FunctionType::Func(return_type_set));
+                        drop(context_get_mut);
+                    },
+                    FunctionType::Event(EventStructType::Undecided(event_struct_node)) => {
+                        let event_struct_set = if !matches!(event_struct_node.as_ref(), Node::None) {
+                            self.get_type(&event_struct_node, context_id)?
+                        } else { // No return type
+                            ValueType::Primitive(PrimitiveType::None)
+                        };
+                        let ValueType::Struct(event_struct_id) = event_struct_set else {
+                            return CodegenError::err(event_struct_node.clone(), ErrorRepr::ExpectedStruct);
+                        };
+                        let mut context_get_mut = self.context_borrow_mut(context_id)?;
+                        context_get_mut.context_type = ContextType::Function(FunctionType::Event(EventStructType::Struct(event_struct_id, false)));
+                        drop(context_get_mut);
+                    }
+                    FunctionType::EventListener(event_ident) => {
+                        let event_ident_evaluation = self.generate_expression(context_id, &event_ident, GenerateExpressionSettings::comptime().prefer_category(IdentifierCategory::Function))?;
+                        let ValueType::Comptime(ComptimeType::Function(event_context_id)) = event_ident_evaluation.value.value_type else {
+                            return CodegenError::err(event_ident.clone(), ErrorRepr::ExpectedEventIdentifier);
+                        };
+                        let event_context_get = self.context_borrow(event_context_id)?;
+                        let event_context_type = event_context_get.context_type.clone();
+                        drop(event_context_get);
+                        if !matches!(event_context_type, ContextType::Function(FunctionType::Event(..))) {
+                            return CodegenError::err(event_ident.clone(), ErrorRepr::ExpectedEventIdentifier);
+                        }
+                        if let Some(m) = self.context_listeners.get_mut(&event_context_id) {
+                            m.push(context_id);
+                        } else {
+                            self.context_listeners.insert(event_context_id, vec![context_id]);
+                        }
+                        self.context_listening.insert(context_id, event_context_id);
+                        let event_name = self.context_names[event_context_id].clone();
+                        self.context_names[context_id].push_str(&event_name);
+                        self.context_full_names[context_id].push_str(&event_name);
+                    }
+                    _ => {}
+                }
             }
 
             let domain_vars_len = self.domain_vars[context_id].len();
@@ -319,6 +431,10 @@ impl CodeGen {
             "bool" => Some(PrimitiveType::Bool),
             "vec" => Some(PrimitiveType::Vector),
             "loc" => Some(PrimitiveType::Location),
+            "item" => Some(PrimitiveType::Item),
+            "potion" => Some(PrimitiveType::Potion),
+            "particle" => Some(PrimitiveType::Particle),
+            "sound" => Some(PrimitiveType::Sound),
             _ => None
         }
     }
@@ -486,8 +602,14 @@ impl CodeGen {
             ContextType::Struct => {
 
             },
-            ContextType::Function(return_type) => {
+            ContextType::Function(FunctionType::Func(return_type)) => {
                 self.generate_function_code(context, body, fields, return_type)?;
+            },
+            ContextType::Function(FunctionType::EventListener(..)) => {
+                self.generate_function_code(context, body, fields, ValueType::Primitive(PrimitiveType::None))?;
+            },
+            ContextType::Function(FunctionType::Event(..)) => {
+                self.generate_function_code(context, body, fields, ValueType::Primitive(PrimitiveType::None))?;
             },
             ContextType::Domain => {
 
@@ -617,6 +739,26 @@ impl CodeGen {
             ValueType::Primitive(PrimitiveType::Location) => {
                 self.buffer.code_buffer.push_instruction(instruction!(Var::SetAllCoords, [
                     (Ident, set_ident), (Int, 0), (Int, 0), (Int, 0), (Int, 0), (Int, 0)
+                ]))
+            },
+            ValueType::Primitive(PrimitiveType::Item) => {
+                self.buffer.code_buffer.push_instruction(instruction!(Var::SetItemType, [
+                    (Ident, set_ident), (String, "apple")
+                ]))
+            },
+            ValueType::Primitive(PrimitiveType::Particle) => {
+                self.buffer.code_buffer.push_instruction(instruction!(Var::SetParticleType, [
+                    (Ident, set_ident), (String, "End Rod")
+                ]))
+            },
+            ValueType::Primitive(PrimitiveType::Potion) => {
+                self.buffer.code_buffer.push_instruction(instruction!(Var::SetPotionType, [
+                    (Ident, set_ident), (String, "Haste")
+                ]))
+            },
+            ValueType::Primitive(PrimitiveType::Sound) => {
+                self.buffer.code_buffer.push_instruction(instruction!(Var::SetSoundType, [
+                    (Ident, set_ident), (String, "Player Burp")
                 ]))
             },
             ValueType::Comptime(..) => {
@@ -953,6 +1095,7 @@ impl CodeGen {
         let mut expression_stack= VecDeque::new();
         expression_stack.push_back(CodegenExpressionStack::Node(root_node));
         let register_group = self.buffer.allocate_line_register_group();
+        // println!("{:#?}", root_node.clone());
         let result = self.generate_expression_inside(context, root_node, settings.clone(), register_group)?;
         self.buffer.free_line_register_group(register_group);
         Ok(result)
@@ -1013,6 +1156,26 @@ impl CodeGen {
                                 CodegenValue::new(
                                     self_variable,
                                     ValueType::Struct(parent_context)
+                                )
+                            }
+                            ValuedKeyword::Event => {
+                                dbg!("WTF EVENT KEYWORD");
+                                let Some(event_context) = self.context_listening.get(&context) else {
+                                    return CodegenError::err(node.clone(), ErrorRepr::EventInNonListenerCode);
+                                };
+                                let event_context = *event_context;
+                                let ContextType::Function(FunctionType::EventListener(..)) = self.get_context_type(context)? else {
+                                    return CodegenError::err(node.clone(), ErrorRepr::EventInNonListenerCode);
+                                };
+                                let ContextType::Function(FunctionType::Event(EventStructType::Struct(event_struct_id, _autobuilt_event_struct))) = self.get_context_type(event_context)? else {
+                                    panic!("Somehow an event listener is not listening to an event?");
+                                };
+                                let event_variable = self.buffer.use_variable("event", DP::Var::Scope::Line);
+                                trace = Some(CodegenTrace::root(event_variable));
+                                dbg!(event_struct_id, trace.clone(), event_variable);
+                                CodegenValue::new(
+                                    event_variable,
+                                    ValueType::Struct(event_struct_id)
                                 )
                             }
                             _ => { return CodegenError::err(node.clone(), ErrorRepr::UnexpectedPrimaryToken); }
@@ -1088,7 +1251,9 @@ impl CodeGen {
                 value = CodegenValue::new(register, func_type);
             }
             Node::Access(accessed, access_field) => {
-                let accessed_expression: CodegenExpressionResult = self.generate_expression_inside(context, accessed, settings.pass(), register_group)?.clone();
+                let s = settings.pass();
+                let accessed_expression: CodegenExpressionResult = self.generate_expression_inside(context, accessed, s.clone(), register_group)?.clone();
+                dbg!("@@@@@@@@@@@@@@@@@@@@@@@@@@", accessed.clone(), accessed_expression.clone(), s.clone());
                 let accessed_value = accessed_expression.value;
                 let access_field_ident = Self::get_primary_as_ident(access_field, ErrorRepr::ExpectedAccessableIdentifier)?;
 
@@ -1119,6 +1284,7 @@ impl CodeGen {
                             value.value_type = field_type;
                         } else if let Ok(func_id) = self.extract_definition_function(definition) {
                             drop(struct_context);
+                            dbg!("#####################", accessed_value.clone());
                             return Ok(CodegenExpressionResult::value(CodegenValue::comptime(self.buffer.constant_void(), ComptimeType::SelfFunction(func_id, accessed_value.ident))))
                         } else {
                             panic!("Invalid struct access found which *is* correctly looked up but is neither a field nor a function.");
@@ -1318,11 +1484,11 @@ impl CodeGen {
                     return CodegenError::err(block.clone(), ErrorRepr::ExpectedBlock);
                 };
                 let mut compiler = Compiler::new(dfasm_str.as_str());
-                compiler.identifier_count = self.buffer.ident_count;
                 for (param_id, param) in Self::extract_parameter_vec(params)?.iter().enumerate() {
                     let param_value = self.generate_expression_inside(context, param, settings.pass(), dfasm_group)?.value.clone();
                     compiler.references.insert(param_id.to_string(), param_value.ident);
                 }
+                compiler.identifier_count = self.buffer.ident_count;
                 compiler.references.insert("".to_owned(), register);
                 let added_identifiers = compiler.identifier_count;
                 compiler.compile_string().map_err(|_| CodegenError::new(block.clone(), ErrorRepr::DFASMError))?;
@@ -1386,10 +1552,19 @@ impl CodeGen {
 
     fn call_function(&mut self, context: usize, function_ident: &Rc<Node>, function_params: &Rc<Node>, return_ident: u32) -> Result<ValueType, CodegenError> {
         // let func_context = self.find_function_by_node(function_ident, context)?;
+        let call_func_reg_group = self.buffer.allocate_line_register_group();
         let function_ident_evaluation = self.generate_expression(context, function_ident, GenerateExpressionSettings::comptime().prefer_category(IdentifierCategory::Function))?;
-        let (func_context, struct_func_ident) = match function_ident_evaluation.value.value_type {
-            ValueType::Comptime(ComptimeType::Function(func_context)) => (func_context, None),
-            ValueType::Comptime(ComptimeType::SelfFunction(func_context, struct_func_ident)) => (func_context, Some(struct_func_ident)),
+        
+        let (func_context, struct_func_ident, allocated_self_register) = match function_ident_evaluation.value.value_type {
+            ValueType::Comptime(ComptimeType::Function(func_context)) => (func_context, None, None),
+            ValueType::Comptime(ComptimeType::SelfFunction(func_context, ..)) => {
+                let self_reg = self.buffer.allocate_grouped_line_register(call_func_reg_group);
+                let Node::Access(function_ident_inside, ..) = function_ident.as_ref() else {
+                    return CodegenError::err(function_ident.clone(), ErrorRepr::ExpectedAccessableIdentifier);
+                };
+                let function_ident_evaluation_codeblocked = self.generate_expression(context, function_ident_inside, GenerateExpressionSettings::ident(self_reg).prefer_category(IdentifierCategory::Field))?;
+                (func_context, Some(self_reg), Some(function_ident_evaluation_codeblocked))
+            },
             _ => { return CodegenError::err(function_ident.clone(), ErrorRepr::ExpectedFunctionIdentifier); }
         };
         let func_name = self.get_context_full_name(func_context).clone();
@@ -1400,6 +1575,14 @@ impl CodeGen {
         let ContextType::Function(ret_type_field) = self.context_borrow(func_context)?.context_type.clone() else {
             return CodegenError::err_headless(ErrorRepr::Generic);
         };
+        let ret_type_field = match ret_type_field {
+            FunctionType::Func(value_type) => value_type,
+            FunctionType::Event(..) => ValueType::Primitive(PrimitiveType::None),
+            FunctionType::EventListener(..) => {
+                return CodegenError::err(function_ident.clone(), ErrorRepr::CannotCallEventListener)
+            },
+        };
+        dbg!("66666666666666666666", struct_func_ident, return_ident, function_ident);
         if let Some(struct_func_ident) = struct_func_ident {
             call_instruction.params.push(Parameter::from_ident(struct_func_ident));
         }
@@ -1407,7 +1590,6 @@ impl CodeGen {
             call_instruction.params.push(Parameter::from_ident(return_ident))
         }
         let params = Self::extract_parameter_vec(function_params)?;
-        let param_register_group = self.buffer.allocate_line_register_group();
         let func_fields = self.context_borrow(func_context)?.fields.clone();
         if params.len() > func_fields.len() {
             return CodegenError::err(function_params.clone(), ErrorRepr::UnexpectedFunctionParameter)
@@ -1416,12 +1598,18 @@ impl CodeGen {
             return CodegenError::err(function_params.clone(), ErrorRepr::ExpectedFunctionParameter)
         }
         for (param, param_field) in params.into_iter().zip(func_fields) {
-            let param_expression = self.generate_expression(context, &param, GenerateExpressionSettings::parameter(param_register_group).expect_type(&param_field.field_type))?;
+            dbg!(param.clone(), param_field.clone());
+            let param_expression = self.generate_expression(context, &param, GenerateExpressionSettings::parameter(call_func_reg_group).expect_type(&param_field.field_type))?;
+            dbg!(param_expression.clone());
             call_instruction.params.push(Parameter::from_ident(param_expression.value.ident));
         }
-
         self.buffer.code_buffer.push_instruction(call_instruction);
-        self.buffer.free_line_register_group(param_register_group);
+        if let Some(allocated_self_register) = allocated_self_register {
+            if let Some(allocated_self_register_trace) = allocated_self_register.trace {
+                self.set_trace_to_value(context, allocated_self_register_trace, allocated_self_register.value)?;
+            }
+        }
+        self.buffer.free_line_register_group(call_func_reg_group);
         Ok(ret_type_field)
     }
 
@@ -1430,6 +1618,7 @@ impl CodeGen {
         // self.return_runtimes[context] = 
         let parent = self.parents[context];
         let parent_context = self.context_borrow(parent)?.context_type.clone();
+        let context_type = self.context_borrow(context)?.context_type.clone();
         
         let func_name = self.get_context_full_name(context).clone();
         let func_id = self.buffer.use_function(func_name.as_str());
@@ -1443,6 +1632,11 @@ impl CodeGen {
             let self_struct_param_ident = self.buffer.use_return_param("self");
             self.buffer.code_buffer.push_parameter(Parameter::from_ident(self_struct_param_ident.0));
         }
+        if matches!(context_type, ContextType::Function(FunctionType::EventListener(..))) {
+            let event_param_ident = self.buffer.use_return_param("event");
+            self.buffer.code_buffer.push_parameter(Parameter::from_ident(event_param_ident.0));  
+        }
+
         let return_type_ident = if !matches!(return_type, ValueType::Primitive(PrimitiveType::None)) {
             let return_type_param_ident = self.buffer.use_return_param("fr");
             self.buffer.code_buffer.push_parameter(Parameter::from_ident(return_type_param_ident.0));
@@ -1452,9 +1646,11 @@ impl CodeGen {
         };
         let mut returned_value = false;
         let mut field_id = 0;
+        let mut param_and_var_idents = Vec::new();
         for field in fields {
             let var_name = Self::make_var_name(&self.field_names[context][field_id], "rvp");
             let param_and_var_ident = self.buffer.use_param(var_name.as_ref());
+            param_and_var_idents.push(param_and_var_ident);
             self.runtime_vars[context].insert(
                 self.field_names[context][field_id].to_owned(), 
                 RuntimeVariable::new_param(
@@ -1568,6 +1764,32 @@ impl CodeGen {
         if !returned_value && return_type_ident.is_some() { // This means the function needs to a return a value, but hasn't in the core branch.
             return CodegenError::err_headless(ErrorRepr::ExpectedFunctionReturnValue);
         }
+        if let ContextType::Function(FunctionType::Event(EventStructType::Struct(event_struct_id, autobuilt_struct))) = context_type {
+            let send_id = if autobuilt_struct {
+                let reg = self.buffer.allocate_line_register();
+                self.buffer.code_buffer.push_instruction(instruction!(
+                    Var::CreateList, [(Ident, reg)]
+                ));
+                for add_param_autobuild in param_and_var_idents {
+                    self.buffer.code_buffer.push_parameter(Parameter::from_ident(add_param_autobuild.1))
+                }
+                self.buffer.free_line_register(reg)?;
+                reg
+            } else {
+                param_and_var_idents.get(0).expect("If event has no autobuilt struct, it should have 1 and only param (the struct itself)").1
+            };
+            if let Some(listeners) = self.context_listeners.get(&context) {
+                for listener in listeners {
+                    let listener_name = self.get_context_full_name(*listener).clone();
+                    let listener_id = self.buffer.use_function(listener_name.as_str());
+                    self.buffer.code_buffer.push_instruction(instruction!(
+                        Call, [
+                            (Ident, listener_id), (Ident, send_id)
+                        ]
+                    ))
+                }
+            }
+        }
         Ok(())
     }
 
@@ -1594,7 +1816,7 @@ mod tests {
 
     #[test]
     pub fn decompile_from_file_test() {
-        let name = "dfasm";
+        let name = "events";
         // let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\codegen\examples\";
         let path = r"K:\Programming\GitHub\Esh\codegen\examples\";
 
@@ -1602,14 +1824,14 @@ mod tests {
         let lexer = Lexer::new(str::from_utf8(&file_bytes).expect("Should encode to utf-8"));
         let lexer_tokens: Vec<Rc<Token>> = lexer.map(|v| Rc::new(v.expect("Lexer token should unwrap"))).collect();
         
-        println!("LEXER TOKENS\n----------------------\n{:#?}\n----------------------", lexer_tokens);
+        //##println!("LEXER TOKENS\n----------------------\n{:#?}\n----------------------", lexer_tokens);
         let mut parser = Parser::new(lexer_tokens.as_slice());
         let parser_tree = Rc::new(parser.parse().expect("Parser statement block should unwrap"));
-        //##println!("PARSER TREE\n----------------------\n{:#?}\n----------------------", parser_tree);
+        println!("PARSER TREE\n----------------------\n{:#?}\n----------------------", parser_tree);
         
         let mut codegen = CodeGen::new();
         codegen.codegen_from_node(parser_tree.clone()).expect("Codegen should generate");
-        // println!("CODEGEN CONTEXTS\n----------------------\n{:#?}\n----------------------", codegen.contexts);
+        //##println!("CODEGEN CONTEXTS\n----------------------\n{:#?}\n----------------------", codegen.contexts);
 
         //##println!("CODEGEN CONTEXT NAMES\n----------------------");
         //##for context in 0..codegen.contexts.len() {
