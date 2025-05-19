@@ -52,7 +52,7 @@ pub enum ValueType {
     Ident(Rc<Node>),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Copy)]
 pub enum IdentifierCategory {
     Field,
     RuntimeVariable,

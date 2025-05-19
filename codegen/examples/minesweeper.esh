@@ -65,9 +65,8 @@ domain Player {
 
     dfasm() { plev join }
         Join(Player.new(dfasm() -> string {
-                var set @, <value #type:uuid #target:default>
-            })
-        );
+            var set @, <value #type:uuid #target:default>
+        }));
 
     dfasm() { plev leftclick }
         LeftClick(
@@ -93,8 +92,7 @@ domain Player {
         TakeDamage(TakeDamage {
             player = Player.new(dfasm() -> string {
                 var set @, <value #type:uuid #target:default>
-            }
-            );
+            });
         });
     }
 }
@@ -109,8 +107,7 @@ domain Plot {
         func getBlock(loc location) -> Block {
             return Block.new(dfasm(location) -> string {
                 var getblocktype @, @0
-            }
-            );
+            });
         }
         func setRegion(Block block, loc corner1, loc corner2) {
             dfasm(block.getItem(), corner1, corner2) {
@@ -188,24 +185,24 @@ domain Minesweeper {
         num size;
         num mine_percentage;
         vec[] offsets;
-        string[] blocks;
+        Block[] blocks;
         num offset_count;
 
         func initialize() {
             size = 100;
             mine_percentage = 0.05;
             offsets = [<-1, 0, -1>, <-1, 0, 0>, <-1, 0, 1>, <0, 0, -1>, <0, 0, 1>, <1, 0, -1>, <1, 0, 0>, <1, 0, 1>];
-            offset_count = Utils.vecArrayLength(offsets);
+            offset_count = offsets.length;
             blocks = [
-                "white_concrete_powder",
-                "light_blue_concrete_powder",
-                "lime_concrete_powder",
-                "red_concrete_powder",
-                "blue_concrete_powder",
-                "brown_concrete_powder",
-                "cyan_concrete_powder",
-                "light_gray_concrete_powder",
-                "gray_concrete_powder"
+                Block.new("white_concrete_powder"),
+                Block.new("light_blue_concrete_powder"),
+                Block.new("lime_concrete_powder"),
+                Block.new("red_concrete_powder"),
+                Block.new("blue_concrete_powder"),
+                Block.new("brown_concrete_powder"),
+                Block.new("cyan_concrete_powder"),
+                Block.new("light_gray_concrete_powder"),
+                Block.new("gray_concrete_powder")
             ];
         }
     }
@@ -285,8 +282,8 @@ domain Minesweeper {
                         }
                         i = i + 1;
                     }
-                    string[] blockList = Settings.blocks;
-                    Plot.World.setBlock(Block.new(blockList[tileValue]), examine);
+                    Block[] blockList = Settings.blocks;
+                    Plot.World.setBlock(blockList[tileValue], examine);
                 }
                 z = z + 1;
             }

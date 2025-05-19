@@ -11,3 +11,4 @@ seg code
         dp value _0 #type:selectiontargetuuids
         sel reset
         var joinstring
+        var randomnumber _0 #roundingmode:decimal

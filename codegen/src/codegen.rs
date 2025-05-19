@@ -1306,6 +1306,20 @@ impl CodeGen {
                             trace = Some(trace_add);
                         }
                     }
+                    ValueType::Primitive(PrimitiveType::List(..)) => {
+                        let register = self.generate_expression_allocate_register(&settings, register_group);
+                        value.ident = register;
+                        match access_field_ident.as_str() {
+                            "length" => {
+                                value.value_type = ValueType::Primitive(PrimitiveType::Number);
+                                self.push_expression_instruction(&settings, instruction!(
+                                    Var::ListLength, [ (Ident, register), (Ident, accessed_value.ident) ]
+                                ));
+                            },
+                            _ => { return CodegenError::err(node.clone(), ErrorRepr::InvalidListAccess); }
+                        };
+                        trace = None;
+                    }
                     ValueType::Primitive(PrimitiveType::Vector) => {
                         let register = self.generate_expression_allocate_register(&settings, register_group);
                         value.ident = register;
@@ -1343,10 +1357,12 @@ impl CodeGen {
                 }
             }
             Node::ListCall(called, index_field) => {
-                let called_expression = self.generate_expression_inside(context, called, settings.pass(), register_group)?.clone();
+                let mut passed_settings = settings.pass();
+                if settings.preferred_category == IdentifierCategory::Type {
+                    passed_settings.preferred_category = IdentifierCategory::Type;
+                }
+                let called_expression = self.generate_expression_inside(context, called, passed_settings, register_group)?.clone();
                 let called_value = called_expression.value;
-
-                
                 match called_value.value_type {
                     ValueType::Primitive(PrimitiveType::List(inside_type)) => {
                         let register = self.generate_expression_allocate_register(&settings, register_group);
@@ -2017,7 +2033,7 @@ mod tests {
 
     #[test]
     pub fn decompile_from_file_test() {
-        let name = "events";
+        let name = "minesweeper";
         // let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\codegen\examples\";
         let path = r"K:\Programming\GitHub\Esh\codegen\examples\";
 

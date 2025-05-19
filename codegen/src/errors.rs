@@ -191,6 +191,8 @@ pub enum ErrorRepr {
     ExpectedListType,
     #[error("Invalid location coordinate access.")]
     InvalidLocationAccess,
+    #[error("Invalid list access.")]
+    InvalidListAccess,
     #[error("Invalid vector coordinate access.")]
     InvalidVectorAccess,
     #[error("DF Assembly Error.")]
