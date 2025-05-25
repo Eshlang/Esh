@@ -86,8 +86,8 @@ seg param
     dp param _87 "_rvp_max"
     dp var _90 "_rvp_g" #scope:line
     dp param _91 "_rvp_g"
-    dp num _93 100
-    dp num _94 0.05
+    dp num _93 50
+    dp num _94 0.11
     dp num _95 0
     dp var _96 "_xl9" #scope:line
     dp var _97 "_xl10" #scope:line
@@ -197,6 +197,7 @@ seg code
         var getlistvalue _17, _6, 1
         sel playername _17
         plac adventuremode
+        plac sendmessage "hey" #target:all
         sel reset
     func _18 _8, _20, _22
         var getlistvalue _17, _6, 1

@@ -1,0 +1,60 @@
+
+func test() {
+    Plot.World.setRegion(Block.new("air"), < 0.5, 50.5, 0.5 >, < 5 - 0.5, 50.5, 5 - 0.5 >);
+    num hey = 10 + (5 + 2);
+}
+
+
+domain Plot {
+    domain World {
+        func setBlock(Block block, loc location) {
+            dfasm(block.getItem(), location) {
+                gmac setblock @0, @1
+            }
+        }
+        func getBlock(loc location) -> Block {
+            return Block.new(dfasm(location)-> string {
+                var getblocktype @, @0
+            });
+        }
+        func setRegion(Block block, loc corner1, loc corner2) {
+            dfasm(block.getItem(), corner1, corner2) {
+                gmac setregion @0, @1, @2
+            }
+        }
+    }
+    func Debug(string message) {
+        dfasm(message) {
+            plac sendmessage @0 #target:all
+        }
+    }
+}
+
+struct Block {
+    string material;
+    func getItem() -> item {
+        return Item.new_material(self.material);
+    }
+}
+domain Block {
+    func new(string material_set) -> Block {
+        return Block {
+            material = material_set;
+        };
+    }
+}
+
+domain Item {
+    func new_material(string material) -> item {
+        return dfasm(material) -> item {
+            var setitemtype @, @0
+        };
+    }
+    func new(string material, string name) -> item {
+        return dfasm(material, name) -> item {
+            var setitemtype @, @0
+            var setitemname @, @, @1
+        };
+    }
+}
+

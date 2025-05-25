@@ -273,17 +273,21 @@ impl CodeGenBuffer {
 
     pub fn allocate_line_register(&mut self) -> u32 {
         let index = Self::bitset_allocate(&mut self.allocated_line_registers);
+        //###print!("\nAllocating {}", index);
+        //###//BACKTRACE: print!(" [{}]", std::backtrace::Backtrace::force_capture());
         self.use_line_register(index)
     }
 
     pub fn allocate_line_register_group(&mut self) -> u64 {
+        //###print!("\nAllocating group {}", self.line_register_groups);
         self.line_register_groups += 1;
         self.line_register_groups - 1
     }
 
     pub fn allocate_grouped_line_register(&mut self, group: u64) -> u32 {
         let register_ident = self.allocate_line_register();
-        if let Some(group) = self.allocated_line_register_groups.get_mut(&self.line_register_groups) {
+        //###print!(" on group {}", group);
+        if let Some(group) = self.allocated_line_register_groups.get_mut(&group) {
             group.push(register_ident);
         } else {
             self.allocated_line_register_groups.insert(group.to_owned(), vec![register_ident]);
@@ -295,6 +299,7 @@ impl CodeGenBuffer {
         let Some(ind) = self.line_register_indices.get(&register_ident) else {
             return CodegenError::err_headless(ErrorRepr::RegisterDeallocationError);
         };
+        //###print!("\nFreeing {}", *ind);
         Self::bitset_deallocate(&mut self.allocated_line_registers, *ind);
         Ok(())
     }
@@ -307,7 +312,10 @@ impl CodeGenBuffer {
     }
 
     pub fn free_line_register_group(&mut self, group: u64) {
+        //###print!("\nFreeing group {}", group);
         if let Some(group_get) = self.allocated_line_register_groups.get(&group) {
+            //###let g: Vec<String> = group_get.clone().iter().map(|x| x.to_string()).collect();
+            //###print!(" ({:?})", g);
             self.free_line_registers(group_get.clone()).expect("Line register group should free.");
             self.allocated_line_register_groups.remove(&group);
         }

@@ -59,14 +59,14 @@ seg param
     dp param _42 "self_struct" #type:var
     dp var _43 "_c_void" #scope:global
     dp str _44 "wowwww"
-    dp param _45 "_xl2" #type:var
-    dp param _46 "_rvl_wowvar" #type:var
-    dp param _47 "_rvl_testvar" #type:var
-    dp param _48 "_rvp_add" #type:var
-    dp param _49 "_xl1" #type:var
+    dp param _45 "_xl4" #type:var
+    dp param _46 "_xl2" #type:var
+    dp param _47 "_rvl_wowvar" #type:var
+    dp param _48 "_xl1" #type:var
+    dp param _49 "_rvl_testvar" #type:var
     dp param _50 "_xl0" #type:var
     dp param _51 "_xl3" #type:var
-    dp param _52 "_xl4" #type:var
+    dp param _52 "_rvp_add" #type:var
     dp param _60 "_rvp_hell" #type:var
     dp param _62 "_rvp_pl" #type:var
     dp param _63 "_rvl_hey" #type:var
@@ -75,64 +75,64 @@ seg code
         var add _12, _14, _13
         var add _17, _19, _18
         var mul _15, _17, _16
-        call _59 _17, _11, _24, _9, _15, _12, _20, _5, _22
+        call _59 _22, _17, _11, _15, _24, _12, _20, _9, _5
     func _1 _8, _10
         var set _11, _31
-        call _61 _15, _17, _11, _22, _7, _12, _20
+        call _61 _12, _22, _7, _17, _20, _15, _11
     func _2 _6, _38
         var set _12, _32
         var set _15, _40
-        call _68 _20, _15, _37, _12, _5, _17, _39
+        call _68 _15, _37, _12, _17, _5, _20, _39
     func _3 _42, _6
         var set _5, _33
     func _4 _8, _10
         call _69 _7, _12, _15, _11
-    func _53 _45, _46, _47, _48, _49, _50, _51, _6, _52
+    func _53 _45, _46, _47, _48, _49, _50, _51, _52, _6
         var set _9, _23
         var set _24, _21
         var add _24, _24, _25
         var repeatstring _5, _26, _24
         ctrl returnntimes 6
-    func _54 _45, _46, _47, _48, _49, _50, _51, _6, _52
+    func _54 _45, _46, _47, _48, _49, _50, _51, _52, _6
         var mul _12, _9, _27
         var add _11, _11, _12
-    func _55 _45, _46, _47, _48, _49, _50, _51, _6, _52
+    func _55 _45, _46, _47, _48, _49, _50, _51, _52, _6
         var set _24, _28
         var add _24, _24, _29
         var add _11, _11, _9
         var repeatstring _5, _30, _11
-    func _56 _45, _46, _47, _48, _49, _50, _51, _6, _52
+    func _56 _45, _46, _47, _48, _49, _50, _51, _52, _6
         var bitwise _12, _22, _15 #operator:or
         varif eq _12, 1
-            call _53 _17, _11, _24, _9, _15, _12, _20, _5, _22
+            call _53 _22, _17, _11, _15, _24, _12, _20, _9, _5
         else
-            call _54 _17, _11, _24, _9, _15, _12, _20, _5, _22
+            call _54 _22, _17, _11, _15, _24, _12, _20, _9, _5
         endif
-        call _55 _17, _11, _24, _9, _15, _12, _20, _5, _22
-    func _57 _45, _46, _47, _48, _49, _50, _51, _6, _52
+        call _55 _22, _17, _11, _15, _24, _12, _20, _9, _5
+    func _57 _45, _46, _47, _48, _49, _50, _51, _52, _6
         var bitwise _15, _20, _17 #operator:and
         varif eq _11, _16
             var set _22, 1
         else
             var set _22, 0
         endif
-        call _56 _17, _11, _24, _9, _15, _12, _20, _5, _22
-    func _58 _45, _46, _47, _48, _49, _50, _51, _6, _52
+        call _56 _22, _17, _11, _15, _24, _12, _20, _9, _5
+    func _58 _45, _46, _47, _48, _49, _50, _51, _52, _6
         varif eq _11, _21
             var set _20, 1
         else
             var set _20, 0
         endif
-        call _57 _17, _11, _24, _9, _15, _12, _20, _5, _22
-    func _59 _45, _46, _47, _48, _49, _50, _51, _6, _52
+        call _57 _22, _17, _11, _15, _24, _12, _20, _9, _5
+    func _59 _45, _46, _47, _48, _49, _50, _51, _52, _6
         var add _11, _15, _12
         varif lower _9, _14
             var set _17, 1
         else
             var set _17, 0
         endif
-        call _58 _17, _11, _24, _9, _15, _12, _20, _5, _22
-    func _61 _49, _45, _46, _52, _60, _50, _51
+        call _58 _22, _17, _11, _15, _24, _12, _20, _9, _5
+    func _61 _50, _45, _60, _46, _51, _48, _47
         var string _11, _11, _7
         var string _20, _34, _33
         var set _22, _35
@@ -141,7 +141,7 @@ seg code
         var set _17, _36
         call _0 _12, _15, _17
         var string _11, _12, _32
-    func _64 _51, _49, _62, _50, _6, _45, _63
+    func _64 _48, _62, _50, _46, _6, _51, _63
         varif eq _12, 1
             ctrl stoprepeat
         endif
@@ -149,27 +149,27 @@ seg code
         var getlistvalue _15, _15, 2
         var add _12, _15, _18
         var setlistvalue _39, 2, _12
-    func _65 _51, _49, _62, _50, _6, _45, _63
+    func _65 _48, _62, _50, _46, _6, _51, _63
         var getlistvalue _15, _15, 2
         varif lower _15, _36
             var set _12, 1
         else
             var set _12, 0
         endif
-        call _64 _20, _15, _37, _12, _5, _17, _39
-    func _66 _51, _49, _62, _50, _6, _45, _63
+        call _64 _15, _37, _12, _17, _5, _20, _39
+    func _66 _48, _62, _50, _46, _6, _51, _63
         var set _15, _39
-        call _65 _20, _15, _37, _12, _5, _17, _39
-    func _67 _51, _49, _62, _50, _6, _45, _63
+        call _65 _15, _37, _12, _17, _5, _20, _39
+    func _67 _48, _62, _50, _46, _6, _51, _63
         var getlistvalue _15, _39, 3
         var setlistvalue _15, 1, _12
         var setlistvalue _39, 3, _15
         rep forever
-            call _66 _20, _15, _37, _12, _5, _17, _39
+            call _66 _15, _37, _12, _17, _5, _20, _39
         endrep
         var set _5, _39
         var getlistvalue _5, _5, 3
-    func _68 _51, _49, _62, _50, _6, _45, _63
+    func _68 _48, _62, _50, _46, _6, _51, _63
         var set _20, _40
         var createlist _17, _20
         var createlist _39, _12, _15, _17
@@ -177,8 +177,8 @@ seg code
         var getlistvalue _15, _15, 3
         var getlistvalue _15, _15, 1
         var add _12, _15, _36
-        call _67 _20, _15, _37, _12, _5, _17, _39
-    func _69 _60, _50, _49, _46
+        call _67 _15, _37, _12, _17, _5, _20, _39
+    func _69 _60, _50, _48, _47
         var set _11, _31
         var string _11, _11, _7
         var set _12, _44

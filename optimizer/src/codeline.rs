@@ -56,6 +56,8 @@ pub enum CodelineBranchType {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Codeline {
     pub root_instruction: Instruction,
+    pub pre_instructions: Vec<Instruction>,
+    pub post_instructions: Vec<Instruction>,
     pub body_instructions: Vec<Instruction>,
     pub root_branch: Vec<CodelineBranchLog>,
     pub branch_list: Vec<CodelineBranch>,
@@ -73,6 +75,8 @@ impl Codeline {
         let root_instruction = instructions.remove(0);
         let mut make = Self {
             root_instruction,
+            pre_instructions: Vec::new(),
+            post_instructions: Vec::new(),
             body_instructions: instructions,
             root_branch: Vec::new(),
             branch_list: Vec::new(),
@@ -142,9 +146,10 @@ impl Codeline {
     }
 
     pub fn to_bin(&mut self) -> DFBin {
-        self.buffer = DFBin::new();
+        self.buffer = DFBin::from_instructions(self.pre_instructions.clone());
         self.buffer.push_instruction_ref(&self.root_instruction);
         self.add_buffer(self.root_branch.clone());
+        self.buffer.append_instructions(self.post_instructions.clone());
         self.buffer.clone()
     }
 

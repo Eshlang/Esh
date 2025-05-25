@@ -1,40 +1,885 @@
 seg func
-    df _0 "__1#yo"
-    df _3 "__e1"
-    df _4 "__e2"
-    df _5 "__e3"
+    df _0 "__2#main.Player.sendMessage"
+    df _1 "__3#main.Player.giveItem"
+    df _2 "__4#main.Player.adventureMode"
+    df _3 "__5#main.Player.launchToward"
+    df _4 "__6#main.Player.getHealth"
+    df _5 "__8#main.Player.new"
+    df _6 "__10#main.Player.Join"
+    df _7 "__26#main.Plot.L:Join"
+    df _8 "__43#main.Minesweeper.L:Join"
+    df _9 "__12#main.Player.LeftClick"
+    df _10 "__45#main.Minesweeper.L:LeftClick"
+    df _11 "__14#main.Player.RightClick"
+    df _12 "__46#main.Minesweeper.L:RightClick"
+    df _13 "__16#main.Player.TakeDamage.cancel"
+    df _14 "__17#main.Player.TakeDamage"
+    df _15 "__18#main.Player._"
+    df _16 "__21#main.Plot.World.setBlock"
+    df _17 "__29#main.Block.getItem"
+    df _18 "__22#main.Plot.World.getBlock"
+    df _19 "__31#main.Block.new"
+    df _20 "__23#main.Plot.World.setRegion"
+    df _21 "__25#main.Plot.Awake"
+    df _22 "__44#main.Minesweeper.L:Awake"
+    df _23 "__27#main.Plot.getPlayers"
+    df _24 "__33#main.Item.new_material"
+    df _25 "__34#main.Item.new"
+    df _26 "__36#main.Math.RandomWhole"
+    df _27 "__37#main.Math.Random"
+    df _28 "__39#main.Utils.vecArrayLength"
+    df _29 "__42#main.Minesweeper.Settings.initialize"
+    df _30 "__48#main.Minesweeper.generateBoard"
+    df _31 "__49#main.Minesweeper.exposeTile"
+    df _32 "__47#main.Minesweeper.clearBoard"
+    df _261 "__e1"
+    df _314 "__e2"
+    df _315 "__e3"
+    df _316 "__e4"
+    df _317 "__e5"
 seg param
-    dp var _1 "fr" #scope:line
-    dp param _2 "fr" #type:var
+    dp var _33 "_dvg_41#main.Minesweeper.Settings.size" #scope:global
+    dp var _34 "_dvg_41#main.Minesweeper.Settings.mine_percentage" #scope:global
+    dp var _35 "_dvg_41#main.Minesweeper.Settings.offsets" #scope:global
+    dp var _36 "_dvg_41#main.Minesweeper.Settings.blocks" #scope:global
+    dp var _37 "_dvg_41#main.Minesweeper.Settings.offset_count" #scope:global
+    dp var _38 "_c_void" #scope:global
+    dp var _39 "self" #scope:line
+    dp param _40 "self" #type:var
+    dp var _41 "_rvp_message" #scope:line
+    dp param _42 "_rvp_message"
+    dp var _43 "_xl0" #scope:line
+    dp var _44 "_rvp_item_give" #scope:line
+    dp param _45 "_rvp_item_give"
+    dp var _46 "_xl1" #scope:line
+    dp var _47 "_xl2" #scope:line
+    dp var _48 "_rvp_location" #scope:line
+    dp param _49 "_rvp_location"
+    dp var _50 "_rvp_strength" #scope:line
+    dp param _51 "_rvp_strength"
+    dp var _52 "_xl3" #scope:line
+    dp var _53 "fr" #scope:line
+    dp param _54 "fr" #type:var
+    dp var _55 "_xl4" #scope:line
+    dp var _56 "_rvp_UUID" #scope:line
+    dp param _57 "_rvp_UUID"
+    dp var _58 "_rvp_player" #scope:line
+    dp param _59 "_rvp_player"
+    dp var _60 "_rvp_event_data" #scope:line
+    dp param _61 "_rvp_event_data"
+    dp var _62 "_xl5" #scope:line
+    dp var _63 "_xl6" #scope:line
+    dp var _64 "_xl7" #scope:line
+    dp var _65 "_xl8" #scope:line
+    dp var _66 "_rvp_block" #scope:line
+    dp param _67 "_rvp_block"
+    dp var _68 "_rvp_corner1" #scope:line
+    dp param _69 "_rvp_corner1"
+    dp var _70 "_rvp_corner2" #scope:line
+    dp param _71 "_rvp_corner2"
+    dp var _72 "event" #scope:line
+    dp param _73 "event" #type:var
+    dp num _74 1
+    dp var _75 "_rvp_material_set" #scope:line
+    dp param _76 "_rvp_material_set"
+    dp var _77 "_rvp_material" #scope:line
+    dp param _78 "_rvp_material"
+    dp var _79 "_rvp_name" #scope:line
+    dp param _80 "_rvp_name"
+    dp var _81 "_rvp_min" #scope:line
+    dp param _82 "_rvp_min"
+    dp var _83 "_rvp_max" #scope:line
+    dp param _84 "_rvp_max"
+    dp var _85 "_rvp_g" #scope:line
+    dp param _86 "_rvp_g"
+    dp num _87 50
+    dp num _88 0.11
+    dp num _89 0
+    dp var _90 "_xl9" #scope:line
+    dp var _91 "_xl10" #scope:line
+    dp var _92 "_xl11" #scope:line
+    dp var _93 "_xl12" #scope:line
+    dp var _94 "_xl13" #scope:line
+    dp var _95 "_xl14" #scope:line
+    dp var _96 "_xl15" #scope:line
+    dp str _97 "white_concrete_powder"
+    dp var _98 "_xl16" #scope:line
+    dp str _99 "light_blue_concrete_powder"
+    dp var _100 "_xl17" #scope:line
+    dp str _101 "lime_concrete_powder"
+    dp var _102 "_xl18" #scope:line
+    dp str _103 "red_concrete_powder"
+    dp var _104 "_xl19" #scope:line
+    dp str _105 "blue_concrete_powder"
+    dp var _106 "_xl20" #scope:line
+    dp str _107 "brown_concrete_powder"
+    dp var _108 "_xl21" #scope:line
+    dp str _109 "cyan_concrete_powder"
+    dp var _110 "_xl22" #scope:line
+    dp str _111 "light_gray_concrete_powder"
+    dp var _112 "_xl23" #scope:line
+    dp str _113 "gray_concrete_powder"
+    dp var _114 "_xl24" #scope:line
+    dp str _115 "iron_shovel"
+    dp var _116 "_xl25" #scope:line
+    dp var _117 "_xl26" #scope:line
+    dp num _118 49.5
+    dp var _119 "_rvl_tileLoc" #scope:line
+    dp num _120 50.5
+    dp var _121 "_rvl_flagBlock" #scope:line
+    dp str _122 "red_carpet"
+    dp var _123 "_rvl_topBlock" #scope:line
+    dp str _124 "smooth_stone"
+    dp num _125 48.5
+    dp var _126 "_rvl_tileBlock" #scope:line
+    dp str _127 "tnt"
+    dp var _128 "_xl27" #scope:line
+    dp num _129 30
+    dp var _130 "_xl28" #scope:line
+    dp var _131 "_xl29" #scope:line
+    dp var _132 "_xl30" #scope:line
+    dp var _133 "_xl31" #scope:line
+    dp var _134 "_xl32" #scope:line
+    dp var _135 "_xl33" #scope:line
+    dp str _136 "air"
+    dp num _137 0.5
+    dp var _138 "_xl34" #scope:line
+    dp loc _139 0, 0, 0
+    dp var _140 "_xl35" #scope:line
+    dp var _141 "_xl36" #scope:line
+    dp var _142 "_xl37" #scope:line
+    dp loc _143 0, 0, 0
+    dp var _144 "_xl38" #scope:line
+    dp var _145 "_xl39" #scope:line
+    dp loc _146 0, 0, 0
+    dp var _147 "_xl40" #scope:line
+    dp var _148 "_xl41" #scope:line
+    dp var _149 "_xl42" #scope:line
+    dp loc _150 0, 0, 0
+    dp var _151 "_xl43" #scope:line
+    dp var _152 "_xl44" #scope:line
+    dp loc _153 0, 0, 0
+    dp var _154 "_xl45" #scope:line
+    dp var _155 "_xl46" #scope:line
+    dp var _156 "_xl47" #scope:line
+    dp loc _157 0, 0, 0
+    dp var _158 "_xl48" #scope:line
+    dp var _159 "_xl49" #scope:line
+    dp loc _160 0, 0, 0
+    dp var _161 "_xl50" #scope:line
+    dp var _162 "_xl51" #scope:line
+    dp var _163 "_xl52" #scope:line
+    dp loc _164 0, 0, 0
+    dp var _165 "_xl53" #scope:line
+    dp var _166 "_xl54" #scope:line
+    dp loc _167 0, 0, 0
+    dp var _168 "_xl55" #scope:line
+    dp var _169 "_xl56" #scope:line
+    dp var _170 "_xl57" #scope:line
+    dp loc _171 0, 0, 0
+    dp var _172 "_xl58" #scope:line
+    dp var _173 "_xl59" #scope:line
+    dp loc _174 0, 0, 0
+    dp var _175 "_xl60" #scope:line
+    dp var _176 "_xl61" #scope:line
+    dp var _177 "_xl62" #scope:line
+    dp loc _178 0, 0, 0
+    dp var _179 "_rvl_i" #scope:line
+    dp var _180 "_xl63" #scope:line
+    dp var _181 "_xl64" #scope:line
+    dp var _182 "_xl65" #scope:line
+    dp var _183 "_xl66" #scope:line
+    dp var _184 "_xl67" #scope:line
+    dp var _185 "_xl68" #scope:line
+    dp var _186 "_xl69" #scope:line
+    dp loc _187 0, 0, 0
+    dp var _188 "_rvl_x" #scope:line
+    dp var _189 "_rvl_z" #scope:line
+    dp var _190 "_rvl_examine" #scope:line
+    dp loc _191 0, 0, 0
+    dp var _192 "_rvl_examineBlock" #scope:line
+    dp var _193 "_rvl_tileValue" #scope:line
+    dp var _194 "_rvl_offsetList" #scope:line
+    dp var _195 "_rvl_valueBlock" #scope:line
+    dp var _196 "_xl70" #scope:line
+    dp var _197 "_rvl_blockList" #scope:line
+    dp var _198 "_rvp_tile" #scope:line
+    dp param _199 "_rvp_tile"
+    dp var _200 "_rvl_upPos" #scope:line
+    dp var _201 "_rvl_offsetLoc" #scope:line
+    dp var _202 "_xl71" #scope:line
+    dp param _215 "_xl0" #type:var
+    dp param _216 "_rvp_message" #type:var
+    dp param _217 "_xl1" #type:var
+    dp param _218 "_rvp_item_give" #type:var
+    dp param _219 "_xl2" #type:var
+    dp param _220 "_rvp_strength" #type:var
+    dp param _221 "_rvp_location" #type:var
+    dp param _222 "_xl4" #type:var
+    dp param _223 "_rvp_UUID" #type:var
+    dp param _224 "_rvp_player" #type:var
+    dp param _225 "_xl5" #type:var
+    dp param _226 "_xl6" #type:var
+    dp param _227 "_xl8" #type:var
+    dp param _228 "_xl7" #type:var
+    dp param _229 "_rvp_block" #type:var
+    dp param _230 "_rvp_corner1" #type:var
+    dp param _231 "_rvp_corner2" #type:var
+    dp param _232 "_rvp_material_set" #type:var
+    dp param _233 "_rvp_material" #type:var
+    dp param _234 "_rvp_name" #type:var
+    dp param _235 "_rvp_max" #type:var
+    dp param _236 "_rvp_min" #type:var
+    dp param _237 "_rvp_g" #type:var
+    dp param _238 "_xl21" #type:var
+    dp param _239 "_xl14" #type:var
+    dp param _240 "_xl12" #type:var
+    dp param _241 "_xl18" #type:var
+    dp param _242 "_xl11" #type:var
+    dp param _243 "_xl17" #type:var
+    dp param _244 "_xl19" #type:var
+    dp param _245 "_xl20" #type:var
+    dp param _246 "_xl22" #type:var
+    dp param _247 "_xl10" #type:var
+    dp param _248 "_xl23" #type:var
+    dp param _249 "_xl9" #type:var
+    dp param _250 "_xl13" #type:var
+    dp param _251 "_xl16" #type:var
+    dp param _252 "_xl15" #type:var
+    dp param _253 "_xl24" #type:var
+    dp param _254 "_xl25" #type:var
+    dp param _255 "_rvl_tileLoc" #type:var
+    dp param _256 "_rvl_flagBlock" #type:var
+    dp param _257 "_rvl_tileBlock" #type:var
+    dp param _258 "_rvl_topBlock" #type:var
+    dp param _259 "_xl27" #type:var
+    dp param _260 "_xl26" #type:var
+    dp param _262 "_xl30" #type:var
+    dp param _263 "_xl29" #type:var
+    dp param _264 "_xl31" #type:var
+    dp param _265 "_xl33" #type:var
+    dp param _266 "_xl32" #type:var
+    dp param _267 "_xl28" #type:var
+    dp param _268 "_xl35" #type:var
+    dp param _269 "_xl36" #type:var
+    dp param _270 "_xl37" #type:var
+    dp param _271 "_xl34" #type:var
+    dp param _272 "_xl47" #type:var
+    dp param _273 "_xl44" #type:var
+    dp param _274 "_xl45" #type:var
+    dp param _275 "_xl40" #type:var
+    dp param _276 "_xl46" #type:var
+    dp param _277 "_xl39" #type:var
+    dp param _278 "_xl42" #type:var
+    dp param _279 "_xl38" #type:var
+    dp param _280 "_xl43" #type:var
+    dp param _281 "_xl41" #type:var
+    dp param _282 "_xl62" #type:var
+    dp param _283 "_rvl_examine" #type:var
+    dp param _284 "_xl55" #type:var
+    dp param _285 "_xl59" #type:var
+    dp param _286 "_rvl_tileValue" #type:var
+    dp param _287 "_rvl_valueBlock" #type:var
+    dp param _288 "_xl68" #type:var
+    dp param _289 "_xl63" #type:var
+    dp param _290 "_xl52" #type:var
+    dp param _291 "_xl61" #type:var
+    dp param _292 "_rvl_offsetList" #type:var
+    dp param _293 "_rvl_x" #type:var
+    dp param _294 "_rvl_blockList" #type:var
+    dp param _295 "_xl56" #type:var
+    dp param _296 "_xl58" #type:var
+    dp param _297 "_xl67" #type:var
+    dp param _298 "_xl60" #type:var
+    dp param _299 "_xl69" #type:var
+    dp param _300 "_xl64" #type:var
+    dp param _301 "_xl53" #type:var
+    dp param _302 "_rvl_i" #type:var
+    dp param _303 "_xl51" #type:var
+    dp param _304 "_rvl_z" #type:var
+    dp param _305 "_xl57" #type:var
+    dp param _306 "_xl49" #type:var
+    dp param _307 "_xl70" #type:var
+    dp param _308 "_xl48" #type:var
+    dp param _309 "_xl54" #type:var
+    dp param _310 "_xl50" #type:var
+    dp param _311 "_xl65" #type:var
+    dp param _312 "_rvl_examineBlock" #type:var
+    dp param _313 "_xl66" #type:var
+    dp param _318 "_xl71" #type:var
+    dp param _319 "_rvl_upPos" #type:var
+    dp param _320 "_rvp_tile" #type:var
+    dp param _321 "_rvl_offsetLoc" #type:var
 seg code
-    func _0
-        var set _1, 1
-        varif eq _1, 1.1
-            var set _1, 1.2
-            var set _1, 1.3
+    func _0 _40, _42
+        var getlistvalue _43, _39, 1
+        sel playername _43
+        plac sendmessage _41
+        sel reset
+    func _1 _40, _45
+        var getlistvalue _46, _39, 1
+        sel playername _46
+        plac giveitems _44
+        sel reset
+    func _2 _40
+        var getlistvalue _47, _39, 1
+        sel playername _47
+        plac adventuremode
+        sel reset
+    func _3 _40, _49, _51
+        var getlistvalue _47, _39, 1
+        sel playername _47
+        plac launchtoward _48, _50
+        sel reset
+    func _4 _40, _54
+        var getlistvalue _55, _39, 1
+        sel playername _55
+        dp value _203 #target:selection #type:currenthealth
+        var set _53, _203
+        sel reset
+        ctrl return
+    func _5 _54, _57
+        var createlist _53, _56
+        ctrl return
+    func _6 _59
+        var createlist _55, _58
+        call _7 _55
+        call _8 _55
+    func _9 _59, _49
+        var createlist _55, _58, _48
+        call _10 _55
+    func _11 _59, _49
+        var createlist _55, _58, _48
+        call _12 _55
+    func _13 _40
+        gmac cancelevent
+    func _14 _61
+    func _15
+    plev join
+        dp value _204 #type:uuid #target:default
+        var set _62, _204
+        call _5 _55, _62
+        call _6 _55
+    plev leftclick
+        dp value _205 #type:uuid #target:default
+        var set _62, _205
+        call _5 _55, _62
+        dp value _206 #type:eventblocklocation #target:default
+        var set _62, _206
+        call _9 _55, _62
+    plev rightclick
+        dp value _207 #type:uuid #target:default
+        var set _63, _207
+        call _5 _62, _63
+        dp value _208 #type:eventblocklocation #target:default
+        var set _63, _208
+        call _11 _62, _63
+    plev playertakedmg
+        dp value _209 #type:uuid #target:default
+        var set _65, _209
+        call _5 _64, _65
+        var createlist _63, _64
+        call _14 _63
+    func _16 _67, _49
+        var set _64, _66
+        call _17 _64, _63
+        var set _66, _66
+        gmac setblock _63, _48
+    func _18 _54, _49
+        var getblocktype _63, _48
+        call _19 _53, _63
+        ctrl return
+    func _20 _67, _69, _71
+        var set _64, _66
+        call _17 _64, _63
+        var set _66, _66
+        gmac setregion _63, _68, _70
+    func _21
+        var createlist _63
+        call _22 _63
+    func _7 _73
+        dp value _210 #type:playercount
+        var set _64, _210
+        var set _63, 0
+        varif eq _64, _74
+            var set _63, 1
         endif
-        call _6 _1
-    func _4 _2
-        var set _1, 9
-        var set _1, 10
-        var set _1, 11
-        var set _1, 12
-        var set _1, 13
-        var set _1, 14
-        var set _1, 15
-        var set _1, 16
-    func _5 _2
-        var set _1, 3
-        var set _1, 4
-        var set _1, 5
-        var set _1, 6
-        var set _1, 7
-        var set _1, 8
-        call _4 _1
-    func _6 _2
-        var set _1, 2
-        varif eq _1, 2.1
-            var set _1, 2.2
-            var set _1, 2.3
+        varif eq _63, 1
+            call _21
         endif
-        call _5 _1
+    func _23 _54
+        sel allplayers
+        dp value _211 #type:selectiontargetuuids
+        var joinstring _53, _211, ","
+        sel reset
+        ctrl return
+    func _17 _40, _54
+        var getlistvalue _63, _39, 1
+        call _24 _53, _63
+        ctrl return
+    func _19 _54, _76
+        var createlist _53, _75
+        ctrl return
+    func _24 _54, _78
+        var setitemtype _53, _77
+        ctrl return
+    func _25 _54, _78, _80
+        var setitemtype _53, _77
+        var setitemname _53, _53, _79
+        ctrl return
+    func _26 _54, _82, _84
+        var randomnumber _53, _81, _83 #roundingmode:wholenumber
+        ctrl return
+    func _27 _54, _82, _84
+        var randomnumber _53, _81, _83 #roundingmode:decimalnumber
+        ctrl return
+    func _28 _54, _86
+        var listlength _53, _85
+        ctrl return
+    func _29
+        var set _33, _87
+        var set _34, _88
+        var sub _63, 0, _74
+        var sub _64, 0, _74
+        var sub _65, 0, _74
+        var sub _90, 0, _74
+        var vector _64, _65, _89, _90
+        var sub _91, 0, _74
+        var vector _90, _91, _89, _89
+        var sub _92, 0, _74
+        var vector _91, _92, _89, _74
+        var sub _93, 0, _74
+        var vector _92, _89, _89, _93
+        var vector _93, _89, _89, _74
+        var sub _95, 0, _74
+        var vector _94, _74, _89, _95
+        var vector _95, _74, _89, _89
+        var vector _96, _74, _89, _74
+        var createlist _35, _64, _90, _91, _92, _93, _94, _95, _96
+        var listlength _37, _35
+        call _19 _38, _97
+        call _19 _96, _97
+        call _19 _98, _99
+        call _19 _100, _101
+        call _19 _102, _103
+        call _19 _104, _105
+        call _19 _106, _107
+        call _19 _108, _109
+        call _19 _110, _111
+        call _19 _112, _113
+        var createlist _36, _96, _98, _100, _102, _104, _106, _108, _110, _112
+    func _8 _73
+        var getlistvalue _112, _72, 1
+        call _24 _114, _115
+        call _1 _112, _114
+        var setlistvalue _72, 1, _112
+        var getlistvalue _114, _72, 1
+        call _2 _114
+        var setlistvalue _72, 1, _114
+    func _22 _73
+        call _29
+        call _30
+    func _10 _73
+        call _261 _116, _72, _119, _121, _126, _114, _123, _128, _117
+    func _12 _73
+        var getlistvalue _131, _72, 2
+        var getcoord _132, _131 #coordinate:y
+        var set _130, 0
+        varif eq _132, _118
+            var set _130, 1
+        endif
+        var getlistvalue _134, _72, 2
+        var getcoord _135, _134 #coordinate:y
+        var set _133, 0
+        varif eq _135, _120
+            var set _133, 1
+        endif
+        var bitwise _128, _130, _133 #operator:or
+        varif eq _128, 1
+            var getlistvalue _119, _72, 2
+            var setcoord _119, _119, _118 #coordinate:y
+            call _18 _126, _119
+            var getlistvalue _135, _126, 1
+            var set _128, 1
+            varif eq _135, _124
+                var set _128, 0
+            endif
+            varif eq _128, 1
+                ctrl return
+            endif
+            var setcoord _119, _119, _120 #coordinate:y
+            call _18 _121, _119
+            var getlistvalue _135, _121, 1
+            var set _128, 0
+            varif eq _135, _122
+                var set _128, 1
+            endif
+            varif eq _128, 1
+                call _19 _128, _136
+                call _16 _128, _119
+            else
+                call _19 _128, _122
+                call _16 _128, _119
+            endif
+        endif
+    func _32
+        call _19 _128, _124
+        var vector _135, _137, _125, _137
+        var shiftonvector _138, _139, _135
+        var sub _141, _33, _137
+        var sub _142, _33, _137
+        var vector _140, _141, _125, _142
+        var shiftonvector _142, _143, _140
+        call _20 _128, _138, _142
+        call _19 _142, _124
+        var vector _144, _137, _118, _137
+        var shiftonvector _145, _146, _144
+        var sub _148, _33, _137
+        var sub _149, _33, _137
+        var vector _147, _148, _118, _149
+        var shiftonvector _149, _150, _147
+        call _20 _142, _145, _149
+        call _19 _149, _136
+        var vector _151, _137, _120, _137
+        var shiftonvector _152, _153, _151
+        var sub _155, _33, _137
+        var sub _156, _33, _137
+        var vector _154, _155, _120, _156
+        var shiftonvector _156, _157, _154
+        call _20 _149, _152, _156
+    func _30
+        call _19 _156, _124
+        var vector _158, _137, _125, _137
+        var shiftonvector _159, _160, _158
+        var sub _162, _33, _137
+        var sub _163, _33, _137
+        var vector _161, _162, _125, _163
+        var shiftonvector _163, _164, _161
+        call _20 _156, _159, _163
+        call _19 _163, _124
+        var vector _165, _137, _118, _137
+        var shiftonvector _166, _167, _165
+        var sub _169, _33, _137
+        var sub _170, _33, _137
+        var vector _168, _169, _118, _170
+        var shiftonvector _170, _171, _168
+        call _20 _163, _166, _170
+        call _19 _170, _136
+        var vector _172, _137, _120, _137
+        var shiftonvector _173, _174, _172
+        dp var _212 "_optimizercopy" #scope:line
+        var splitstring _212, "_xl62#_rvl_examine#_xl55#_xl59#_rvl_tileValue#_rvl_valueBlock#_xl68#_xl63#_xl52#_xl61#_rvl_offsetList#_rvl_x#_rvl_blockList#_xl56#_xl58#_xl67#_xl60#_xl69#_xl64#_xl53#_rvl_i#_xl51#_xl47#_rvl_z#_xl57#_xl49#_xl70#_xl48#_xl54#_xl50#_xl65#_rvl_examineBlock#_xl66", "#"
+        dp var _214 "_optimizercopy_values" #scope:line
+        var createlist _214
+        dp var _213 "_optimizercopy_e" #scope:line
+        rep foreach _213, _212
+            dp var _213 "%var(_optimizercopy_e)" #scope:line
+            var appendvalue _214, _213
+        endrep
+        dp var _212 "_optimizercopy_values" #scope:line
+        call _317 _212
+        dp var _212 "_optimizercopy_i" #scope:line
+        rep multiple _212, 33
+            dp var _213 "%index(_optimizercopy,%var(_optimizercopy_i))" #scope:line
+            dp var _214 "_optimizercopy_values" #scope:line
+            var getlistvalue _213, _214, _212
+        endrep
+    func _31 _199
+        var set _200, _198
+        var setcoord _200, _200, _118 #coordinate:y
+        call _18 _185, _198
+        call _16 _185, _200
+        call _18 _192, _198
+        var getlistvalue _196, _192, 1
+        var set _185, 0
+        varif eq _196, _97
+            var set _185, 1
+        endif
+        varif eq _185, 1
+            var set _179, _89
+            rep forever
+                var set _185, 0
+                varif lower _179, _37
+                    var set _185, 1
+                endif
+                varif eq _185, 0
+                    ctrl stoprepeat
+                endif
+                var set _194, _35
+                var add _196, _179, 1
+                var getlistvalue _185, _194, _196
+                var shiftonvector _201, _198, _185
+                var setcoord _201, _201, _118 #coordinate:y
+                call _18 _195, _201
+                var getlistvalue _202, _195, 1
+                var set _196, 0
+                varif eq _202, _124
+                    var set _196, 1
+                endif
+                varif eq _196, 1
+                    var setcoord _201, _201, _125 #coordinate:y
+                    call _31 _201
+                endif
+                var add _179, _179, _74
+            endrep
+        endif
+    func _261 _254, _73, _255, _256, _257, _253, _258, _259, _260
+        var getlistvalue _116, _72, 2
+        var getcoord _117, _116 #coordinate:y
+        var set _114, 0
+        varif eq _117, _118
+            var set _114, 1
+        endif
+        varif eq _114, 1
+            var getlistvalue _119, _72, 2
+            var setcoord _119, _119, _120 #coordinate:y
+            call _18 _121, _119
+            var getlistvalue _117, _121, 1
+            var set _114, 0
+            varif eq _117, _122
+                var set _114, 1
+            endif
+            varif eq _114, 1
+                ctrl returnntimes 2
+            endif
+            var setcoord _119, _119, _118 #coordinate:y
+            call _18 _123, _119
+            var getlistvalue _117, _123, 1
+            var set _114, 1
+            varif eq _117, _124
+                var set _114, 0
+            endif
+            varif eq _114, 1
+                ctrl returnntimes 2
+            endif
+            var setcoord _119, _119, _125 #coordinate:y
+            call _31 _119
+            call _18 _126, _119
+            var getlistvalue _117, _126, 1
+            var set _114, 0
+            varif eq _117, _127
+                var set _114, 1
+            endif
+            varif eq _114, 1
+                var getlistvalue _114, _72, 1
+                var getlistvalue _117, _72, 2
+                var sub _128, 0, _129
+                call _3 _114, _117, _128
+                var setlistvalue _72, 1, _114
+            endif
+        endif
+        dp param _212 "_optimizercopy_values" #type:var
+    func _314 _212
+        dp var _212 "_optimizercopy" #scope:line
+        var splitstring _212, "_xl62#_rvl_examine#_xl55#_xl59#_rvl_tileValue#_rvl_valueBlock#_xl68#_xl63#_xl52#_xl61#_rvl_offsetList#_rvl_x#_rvl_blockList#_xl56#_xl58#_xl67#_xl60#_xl69#_xl64#_xl53#_rvl_i#_xl51#_xl47#_rvl_z#_xl57#_xl49#_xl70#_xl48#_xl54#_xl50#_xl65#_rvl_examineBlock#_xl66", "#"
+        dp var _212 "_optimizercopy_i" #scope:line
+        rep multiple _212, 33
+            dp var _213 "%index(_optimizercopy,%var(_optimizercopy_i))" #scope:line
+            dp var _214 "_optimizercopy_values" #scope:line
+            var getlistvalue _213, _214, _212
+        endrep
+        var set _193, _89
+        var set _179, _89
+        rep forever
+            var set _185, 0
+            varif lower _179, _37
+                var set _185, 1
+            endif
+            varif eq _185, 0
+                ctrl stoprepeat
+            endif
+            var set _194, _35
+            var add _196, _179, 1
+            var getlistvalue _186, _194, _196
+            var shiftonvector _185, _190, _186
+            call _18 _195, _185
+            var getlistvalue _196, _195, 1
+            var set _185, 0
+            varif eq _196, _127
+                var set _185, 1
+            endif
+            varif eq _185, 1
+                var add _193, _193, _74
+            endif
+            var add _179, _179, _74
+        endrep
+        var set _197, _36
+        var add _196, _193, 1
+        var getlistvalue _185, _197, _196
+        call _16 _185, _190
+        dp var _212 "_optimizercopy" #scope:line
+        dp var _214 "_optimizercopy_values" #scope:line
+        var createlist _214
+        dp var _213 "_optimizercopy_e" #scope:line
+        rep foreach _213, _212
+            dp var _213 "%var(_optimizercopy_e)" #scope:line
+            var appendvalue _214, _213
+        endrep
+        dp param _212 "_optimizercopy_values" #type:var
+    func _315 _212
+        dp var _212 "_optimizercopy" #scope:line
+        var splitstring _212, "_xl62#_rvl_examine#_xl55#_xl59#_rvl_tileValue#_rvl_valueBlock#_xl68#_xl63#_xl52#_xl61#_rvl_offsetList#_rvl_x#_rvl_blockList#_xl56#_xl58#_xl67#_xl60#_xl69#_xl64#_xl53#_rvl_i#_xl51#_xl47#_rvl_z#_xl57#_xl49#_xl70#_xl48#_xl54#_xl50#_xl65#_rvl_examineBlock#_xl66", "#"
+        dp var _212 "_optimizercopy_i" #scope:line
+        rep multiple _212, 33
+            dp var _213 "%index(_optimizercopy,%var(_optimizercopy_i))" #scope:line
+            dp var _214 "_optimizercopy_values" #scope:line
+            var getlistvalue _213, _214, _212
+        endrep
+        var set _184, 0
+        varif lower _189, _33
+            var set _184, 1
+        endif
+        varif eq _184, 0
+            ctrl stoprepeat
+        endif
+        var add _184, _188, _137
+        var add _185, _189, _137
+        var vector _190, _184, _125, _185
+        var shiftonvector _190, _191, _190
+        call _18 _192, _190
+        var getlistvalue _186, _192, 1
+        var set _185, 1
+        varif eq _186, _127
+            var set _185, 0
+        endif
+        varif eq _185, 1
+            dp var _212 "_optimizercopy" #scope:line
+            var splitstring _212, "_xl62#_rvl_examine#_xl55#_xl59#_rvl_tileValue#_rvl_valueBlock#_xl68#_xl63#_xl52#_xl61#_rvl_offsetList#_rvl_x#_rvl_blockList#_xl56#_xl58#_xl67#_xl60#_xl69#_xl64#_xl53#_rvl_i#_xl51#_xl47#_rvl_z#_xl57#_xl49#_xl70#_xl48#_xl54#_xl50#_xl65#_rvl_examineBlock#_xl66", "#"
+            dp var _214 "_optimizercopy_values" #scope:line
+            var createlist _214
+            dp var _213 "_optimizercopy_e" #scope:line
+            rep foreach _213, _212
+                dp var _213 "%var(_optimizercopy_e)" #scope:line
+                var appendvalue _214, _213
+            endrep
+            dp var _212 "_optimizercopy_values" #scope:line
+            call _314 _212
+            dp var _212 "_optimizercopy_i" #scope:line
+            rep multiple _212, 33
+                dp var _213 "%index(_optimizercopy,%var(_optimizercopy_i))" #scope:line
+                dp var _214 "_optimizercopy_values" #scope:line
+                var getlistvalue _213, _214, _212
+            endrep
+        endif
+        var add _189, _189, _74
+        dp var _212 "_optimizercopy" #scope:line
+        dp var _214 "_optimizercopy_values" #scope:line
+        var createlist _214
+        dp var _213 "_optimizercopy_e" #scope:line
+        rep foreach _213, _212
+            dp var _213 "%var(_optimizercopy_e)" #scope:line
+            var appendvalue _214, _213
+        endrep
+        dp param _212 "_optimizercopy_values" #type:var
+    func _316 _212
+        dp var _212 "_optimizercopy" #scope:line
+        var splitstring _212, "_xl62#_rvl_examine#_xl55#_xl59#_rvl_tileValue#_rvl_valueBlock#_xl68#_xl63#_xl52#_xl61#_rvl_offsetList#_rvl_x#_rvl_blockList#_xl56#_xl58#_xl67#_xl60#_xl69#_xl64#_xl53#_rvl_i#_xl51#_xl47#_rvl_z#_xl57#_xl49#_xl70#_xl48#_xl54#_xl50#_xl65#_rvl_examineBlock#_xl66", "#"
+        dp var _212 "_optimizercopy_i" #scope:line
+        rep multiple _212, 33
+            dp var _213 "%index(_optimizercopy,%var(_optimizercopy_i))" #scope:line
+            dp var _214 "_optimizercopy_values" #scope:line
+            var getlistvalue _213, _214, _212
+        endrep
+        var set _188, _89
+        var set _189, _89
+        rep forever
+            var set _184, 0
+            varif lower _188, _33
+                var set _184, 1
+            endif
+            varif eq _184, 0
+                ctrl stoprepeat
+            endif
+            var set _189, _89
+            rep forever
+                dp var _212 "_optimizercopy" #scope:line
+                var splitstring _212, "_xl62#_rvl_examine#_xl55#_xl59#_rvl_tileValue#_rvl_valueBlock#_xl68#_xl63#_xl52#_xl61#_rvl_offsetList#_rvl_x#_rvl_blockList#_xl56#_xl58#_xl67#_xl60#_xl69#_xl64#_xl53#_rvl_i#_xl51#_xl47#_rvl_z#_xl57#_xl49#_xl70#_xl48#_xl54#_xl50#_xl65#_rvl_examineBlock#_xl66", "#"
+                dp var _214 "_optimizercopy_values" #scope:line
+                var createlist _214
+                dp var _213 "_optimizercopy_e" #scope:line
+                rep foreach _213, _212
+                    dp var _213 "%var(_optimizercopy_e)" #scope:line
+                    var appendvalue _214, _213
+                endrep
+                dp var _212 "_optimizercopy_values" #scope:line
+                call _315 _212
+                dp var _212 "_optimizercopy_i" #scope:line
+                rep multiple _212, 33
+                    dp var _213 "%index(_optimizercopy,%var(_optimizercopy_i))" #scope:line
+                    dp var _214 "_optimizercopy_values" #scope:line
+                    var getlistvalue _213, _214, _212
+                endrep
+            endrep
+            var add _188, _188, _74
+        endrep
+        dp var _212 "_optimizercopy" #scope:line
+        dp var _214 "_optimizercopy_values" #scope:line
+        var createlist _214
+        dp var _213 "_optimizercopy_e" #scope:line
+        rep foreach _213, _212
+            dp var _213 "%var(_optimizercopy_e)" #scope:line
+            var appendvalue _214, _213
+        endrep
+        dp param _212 "_optimizercopy_values" #type:var
+    func _317 _212
+        dp var _212 "_optimizercopy" #scope:line
+        var splitstring _212, "_xl62#_rvl_examine#_xl55#_xl59#_rvl_tileValue#_rvl_valueBlock#_xl68#_xl63#_xl52#_xl61#_rvl_offsetList#_rvl_x#_rvl_blockList#_xl56#_xl58#_xl67#_xl60#_xl69#_xl64#_xl53#_rvl_i#_xl51#_xl47#_rvl_z#_xl57#_xl49#_xl70#_xl48#_xl54#_xl50#_xl65#_rvl_examineBlock#_xl66", "#"
+        dp var _212 "_optimizercopy_i" #scope:line
+        rep multiple _212, 33
+            dp var _213 "%index(_optimizercopy,%var(_optimizercopy_i))" #scope:line
+            dp var _214 "_optimizercopy_values" #scope:line
+            var getlistvalue _213, _214, _212
+        endrep
+        var sub _176, _33, _137
+        var sub _177, _33, _137
+        var vector _175, _176, _120, _177
+        var shiftonvector _177, _178, _175
+        call _20 _170, _173, _177
+        var set _179, _89
+        rep forever
+            var mul _181, _33, _33
+            var mul _180, _181, _34
+            var set _177, 0
+            varif lower _179, _180
+                var set _177, 1
+            endif
+            varif eq _177, 0
+                ctrl stoprepeat
+            endif
+            call _19 _177, _127
+            var sub _184, _33, _74
+            call _26 _183, _89, _184
+            var add _182, _183, _137
+            var sub _186, _33, _74
+            call _26 _185, _89, _186
+            var add _184, _185, _137
+            var vector _181, _182, _125, _184
+            var shiftonvector _184, _187, _181
+            call _16 _177, _184
+            var add _179, _179, _74
+        endrep
+        dp var _212 "_optimizercopy" #scope:line
+        var splitstring _212, "_xl62#_rvl_examine#_xl55#_xl59#_rvl_tileValue#_rvl_valueBlock#_xl68#_xl63#_xl52#_xl61#_rvl_offsetList#_rvl_x#_rvl_blockList#_xl56#_xl58#_xl67#_xl60#_xl69#_xl64#_xl53#_rvl_i#_xl51#_xl47#_rvl_z#_xl57#_xl49#_xl70#_xl48#_xl54#_xl50#_xl65#_rvl_examineBlock#_xl66", "#"
+        dp var _214 "_optimizercopy_values" #scope:line
+        var createlist _214
+        dp var _213 "_optimizercopy_e" #scope:line
+        rep foreach _213, _212
+            dp var _213 "%var(_optimizercopy_e)" #scope:line
+            var appendvalue _214, _213
+        endrep
+        dp var _212 "_optimizercopy_values" #scope:line
+        call _316 _212
+        dp var _212 "_optimizercopy_i" #scope:line
+        rep multiple _212, 33
+            dp var _213 "%index(_optimizercopy,%var(_optimizercopy_i))" #scope:line
+            dp var _214 "_optimizercopy_values" #scope:line
+            var getlistvalue _213, _214, _212
+        endrep
+        dp var _212 "_optimizercopy" #scope:line
+        dp var _214 "_optimizercopy_values" #scope:line
+        var createlist _214
+        dp var _213 "_optimizercopy_e" #scope:line
+        rep foreach _213, _212
+            dp var _213 "%var(_optimizercopy_e)" #scope:line
+            var appendvalue _214, _213
+        endrep

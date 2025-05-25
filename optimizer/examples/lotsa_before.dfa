@@ -1,0 +1,65 @@
+seg func
+    df _0 "__1#yo"
+seg param
+    dp var _1 "fr1" #scope:line
+    dp var _2 "fr2" #scope:line
+    dp var _3 "fr3" #scope:line
+    dp var _4 "fr4" #scope:line
+    dp var _5 "fr5" #scope:line
+    dp var _6 "fr6" #scope:line
+    dp var _7 "fr7" #scope:line
+    dp var _8 "fr8" #scope:line
+    dp var _9 "fr9" #scope:line
+    dp var _10 "fr10" #scope:line
+    dp var _11 "fr11" #scope:line
+    dp var _12 "fr12" #scope:line
+    dp var _13 "fr13" #scope:line
+    dp var _14 "fr14" #scope:line
+    dp var _15 "fr15" #scope:line
+    dp var _16 "fr16" #scope:line
+    dp var _17 "fr17" #scope:line
+    dp var _18 "fr18" #scope:line
+    dp var _19 "fr19" #scope:line
+    dp var _20 "fr20" #scope:line
+    dp var _21 "fr21" #scope:line
+    dp var _22 "fr22" #scope:line
+    dp var _23 "fr23" #scope:line
+    dp var _24 "fr24" #scope:line
+    dp var _25 "fr25" #scope:line
+    dp var _26 "fr26" #scope:line
+    dp var _27 "fr27" #scope:line
+    dp var _28 "fr28" #scope:line
+    dp var _29 "fr29" #scope:line
+    dp var _30 "fr30" #scope:line
+seg code
+    func _0
+        var add _1, 1
+        var add _2, 1
+        var add _3, 1
+        var add _4, 1
+        var add _5, 1
+        var add _6, 1
+        var add _7, 1
+        var add _8, 1
+        var add _9, 1
+        var add _10, 1
+        var add _11, 1
+        var add _12, 1
+        var add _13, 1
+        var add _14, 1
+        var add _15, 1
+        var add _16, 1
+        var add _17, 1
+        var add _18, 1
+        var add _19, 1
+        var add _20, 1
+        var add _21, 1
+        var add _22, 1
+        var add _23, 1
+        var add _24, 1
+        var add _25, 1
+        var add _26, 1
+        var add _27, 1
+        var add _28, 1
+        var add _29, 1
+        var add _30, 1

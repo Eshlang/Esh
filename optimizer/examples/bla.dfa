@@ -87,8 +87,8 @@ seg param
     dp param _87 "_rvp_max"
     dp var _90 "_rvp_g" #scope:line
     dp param _91 "_rvp_g"
-    dp num _93 50
-    dp num _94 0.11
+    dp num _93 100
+    dp num _94 0.05
     dp num _95 0
     dp var _96 "_xl9" #scope:line
     dp var _97 "_xl10" #scope:line
@@ -139,70 +139,49 @@ seg param
     dp str _144 "air"
     dp num _146 0.5
     dp var _147 "_xl34" #scope:line
-    dp loc _148 0, 0, 0  
+    dp loc _148 0, 0, 0
     dp var _149 "_xl35" #scope:line
     dp var _150 "_xl36" #scope:line
     dp var _151 "_xl37" #scope:line
-    dp loc _152 0, 0, 0  
+    dp loc _152 0, 0, 0
     dp var _153 "_xl38" #scope:line
     dp var _154 "_xl39" #scope:line
-    dp loc _155 0, 0, 0  
+    dp loc _155 0, 0, 0
     dp var _156 "_xl40" #scope:line
     dp var _157 "_xl41" #scope:line
     dp var _158 "_xl42" #scope:line
-    dp loc _159 0, 0, 0  
+    dp loc _159 0, 0, 0
     dp var _160 "_xl43" #scope:line
     dp var _161 "_xl44" #scope:line
-    dp loc _162 0, 0, 0  
+    dp loc _162 0, 0, 0
     dp var _163 "_xl45" #scope:line
     dp var _164 "_xl46" #scope:line
     dp var _165 "_xl47" #scope:line
-    dp loc _166 0, 0, 0  
-    dp var _167 "_xl48" #scope:line
-    dp var _168 "_xl49" #scope:line
-    dp loc _169 0, 0, 0  
+    dp loc _166 0, 0, 0
+    dp var _167 "_rvl_i" #scope:line
+    dp var _168 "_xl48" #scope:line
+    dp var _169 "_xl49" #scope:line
     dp var _170 "_xl50" #scope:line
     dp var _171 "_xl51" #scope:line
     dp var _172 "_xl52" #scope:line
-    dp loc _173 0, 0, 0  
-    dp var _174 "_xl53" #scope:line
-    dp var _175 "_xl54" #scope:line
-    dp loc _176 0, 0, 0  
-    dp var _177 "_xl55" #scope:line
-    dp var _178 "_xl56" #scope:line
-    dp var _179 "_xl57" #scope:line
-    dp loc _180 0, 0, 0  
-    dp var _181 "_xl58" #scope:line
-    dp var _182 "_xl59" #scope:line
-    dp loc _183 0, 0, 0  
-    dp var _184 "_xl60" #scope:line
-    dp var _185 "_xl61" #scope:line
-    dp var _186 "_xl62" #scope:line
-    dp loc _187 0, 0, 0  
-    dp var _188 "_rvl_i" #scope:line
-    dp var _189 "_xl63" #scope:line
-    dp var _190 "_xl64" #scope:line
-    dp var _191 "_xl65" #scope:line
-    dp var _192 "_xl66" #scope:line
-    dp var _193 "_xl67" #scope:line
-    dp var _194 "_xl68" #scope:line
-    dp var _195 "_xl69" #scope:line
-    dp loc _196 0, 0, 0  
-    dp var _197 "_rvl_x" #scope:line
-    dp var _198 "_rvl_z" #scope:line
-    dp var _199 "_rvl_examine" #scope:line
-    dp loc _200 0, 0, 0  
-    dp var _201 "_rvl_examineBlock" #scope:line
-    dp var _202 "_rvl_tileValue" #scope:line
-    dp var _203 "_rvl_offsetList" #scope:line
-    dp var _204 "_rvl_valueBlock" #scope:line
-    dp var _205 "_xl70" #scope:line
-    dp var _206 "_rvl_blockList" #scope:line
-    dp var _207 "_rvp_tile" #scope:line
-    dp param _208 "_rvp_tile"
-    dp var _209 "_rvl_upPos" #scope:line
-    dp var _210 "_rvl_offsetLoc" #scope:line
-    dp var _211 "_xl71" #scope:line
+    dp var _173 "_xl53" #scope:line
+    dp var _174 "_xl54" #scope:line
+    dp loc _175 0, 0, 0
+    dp var _176 "_rvl_x" #scope:line
+    dp var _177 "_rvl_z" #scope:line
+    dp var _178 "_rvl_examine" #scope:line
+    dp loc _179 0, 0, 0
+    dp var _180 "_rvl_examineBlock" #scope:line
+    dp var _181 "_rvl_tileValue" #scope:line
+    dp var _182 "_rvl_offsetList" #scope:line
+    dp var _183 "_rvl_valueBlock" #scope:line
+    dp var _184 "_xl55" #scope:line
+    dp var _185 "_rvl_blockList" #scope:line
+    dp var _186 "_rvp_tile" #scope:line
+    dp param _187 "_rvp_tile"
+    dp var _188 "_rvl_upPos" #scope:line
+    dp var _189 "_rvl_offsetLoc" #scope:line
+    dp var _190 "_xl56" #scope:line
 seg code
     func _7 _8, _10
         var getlistvalue _11, _6, 1
@@ -230,10 +209,8 @@ seg code
         dp value _28 #target:selection #type:currenthealth
         var set _25, _28
         sel reset
-        ctrl return
     func _29 _26, _31
         var createlist _25, _30
-        ctrl return
     func _32 _34
         var createlist _27, _33
         call _35 _27
@@ -281,7 +258,6 @@ seg code
     func _60 _26, _20
         var getblocktype _50, _19
         call _61 _25, _50
-        ctrl return
     func _62 _58, _64, _66
         var set _53, _57
         call _59 _53, _50
@@ -305,30 +281,22 @@ seg code
         dp value _74 #type:selectiontargetuuids
         var joinstring _25, _74, ","
         sel reset
-        ctrl return
     func _59 _8, _26
         var getlistvalue _50, _6, 1
         call _75 _25, _50
-        ctrl return
     func _61 _26, _77
         var createlist _25, _76
-        ctrl return
     func _75 _26, _79
         var setitemtype _25, _78
-        ctrl return
     func _80 _26, _79, _82
         var setitemtype _25, _78
         var setitemname _25, _25, _81
-        ctrl return
     func _83 _26, _85, _87
         var randomnumber _25, _84, _86 #roundingmode:wholenumber
-        ctrl return
     func _88 _26, _85, _87
         var randomnumber _25, _84, _86 #roundingmode:decimalnumber
-        ctrl return
     func _89 _26, _91
         var listlength _25, _90
-        ctrl return
     func _92
         var set _0, _93
         var set _1, _94
@@ -484,153 +452,130 @@ seg code
         var shiftonvector _165, _166, _163
         call _62 _158, _161, _165
     func _122
-        call _61 _165, _131
-        var vector _167, _146, _132, _146
-        var shiftonvector _168, _169, _167
-        var sub _171, _0, _146
-        var sub _172, _0, _146
-        var vector _170, _171, _132, _172
-        var shiftonvector _172, _173, _170
-        call _62 _165, _168, _172
-        call _61 _172, _131
-        var vector _174, _146, _125, _146
-        var shiftonvector _175, _176, _174
-        var sub _178, _0, _146
-        var sub _179, _0, _146
-        var vector _177, _178, _125, _179
-        var shiftonvector _179, _180, _177
-        call _62 _172, _175, _179
-        call _61 _179, _144
-        var vector _181, _146, _127, _146
-        var shiftonvector _182, _183, _181
-        var sub _185, _0, _146
-        var sub _186, _0, _146
-        var vector _184, _185, _127, _186
-        var shiftonvector _186, _187, _184
-        call _62 _179, _182, _186
-        var set _188, _95
+        call _145
+        var set _167, _95
         rep forever
-            var mul _190, _0, _0
-            var mul _189, _190, _1
-            var set _186, 0
-            varif lower _188, _189
-                var set _186, 1
+            var mul _169, _0, _0
+            var mul _168, _169, _1
+            var set _165, 0
+            varif lower _167, _168
+                var set _165, 1
             endif
-            varif eq _186, 0
+            varif eq _165, 0
                 ctrl stoprepeat
             endif
-            call _61 _186, _135
-            var sub _193, _0, _72
-            call _83 _192, _95, _193
-            var add _191, _192, _146
-            var sub _195, _0, _72
-            call _83 _194, _95, _195
-            var add _193, _194, _146
-            var vector _190, _191, _132, _193
-            var shiftonvector _193, _196, _190
-            call _56 _186, _193
-            var add _188, _188, _72
+            call _61 _165, _135
+            var sub _172, _0, _72
+            call _83 _171, _95, _172
+            var add _170, _171, _146
+            var sub _174, _0, _72
+            call _83 _173, _95, _174
+            var add _172, _173, _146
+            var vector _169, _170, _132, _172
+            var shiftonvector _172, _175, _169
+            call _56 _165, _172
+            var add _167, _167, _72
         endrep
-        var set _197, _95
-        var set _198, _95
+        var set _176, _95
+        var set _177, _95
         rep forever
-            var set _193, 0
-            varif lower _197, _0
-                var set _193, 1
+            var set _172, 0
+            varif lower _176, _0
+                var set _172, 1
             endif
-            varif eq _193, 0
+            varif eq _172, 0
                 ctrl stoprepeat
             endif
-            var set _198, _95
+            var set _177, _95
             rep forever
-                var set _193, 0
-                varif lower _198, _0
-                    var set _193, 1
+                var set _172, 0
+                varif lower _177, _0
+                    var set _172, 1
                 endif
-                varif eq _193, 0
+                varif eq _172, 0
                     ctrl stoprepeat
                 endif
-                var add _193, _197, _146
-                var add _194, _198, _146
-                var vector _199, _193, _132, _194
-                var shiftonvector _199, _200, _199
-                call _60 _201, _199
-                var getlistvalue _195, _201, 1
-                var set _194, 1
-                varif eq _195, _135
-                    var set _194, 0
+                var add _172, _176, _146
+                var add _173, _177, _146
+                var vector _178, _172, _132, _173
+                var shiftonvector _178, _179, _178
+                call _60 _180, _178
+                var getlistvalue _174, _180, 1
+                var set _173, 1
+                varif eq _174, _135
+                    var set _173, 0
                 endif
-                varif eq _194, 1
-                    var set _202, _95
-                    var set _188, _95
+                varif eq _173, 1
+                    var set _181, _95
+                    var set _167, _95
                     rep forever
-                        var set _194, 0
-                        varif lower _188, _4
-                            var set _194, 1
+                        var set _173, 0
+                        varif lower _167, _4
+                            var set _173, 1
                         endif
-                        varif eq _194, 0
+                        varif eq _173, 0
                             ctrl stoprepeat
                         endif
-                        var set _203, _2
-                        var add _205, _188, 1
-                        var getlistvalue _195, _203, _205
-                        var shiftonvector _194, _199, _195
-                        call _60 _204, _194
-                        var getlistvalue _205, _204, 1
-                        var set _194, 0
-                        varif eq _205, _135
-                            var set _194, 1
+                        var set _182, _2
+                        var add _184, _167, 1
+                        var getlistvalue _174, _182, _184
+                        var shiftonvector _173, _178, _174
+                        call _60 _183, _173
+                        var getlistvalue _184, _183, 1
+                        var set _173, 0
+                        varif eq _184, _135
+                            var set _173, 1
                         endif
-                        varif eq _194, 1
-                            var add _202, _202, _72
+                        varif eq _173, 1
+                            var add _181, _181, _72
                         endif
-                        var add _188, _188, _72
+                        var add _167, _167, _72
                     endrep
-                    var set _206, _3
-                    var add _205, _202, 1
-                    var getlistvalue _194, _206, _205
-                    call _56 _194, _199
+                    var set _185, _3
+                    var add _184, _181, 1
+                    var getlistvalue _173, _185, _184
+                    call _56 _173, _178
                 endif
-                var add _198, _198, _72
+                var add _177, _177, _72
             endrep
-            var add _197, _197, _72
+            var add _176, _176, _72
         endrep
-    func _133 _208
-        var set _209, _207
-        var setcoord _209, _209, _125 #coordinate:y
-        call _60 _194, _207
-        call _56 _194, _209
-        call _60 _201, _207
-        var getlistvalue _205, _201, 1
-        var set _194, 0
-        varif eq _205, _103
-            var set _194, 1
+    func _133 _187
+        var set _188, _186
+        var setcoord _188, _188, _125 #coordinate:y
+        call _60 _173, _186
+        call _56 _173, _188
+        call _60 _180, _186
+        var getlistvalue _184, _180, 1
+        var set _173, 0
+        varif eq _184, _103
+            var set _173, 1
         endif
-        varif eq _194, 1
-            var set _188, _95
+        varif eq _173, 1
+            var set _167, _95
             rep forever
-                var set _194, 0
-                varif lower _188, _4
-                    var set _194, 1
+                var set _173, 0
+                varif lower _167, _4
+                    var set _173, 1
                 endif
-                varif eq _194, 0
+                varif eq _173, 0
                     ctrl stoprepeat
                 endif
-                var set _203, _2
-                var add _205, _188, 1
-                var getlistvalue _194, _203, _205
-                var shiftonvector _210, _207, _194
-                var setcoord _210, _210, _125 #coordinate:y
-                call _60 _204, _210
-                var getlistvalue _211, _204, 1
-                var set _205, 0
-                varif eq _211, _131
-                    var set _205, 1
+                var set _182, _2
+                var add _184, _167, 1
+                var getlistvalue _173, _182, _184
+                var shiftonvector _189, _186, _173
+                var setcoord _189, _189, _125 #coordinate:y
+                call _60 _183, _189
+                var getlistvalue _190, _183, 1
+                var set _184, 0
+                varif eq _190, _131
+                    var set _184, 1
                 endif
-                varif eq _205, 1
-                    var setcoord _210, _210, _132 #coordinate:y
-                    call _133 _210
+                varif eq _184, 1
+                    var setcoord _189, _189, _132 #coordinate:y
+                    call _133 _189
                 endif
-                var add _188, _188, _72
+                var add _167, _167, _72
             endrep
         endif

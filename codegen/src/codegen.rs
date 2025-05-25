@@ -2033,7 +2033,7 @@ mod tests {
 
     #[test]
     pub fn decompile_from_file_test() {
-        let name = "minesweeper";
+        let name = "hello";
         // let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\codegen\examples\";
         let path = r"K:\Programming\GitHub\Esh\codegen\examples\";
 

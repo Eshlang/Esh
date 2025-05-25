@@ -1,0 +1,163 @@
+seg func
+    df _0 "__1#yo"
+    df _64 "__e1"
+    df _65 "__e2"
+seg param
+    dp var _1 "fr1" #scope:line
+    dp var _2 "fr2" #scope:line
+    dp var _3 "fr3" #scope:line
+    dp var _4 "fr4" #scope:line
+    dp var _5 "fr5" #scope:line
+    dp var _6 "fr6" #scope:line
+    dp var _7 "fr7" #scope:line
+    dp var _8 "fr8" #scope:line
+    dp var _9 "fr9" #scope:line
+    dp var _10 "fr10" #scope:line
+    dp var _11 "fr11" #scope:line
+    dp var _12 "fr12" #scope:line
+    dp var _13 "fr13" #scope:line
+    dp var _14 "fr14" #scope:line
+    dp var _15 "fr15" #scope:line
+    dp var _16 "fr16" #scope:line
+    dp var _17 "fr17" #scope:line
+    dp var _18 "fr18" #scope:line
+    dp var _19 "fr19" #scope:line
+    dp var _20 "fr20" #scope:line
+    dp var _21 "fr21" #scope:line
+    dp var _22 "fr22" #scope:line
+    dp var _23 "fr23" #scope:line
+    dp var _24 "fr24" #scope:line
+    dp var _25 "fr25" #scope:line
+    dp var _26 "fr26" #scope:line
+    dp var _27 "fr27" #scope:line
+    dp var _28 "fr28" #scope:line
+    dp var _29 "fr29" #scope:line
+    dp var _30 "fr30" #scope:line
+    dp param _34 "fr7" #type:var
+    dp param _35 "fr9" #type:var
+    dp param _36 "fr8" #type:var
+    dp param _37 "fr27" #type:var
+    dp param _38 "fr1" #type:var
+    dp param _39 "fr28" #type:var
+    dp param _40 "fr29" #type:var
+    dp param _41 "fr20" #type:var
+    dp param _42 "fr19" #type:var
+    dp param _43 "fr22" #type:var
+    dp param _44 "fr6" #type:var
+    dp param _45 "fr2" #type:var
+    dp param _46 "fr24" #type:var
+    dp param _47 "fr10" #type:var
+    dp param _48 "fr13" #type:var
+    dp param _49 "fr5" #type:var
+    dp param _50 "fr21" #type:var
+    dp param _51 "fr25" #type:var
+    dp param _52 "fr30" #type:var
+    dp param _53 "fr11" #type:var
+    dp param _54 "fr17" #type:var
+    dp param _55 "fr4" #type:var
+    dp param _56 "fr18" #type:var
+    dp param _57 "fr14" #type:var
+    dp param _58 "fr3" #type:var
+    dp param _59 "fr15" #type:var
+    dp param _60 "fr26" #type:var
+    dp param _61 "fr16" #type:var
+    dp param _62 "fr12" #type:var
+    dp param _63 "fr23" #type:var
+seg code
+    func _0
+        var add _1, 1
+        var add _2, 1
+        dp var _31 "_optimizercopy" #scope:line
+        var splitstring _31, "fr7#fr9#fr8#fr27#fr1#fr28#fr29#fr20#fr19#fr22#fr6#fr2#fr24#fr10#fr13#fr5#fr21#fr25#fr30#fr11#fr17#fr4#fr18#fr14#fr3#fr15#fr26#fr16#fr12#fr23", "#"
+        dp var _32 "_optimizercopy_e" #scope:line
+        rep foreach _32, _31
+            dp var _31 "_optimizercopy_values" #scope:line
+            dp var _32 "%var(_optimizercopy_e)" #scope:line
+            var appendvalue _31, _32
+        endrep
+        dp var _31 "_optimizercopy_values" #scope:line
+        call _65 _31
+        dp var _31 "_optimizercopy_i" #scope:line
+        rep multiple _31, 30
+            dp var _32 "%index(_optimizercopy,%var(_optimizercopy_i))" #scope:line
+            dp var _33 "_optimizercopy_values" #scope:line
+            var getlistvalue _32, _33, _31
+        endrep
+        dp param _31 "_optimizercopy_values" #type:var
+    func _64
+        dp var _31 "_optimizercopy" #scope:line
+        var splitstring _31, "fr7#fr9#fr8#fr27#fr1#fr28#fr29#fr20#fr19#fr22#fr6#fr2#fr24#fr10#fr13#fr5#fr21#fr25#fr30#fr11#fr17#fr4#fr18#fr14#fr3#fr15#fr26#fr16#fr12#fr23", "#"
+        dp var _31 "_optimizercopy_i" #scope:line
+        rep multiple _31, 30
+            dp var _32 "%index(_optimizercopy,%var(_optimizercopy_i))" #scope:line
+            dp var _33 "_optimizercopy_values" #scope:line
+            var getlistvalue _32, _33, _31
+        endrep
+        var add _9, 1
+        var add _10, 1
+        var add _11, 1
+        var add _12, 1
+        var add _13, 1
+        var add _14, 1
+        var add _15, 1
+        var add _16, 1
+        var add _17, 1
+        var add _18, 1
+        var add _19, 1
+        var add _20, 1
+        var add _21, 1
+        var add _22, 1
+        var add _23, 1
+        var add _24, 1
+        var add _25, 1
+        var add _26, 1
+        var add _27, 1
+        var add _28, 1
+        var add _29, 1
+        var add _30, 1
+        dp var _31 "_optimizercopy" #scope:line
+        dp var _32 "_optimizercopy_e" #scope:line
+        rep foreach _32, _31
+            dp var _31 "_optimizercopy_values" #scope:line
+            dp var _32 "%var(_optimizercopy_e)" #scope:line
+            var appendvalue _31, _32
+        endrep
+        dp param _31 "_optimizercopy_values" #type:var
+    func _65
+        dp var _31 "_optimizercopy" #scope:line
+        var splitstring _31, "fr7#fr9#fr8#fr27#fr1#fr28#fr29#fr20#fr19#fr22#fr6#fr2#fr24#fr10#fr13#fr5#fr21#fr25#fr30#fr11#fr17#fr4#fr18#fr14#fr3#fr15#fr26#fr16#fr12#fr23", "#"
+        dp var _31 "_optimizercopy_i" #scope:line
+        rep multiple _31, 30
+            dp var _32 "%index(_optimizercopy,%var(_optimizercopy_i))" #scope:line
+            dp var _33 "_optimizercopy_values" #scope:line
+            var getlistvalue _32, _33, _31
+        endrep
+        var add _3, 1
+        var add _4, 1
+        var add _5, 1
+        var add _6, 1
+        var add _7, 1
+        var add _8, 1
+        dp var _31 "_optimizercopy" #scope:line
+        var splitstring _31, "fr7#fr9#fr8#fr27#fr1#fr28#fr29#fr20#fr19#fr22#fr6#fr2#fr24#fr10#fr13#fr5#fr21#fr25#fr30#fr11#fr17#fr4#fr18#fr14#fr3#fr15#fr26#fr16#fr12#fr23", "#"
+        dp var _32 "_optimizercopy_e" #scope:line
+        rep foreach _32, _31
+            dp var _31 "_optimizercopy_values" #scope:line
+            dp var _32 "%var(_optimizercopy_e)" #scope:line
+            var appendvalue _31, _32
+        endrep
+        dp var _31 "_optimizercopy_values" #scope:line
+        call _64 _31
+        dp var _31 "_optimizercopy_i" #scope:line
+        rep multiple _31, 30
+            dp var _32 "%index(_optimizercopy,%var(_optimizercopy_i))" #scope:line
+            dp var _33 "_optimizercopy_values" #scope:line
+            var getlistvalue _32, _33, _31
+        endrep
+        dp var _31 "_optimizercopy" #scope:line
+        dp var _32 "_optimizercopy_e" #scope:line
+        rep foreach _32, _31
+            dp var _31 "_optimizercopy_values" #scope:line
+            dp var _32 "%var(_optimizercopy_e)" #scope:line
+            var appendvalue _31, _32
+        endrep

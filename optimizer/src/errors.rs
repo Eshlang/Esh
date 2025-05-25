@@ -15,8 +15,17 @@ impl OptimizerError {
             source: source
         }
     }
+    pub fn new_headless(source: ErrorRepr) -> OptimizerError {
+        Self {
+            instruction: 0,
+            source: source
+        }
+    }
     pub fn err<T>(optimizer: &Optimizer, source: ErrorRepr) -> Result<T, OptimizerError> {
         Err(Self::new(optimizer, source))
+    }
+    pub fn err_headless<T>(source: ErrorRepr) -> Result<T, OptimizerError> {
+        Err(Self::new_headless(source))
     }
 }
 
@@ -26,4 +35,6 @@ pub enum ErrorRepr {
     Generic,
     #[error("Expected a code block.")]
     ExpectedBlock,
+    #[error("Expected an identifier.")]
+    ExpectedIdentifier,
 }

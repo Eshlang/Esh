@@ -110,30 +110,28 @@ impl Optimizer {
         let max_codeblocks = max_codeblocks + 1;
         let mut new_codelines = Vec::new();
         let mut extension_add = VecDeque::new();
-        let mut id_offset: u32 = (self.buffer.func_buffer.len() + self.buffer.param_buffer.len()).try_into().expect("Amount of ids should be below a u32 limit.");
-        id_offset -= 1;
-        let mut id: u32 = 0;
         let code_branches_len = self.buffer.code_branches.len();
+        let mut count_extensions = 0;
+        let free_ids = (self.buffer.next_ident(), self.buffer.next_ident()+1, self.buffer.next_ident()+2);
+        self.buffer.ident_count += 3;
         for codeline_index in 0..code_branches_len {
             // dbg!(format!("Codeline {:?}", codeline_index));
-            let pre_codevar_count: u32 = (self.buffer.func_buffer.len() + self.buffer.param_buffer.len()).try_into().expect("Amount of ids should be below a u32 limit.");
             let codeline_vars = self.get_codeline_vars(codeline_index);
-            let post_codevar_count: u32 = (self.buffer.func_buffer.len() + self.buffer.param_buffer.len()).try_into().expect("Amount of ids should be below a u32 limit.");
-            id_offset += post_codevar_count - pre_codevar_count;
+            let mut buffer_change = self.buffer.clone();
             let codeline = self.buffer.code_branches.get_mut(codeline_index).expect("Should be within list");
             for (depth, branches) in codeline.branches_by_depth.clone().into_iter().enumerate().rev() {
                 for branch_ind in branches {
                     let mut test = 0;
                     'rebreak: loop {
                         let mut branch = codeline.branch_list.get(branch_ind).expect("Should contain branch.").clone();
-                        if let Some((c, mut ca)) = Self::split_branch(&mut codeline.branch_list, &mut branch.body, max_codeblocks, depth, id+id_offset+1, &codeline_vars)? {
-                            id += 1;
-                            new_codelines.push((c, id+id_offset));
+                        if let Some((c, mut ca)) = Self::split_branch(&mut codeline.branch_list, &mut branch.body, max_codeblocks, depth, buffer_change.next_ident(), free_ids, &codeline_vars)? {
                             let mut func_name = "__e".to_string();
-                            func_name.push_str(&id.to_string());
-                            self.buffer.func_buffer.push_instruction(instruction!(DF, [
-                                (Ident, id+id_offset), (String, func_name)
+                            count_extensions += 1;
+                            func_name.push_str(&count_extensions.to_string());
+                            let ident = buffer_change.add_definition(instruction!(DF, [
+                                (String, func_name)
                             ]));
+                            new_codelines.push((c, ident));
                             extension_add.append(&mut ca);
                             codeline.branch_list[branch_ind] = branch;
                         } else {
@@ -148,14 +146,14 @@ impl Optimizer {
             }
             let mut test = 0;
             'rebreak: loop {
-                if let Some((c, mut ca)) = Self::split_branch(&mut codeline.branch_list, &mut codeline.root_branch, max_codeblocks, 0, id+id_offset+1, &codeline_vars)? {
-                    id += 1;
-                    new_codelines.push((c, id+id_offset));
+                if let Some((c, mut ca)) = Self::split_branch(&mut codeline.branch_list, &mut codeline.root_branch, max_codeblocks, 0, buffer_change.next_ident(), free_ids, &codeline_vars)? {
                     let mut func_name = "__e".to_string();
-                    func_name.push_str(&id.to_string());
-                    self.buffer.func_buffer.push_instruction(instruction!(DF, [
-                        (Ident, id+id_offset), (String, func_name)
+                    count_extensions += 1;
+                    func_name.push_str(&count_extensions.to_string());
+                    let ident = buffer_change.add_definition(instruction!(DF, [
+                        (String, func_name)
                     ]));
+                    new_codelines.push((c, ident));
                     extension_add.append(&mut ca);
                 } else {
                     break 'rebreak;
@@ -165,7 +163,9 @@ impl Optimizer {
                     break;
                 }
             }
+            self.buffer.load_state(buffer_change);
         }
+        
         for (new_codeline, new_codeline_key) in new_codelines.into_iter() {
             self.extension_function_idents.insert(new_codeline_key, self.buffer.code_branches.len());
             self.buffer.code_branches.push(new_codeline);
@@ -189,10 +189,7 @@ impl Optimizer {
     }
 
     /// Gets all the line variables that are used in a branch.
-    fn get_codeline_vars(&mut self, codeline_index: usize) -> Vec<(u32, u32)> {
-        let mut id_offset: u32 = (self.buffer.func_buffer.len() + self.buffer.param_buffer.len()).try_into().expect("Amount of ids should be below a u32 limit.");
-        id_offset -= 1;
-        let mut id = 0;
+    fn get_codeline_vars(&mut self, codeline_index: usize) -> Vec<(u32, u32, String)> {
         let mut ret = Vec::new();
         let codeline = self.buffer.code_branches.get(codeline_index).expect("Should be within list");
         let codeline_instructions = codeline.clone().to_bin().instructions();
@@ -205,25 +202,21 @@ impl Optimizer {
                 }
             }
         }
-        let mut new_instructions = Vec::new();
         let mut idents = Vec::new();
         for potential_ident in potential_idents {
-            self.buffer.param_buffer.set_cursor_to_index(0).expect("Should be able to reset the param buffer cursor.");
-            for _param_buffer_id in 0..self.buffer.param_buffer.len() {
-                // Should be able to speed this up with a hashmap, cbf tho
-                let param_instruction = self.buffer.param_buffer.read_instruction().expect("Should have a param instruction.");
-                if !matches!(param_instruction.action, dfbin::Constants::Actions::DP::Var) { continue; }
-                let Some(param) = param_instruction.params.get(0) else { continue; };
-                let ParameterValue::Ident(created_param_ident) = param.value else { continue; };
-                let Some(param) = param_instruction.params.get(1) else { continue; };
-                let ParameterValue::String(created_var_string) = param.value.clone() else { continue; };
-                if potential_ident == created_param_ident {
-                    if matches!(param_instruction.match_tag(dfbin::Constants::Tags::DP::Var::Scope::Global).expect("Var instruction shouldn't have a dynamic scope tag?"), dfbin::Constants::Tags::DP::Var::Scope::Line) {
-                        idents.push((potential_ident, created_var_string));
-                    }
-                    break;
-                }
+            let Some((defining_instruction, defining_params)) = self.buffer.ident_definitions.get(&potential_ident) else { continue; };
+            if !matches!(defining_instruction.action, dfbin::Constants::Actions::DP::Var) { continue; }
+            //##dbg!(defining_instruction);
+            //##dbg!("test1");
+            
+            let Some(ParameterValue::String(created_var_string)) = defining_params.get(0) else { continue; };
+            //##dbg!("test2");
+            if !matches!(defining_instruction.match_tag(dfbin::Constants::Tags::DP::Var::Scope::Global).expect("Var instruction shouldn't have a dynamic scope tag?"), dfbin::Constants::Tags::DP::Var::Scope::Line) {
+                continue;
             }
+            //##dbg!("test3");
+
+            idents.push((potential_ident, created_var_string.to_owned()));
         }
         for (var_ident, var_name) in idents {
             let mut param_ident = None;
@@ -241,18 +234,12 @@ impl Optimizer {
                     param_ident = Some(created_param_ident);
                 }
             }
-            //TODO: thisd codeline probably bugged
-            let param_ident = param_ident.unwrap_or_else(|| ({ 
-                id += 1; 
-                new_instructions.push(instruction!(DP::Param, [
-                    (Ident, id+id_offset), (String, var_name)
-                ], { Type: Var }));
-                id
-            }) + id_offset);
-            ret.push((var_ident, param_ident))
+            let param_ident = param_ident.unwrap_or_else(|| self.buffer.add_definition(instruction!(DP::Param, [
+                (String, var_name.clone())
+                ], { Type: Var })));
+            ret.push((var_ident, param_ident, var_name));
+            //##dbg!(param_ident);
         }
-        self.buffer.param_buffer.append_instructions(new_instructions);
-
         ret
     }
 
@@ -290,18 +277,18 @@ impl Optimizer {
     // }
 
     /// This is used by ``.split_lines()`` - compacts a *branch* down to below the max size.
-    fn split_branch(branches: &mut Vec<CodelineBranch>, branch: &mut Vec<CodelineBranchLog>, true_max_codeblocks: usize, depth: usize, id: u32, codeline_vars: &Vec<(u32, u32)>) -> Result<Option<(Codeline, VecDeque<u32>)>, OptimizerError> {
+    fn split_branch(branches: &mut Vec<CodelineBranch>, branch: &mut Vec<CodelineBranchLog>, true_max_codeblocks: usize, depth: usize, func_id: u32, free_ids: (u32, u32, u32), codeline_vars: &Vec<(u32, u32, String)>) -> Result<Option<(Codeline, VecDeque<u32>)>, OptimizerError> {
         // dbg!(id, depth);
         let mut sum = 0;
         let mut new_branch_accumulate = Vec::new();
         let mut old_branch_accumulate = Vec::new();
-        let padding = 2; // One for call function, one for extra function
+        let padding = 2 + (if codeline_vars.len() > 26 { 7 } else { 0 }); // One for call function, one for extra function
         let max_codeblocks = true_max_codeblocks - padding; // Padding 
         for (log_ind, log) in branch.iter().enumerate().rev() {
             match &log {
                 CodelineBranchLog::Codeblocks(instructions) => {
                     // branch.push(CodelineBranchLog::Codeblocks(vec![instruction!(Enac::FoxSleeping, [(Int, instructions.len())])]));
-                    let add = instructions.len();
+                    let add = DFBin::count_codeblocks(instructions);
                     if sum < max_codeblocks {
                         if sum + add >= max_codeblocks { // Transition Period
                             let mut old_instructions = instructions.clone();
@@ -319,12 +306,12 @@ impl Optimizer {
                 },
                 CodelineBranchLog::Branch(log_branch_ind) => {
                     let log_branch = &branches[*log_branch_ind];
-                    let mut add = log_branch.instructions(&branches).len() + 2;
+                    let mut add = log_branch.instructions(&branches).codeblocks().expect("Expecting codeblock count to work.") + 2;
                     let add_amt = add;
                     if log_branch.root.action == Constants::Actions::Else {
                         if let Some(CodelineBranchLog::Branch(log_if_branch_ind)) = branch.get(log_ind-1) {
                             let log_if_branch = &branches[*log_if_branch_ind];
-                            add += log_if_branch.instructions(&branches).len() + 1;
+                            add += log_if_branch.instructions(&branches).codeblocks().expect("Expecting codeblock count to work.") + 1;
                         }
                     }
                     if sum < max_codeblocks {
@@ -342,12 +329,15 @@ impl Optimizer {
                 },
             }
         };
-        if depth > 0 && sum < max_codeblocks && sum >= max_codeblocks - padding - (depth * 2) - 2 && sum > 1 {
+        let f = (max_codeblocks as isize) - (padding as isize) - 4;
+        if depth > 0 && sum < max_codeblocks && sum >= (f.max(0) as usize) && sum > 1 {
+            // dbg!(sum, f, max_codeblocks, depth);
             old_branch_accumulate.clear();
             new_branch_accumulate = branch.clone();
             new_branch_accumulate.reverse();
             sum = max_codeblocks;
         }
+        // dbg!("HEY", sum, max_codeblocks);
         if sum >= max_codeblocks {
             // Awful code ahead:
             old_branch_accumulate.reverse();
@@ -363,17 +353,76 @@ impl Optimizer {
                     }
                 }
             }
-            let mut call_instruction = instruction!(Call, [(Ident, id)]);
-            let mut func_instruction = instruction!(Func, [(Ident, id)]);
-            for codeline_var in codeline_vars {
-                call_instruction.params.push(Parameter::from_ident(codeline_var.0)); // Add the variable
-                func_instruction.params.push(Parameter::from_ident(codeline_var.1)); // Add the param
+            let mut call_instruction = instruction!(Call, [(Ident, func_id)]);
+            let mut func_instruction = instruction!(Func, [(Ident, func_id)]);
+            let mut call_instructions = Vec::new();
+            let mut func_instructions = Vec::new();
+            let mut func_instructions_end = Vec::new();
+            let mut func_instructions_pre = Vec::new();
+            if codeline_vars.len() > 26 {
+                let combined_names: Vec<String> = codeline_vars.iter().map(|x| x.2.clone()).collect();
+                let combined_names = combined_names.join("#");
+                let codeline_vars_len = codeline_vars.len();
+                let mut split_value_names = vec![
+                    instruction!(DP::Var, [ (Ident, free_ids.0), (String, "_optimizercopy") ], { Scope: Line }),
+                    instruction!(Var::SplitString, [ (Ident, free_ids.0), (String, combined_names.clone()), (String, "#") ])
+                ];
+                let mut pack_values = vec![
+                    instruction!(DP::Var, [ (Ident, free_ids.2), (String, "_optimizercopy_values") ], { Scope: Line }),
+                    instruction!(Var::CreateList, [ (Ident, free_ids.2) ]),
+                    instruction!(DP::Var, [ (Ident, free_ids.1), (String, "_optimizercopy_e") ], { Scope: Line }),
+                    instruction!(Rep::ForEach, [ (Ident, free_ids.1), (Ident, free_ids.0) ]),
+                    instruction!(DP::Var, [ (Ident, free_ids.1), (String, "%var(_optimizercopy_e)") ], { Scope: Line }),
+                    instruction!(Var::AppendValue, [ (Ident, free_ids.2), (Ident, free_ids.1) ]),
+                    instruction!(EndRep)
+                ];
+                let mut unpack_values = vec![
+                    instruction!(DP::Var, [ (Ident, free_ids.0), (String, "_optimizercopy_i") ], { Scope: Line }),
+                    instruction!(Rep::Multiple, [ (Ident, free_ids.0), (Int, codeline_vars_len) ]),
+                    instruction!(DP::Var, [ (Ident, free_ids.1), (String, "%index(_optimizercopy,%var(_optimizercopy_i))") ], { Scope: Line }),
+                    instruction!(DP::Var, [ (Ident, free_ids.2), (String, "_optimizercopy_values") ], { Scope: Line }),
+                    instruction!(Var::GetListValue, [ (Ident, free_ids.1), (Ident, free_ids.2), (Ident, free_ids.0) ]),
+                    instruction!(EndRep)
+                ];
+                // Call: Code, Split, Pack, Call, Unpack
+                call_instructions.append(&mut split_value_names.clone());
+                call_instructions.append(&mut pack_values.clone());
+
+                call_instructions.push(instruction!(DP::Var, [ (Ident, free_ids.0), (String, "_optimizercopy_values") ], { Scope: Line }));
+                call_instruction.params.push(Parameter::from_ident(free_ids.0)); // Add the variable
+                call_instructions.push(call_instruction.clone());
+                
+                call_instructions.append(&mut unpack_values.clone());
+                
+                // Func: Func, Split, Unpack, Code, Pack
+                func_instructions_pre.push(instruction!(DP::Param, [ (Ident, free_ids.0), (String, "_optimizercopy_values") ], { Type: Var }));
+
+
+                func_instructions.append(&mut split_value_names);
+                func_instructions.append(&mut unpack_values);
+
+                
+                func_instructions_end.push(instruction!(DP::Var, [ (Ident, free_ids.0), (String, "_optimizercopy") ], { Scope: Line }));
+                func_instructions_end.append(&mut pack_values);
+
+                
+                func_instruction.params.push(Parameter::from_ident(free_ids.0)); // Add the param
+
+            } else {
+                for codeline_var in codeline_vars {
+                    call_instruction.params.push(Parameter::from_ident(codeline_var.0)); // Add the variable
+                    func_instruction.params.push(Parameter::from_ident(codeline_var.1)); // Add the param
+                }
+                call_instructions.push(call_instruction.clone());
             }
 
-            branch.push(CodelineBranchLog::Codeblocks(vec![call_instruction]));
+            branch.push(CodelineBranchLog::Codeblocks(call_instructions));
             let mut codeline = Codeline::from_bin(DFBin::from_instructions(vec![func_instruction]))?;
             codeline.branch_list = branches.clone();
-            codeline.root_branch = new_branch_accumulate;
+            codeline.root_branch = vec![CodelineBranchLog::Codeblocks(func_instructions)];
+            codeline.root_branch.append(&mut new_branch_accumulate);
+            codeline.pre_instructions = func_instructions_pre;
+            codeline.post_instructions = func_instructions_end;
             codeline.nest_depth += 1;
             let mut extension_funcs = VecDeque::new();
             for instruction_check_call in codeline.clone().to_bin().instructions() {
@@ -404,7 +453,7 @@ mod tests {
 
     #[test]
     pub fn optimize_from_file_test() {
-        let name = "first";
+        let name = "test";
         // let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\optimizer\examples\";
         let path = r"K:\Programming\GitHub\Esh\optimizer\examples\";
 
@@ -419,8 +468,8 @@ mod tests {
         fs::write(format!("{}{}_before.dfa", path, name), decompiled).expect("Decompiled original DFA should write.");
         
         let mut optimizer = Optimizer::new(bin.clone(), OptimizerSettings {
-            remove_end_returns: true,
-            max_codeblocks_per_line: Some(9),
+            remove_end_returns: false,
+            max_codeblocks_per_line: Some(45),
         }).expect("Optimizer should create.");  
         
         optimizer.optimize().expect("Optimizer should optimize.");

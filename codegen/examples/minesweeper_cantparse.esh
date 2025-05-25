@@ -8,7 +8,6 @@ struct Player {
             sel reset
         }
     }
-
     func giveItem(item item_give) {
         dfasm(uuid, item_give) {
             sel playername @0
@@ -16,7 +15,6 @@ struct Player {
             sel reset
         }
     }
-
     func adventureMode() {
         dfasm(uuid) {
             sel playername @0
@@ -128,11 +126,6 @@ domain Plot {
             sel reset
         };
     }
-    func Debug(string message) {
-        dfasm(message) {
-            plac sendmessage @0 #target:all
-        }
-    }
 }
 
 struct Block {
@@ -196,7 +189,7 @@ domain Minesweeper {
         func initialize() {
             size = 50;
             mine_percentage = 0.11;
-            offsets = [< -1, 0, -1 >, < -1, 0, 0 >, < -1, 0, 1 >, < 0, 0, -1 >, < 0, 0, 1 >, < 1, 0, -1 >, < 1, 0, 0 >, < 1, 0, 1 >];
+            offsets = [<-1, 0, -1>, <-1, 0, 0>, <-1, 0, 1>, <0, 0, -1>, <0, 0, 1>, <1, 0, -1>, <1, 0, 0>, <1, 0, 1>];
             offset_count = offsets.length;
             blocks = [
                 Block.new("white_concrete_powder"),
@@ -219,7 +212,6 @@ domain Minesweeper {
     }
     event Plot.Awake {
         Settings.initialize();
-        clearBoard();
         generateBoard();
     }
     event Player.LeftClick {
@@ -261,38 +253,33 @@ domain Minesweeper {
         }
     }
 
-    func clearBoard() {
-        Plot.World.setRegion(Block.new("smooth_stone"), < 0.5, 48.5, 0.5 >, < Settings.size - 0.5, 48.5, Settings.size - 0.5 >);
-        Plot.World.setRegion(Block.new("smooth_stone"), < 0.5, 49.5, 0.5 >, < Settings.size - 0.5, 49.5, Settings.size - 0.5 >);
-        Plot.World.setRegion(Block.new("air"), < 0.5, 50.5, 0.5 >, < Settings.size - 0.5, 50.5, Settings.size - 0.5 >);
-    }
-
     func generateBoard() {
-        num i = 0;
-        while (i < (Settings.size * Settings.size * Settings.mine_percentage)) {
-            Plot.World.setBlock(Block.new("tnt"), < Math.RandomWhole(0, Settings.size - 1) + 0.5, 48.5, Math.RandomWhole(0, Settings.size - 1) + 0.5 >);
-            i = i + 1;
+        Plot.World.setRegion(Block.new("smooth_stone"), <0.5, 48.5, 0.5>, <Settings.size-0.5, 48.5, Settings.size-0.5>);
+        Plot.World.setRegion(Block.new("smooth_stone"), <0.5, 49.5, 0.5>, <Settings.size-0.5, 49.5, Settings.size-0.5>);
+        Plot.World.setRegion(Block.new("air"), <0.5, 50.5, 0.5>, <Settings.size-0.5, 50.5, Settings.size-0.5>);
+        num b = 0;
+        while(b < (Settings.size * Settings.size * Settings.mine_percentage)) {
+            Plot.World.setBlock(Block.new("tnt"), <Math.RandomWhole(0, Settings.size-1)+0.5, 48.5, Math.RandomWhole(0, Settings.size-1)+0.5>);
+            b = b + 1;
         }
         num x = 0;
         num z = 0;
-        while (x < Settings.size) {
+        while(x < Settings.size) {
             z = 0;
-            while (z < Settings.size) {
-                loc examine = < x + 0.5, 48.5, z + 0.5 >;
+            while(z < Settings.size) {
+                loc examine = <x+0.5, 48.5, z+0.5>;
                 Block examineBlock = Plot.World.getBlock(examine);
                 if (examineBlock.material != "tnt") {
                     num tileValue = 0;
-                    i = 0;
-                    while (i < Settings.offset_count) {
+                    num i = 0;
+                    while(i < Settings.offset_count) {
                         vec[] offsetList = Settings.offsets;
-                        Block valueBlock = Plot.World.getBlock(examine + offsetList[i]);
-                        if (valueBlock.material == "tnt") {
+                        if (Plot.World.getBlock(examine + offsetList[i]).material == "tnt") {
                             tileValue = tileValue + 1;
                         }
                         i = i + 1;
                     }
-                    Block[] blockList = Settings.blocks;
-                    Plot.World.setBlock(blockList[tileValue], examine);
+                    Plot.World.setBlock(Settings.blocks[tileValue], examine);
                 }
                 z = z + 1;
             }
@@ -304,15 +291,12 @@ domain Minesweeper {
         loc upPos = tile;
         upPos.y = 49.5;
         Plot.World.setBlock(Plot.World.getBlock(tile), upPos);
-        Block examineBlock = Plot.World.getBlock(tile);
-        if (examineBlock.material == "white_concrete_powder") {
+        if (Plot.World.getBlock(tile).material == "white_concrete_powder") {
             num i = 0;
-            while (i < Settings.offset_count) {
-                vec[] offsetList = Settings.offsets;
-                loc offsetLoc = tile + offsetList[i];
+            while(i < Settings.offset_count) {
+                loc offsetLoc = tile + Settings.offsets[i];
                 offsetLoc.y = 49.5;
-                Block valueBlock = Plot.World.getBlock(offsetLoc);
-                if (valueBlock.material == "smooth_stone") {
+                if (Plot.World.getBlock(offsetLoc).material == "smooth_stone") {
                     offsetLoc.y = 48.5;
                     exposeTile(offsetLoc);
                 }
