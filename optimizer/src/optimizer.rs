@@ -448,12 +448,14 @@ mod tests {
 
     use compiler::Compiler;
 
+    use crate::optimizer_settings::InlinerOptimizerSetting;
+
     use super::*;
 
 
     #[test]
     pub fn optimize_from_file_test() {
-        let name = "test";
+        let name = "lotsa";
         // let path = r"C:\Users\koren\OneDrive\Documents\Github\Esh\optimizer\examples\";
         let path = r"K:\Programming\GitHub\Esh\optimizer\examples\";
 
@@ -469,7 +471,9 @@ mod tests {
         
         let mut optimizer = Optimizer::new(bin.clone(), OptimizerSettings {
             remove_end_returns: false,
-            max_codeblocks_per_line: Some(45),
+            max_codeblocks_per_line: Some(25),
+            inline_functions: InlinerOptimizerSetting::None,
+            deadcode_elimination: false
         }).expect("Optimizer should create.");  
         
         optimizer.optimize().expect("Optimizer should optimize.");

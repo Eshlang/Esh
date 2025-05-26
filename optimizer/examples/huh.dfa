@@ -1,0 +1,13 @@
+seg func
+seg param
+    dp var defaultJoins "%default Joins" #scope:save 
+    dp txt joinMsgFirst "<bold><green>%default joined for the first time!"
+    dp txt joinMsg "<bold><green>%default joined!"
+seg code
+    plev join
+    varif eq defaultJoins, 0
+        plac sendmessage joinMsgFirst #target:all
+    else
+        plac sendmessage joinMsg #target:all
+    endif
+    var inc defaultJoins, 1
